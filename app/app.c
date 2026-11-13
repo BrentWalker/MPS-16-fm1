@@ -456,15 +456,15 @@ static uint8_t cbuf[NPADS][MAXC], cbuf_n[NPADS];
 static const float ARP_RATE[6] = {1.0f, 0.5f, 0.3333333f, 0.25f, 0.1666667f, 0.125f};   /* of a beat */
 static const char *const ARP_RATE_NAME[6] = {"1/4", "1/8", "1/8T", "1/16", "1/16T", "1/32"};
 static const char *const ARP_NAME[5] = {"OFF", "UP", "DOWN", "UP-DN", "RAND"};
-static uint32_t rng_state = 0x2545F491u;
-static uint32_t rnd(void)
+static uint32_t cs_rng = 0x2545F491u;
+static uint32_t cs_rnd(void)
 {
-    rng_state = rng_state * 1664525u + 1013904223u;
-    return rng_state >> 8;
+    cs_rng = cs_rng * 1664525u + 1013904223u;
+    return cs_rng >> 8;
 }
 static uint32_t human_vel(uint32_t v)
 {
-    int32_t h = set.human, r = (int32_t)(rnd() % 201u) - 100;
+    int32_t h = set.human, r = (int32_t)(cs_rnd() % 201u) - 100;
     return (uint32_t)clamp((int32_t)v + (int32_t)v * h * r / 10000, 1, 127);
 }
 
@@ -494,7 +494,7 @@ static void cp_start(uint32_t i, uint32_t vel)
         c->note[k] = cbuf[i][k];
         c->vel[k] = (uint8_t)human_vel(vel);
         c->sounded[k] = 0;
-        c->at[k] = k * ss + (set.human ? rnd() % (set.human * 26u + 1u) : 0u);   /* up to ~30 ms late */
+        c->at[k] = k * ss + (set.human ? cs_rnd() % (set.human * 26u + 1u) : 0u);   /* up to ~30 ms late */
     }
     c->t = 0;
     c->next = 0;
@@ -522,7 +522,7 @@ static void chord_tick(uint32_t n)
                     uint32_t per = len > 1u ? 2u * len - 2u : 1u, q = j % per;
                     pick = q < len ? q : per - q;
                 } else
-                    pick = rnd() % len;
+                    pick = cs_rnd() % len;
                 if (c->cur)
                     out_off(c->cur - 1u);
                 out_on(c->note[pick], human_vel(c->vel[0]));
