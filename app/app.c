@@ -9,6 +9,8 @@
  * Part of the unity build (device/unity.c, host/plat_host.c), after the platform: gfx.c and announce.c are in
  * scope. */
 #include "fastmath.h"
+#include "disk.c"                        /* the USB drive: a FAT12 volume in the flash */
+#include "smf.c"                         /* standard MIDI files, read from it */
 
 /* ================================================================ settings === */
 #define SET_MAGIC 0x43534631u            /* "CSF1" */
@@ -53,7 +55,14 @@ static const quality_t QUAL[] = {
 /* ==================================================================== kit === */
 #define NPADS 16u
 #define MAXN 6u
+#define MAXPH 48u                        /* notes in a phrase pad */
+#define PREVIEW NPADS                    /* the extra slot SLICE auditions from */
 typedef struct {
+    uint8_t type;                        /* PAD_CHORD or PAD_PHRASE */
+    uint8_t fromkey;                     /* a chord built from the key: rebuilt when the key changes */
+    uint8_t tag;                         /* the slice it came from (1 ..), 0 none */
+    uint8_t pn;                          /* a phrase's notes */
+    uint16_t len;                        /* a phrase's length, 96ths of a beat */
     uint8_t n;                           /* notes in the chord */
     uint8_t note[MAXN];                  /* MIDI notes, before the octave */
     uint8_t deg;                         /* the root's scale degree, 0..6 */
@@ -63,7 +72,13 @@ typedef struct {
     char roman[6];                       /* "ii" */
     uint8_t dim;                         /* the roman numeral takes a degree sign */
 } pad_t;
-static pad_t pads[NPADS];
+enum { PAD_EMPTY, PAD_CHORD, PAD_PHRASE };
+typedef struct {
+    uint16_t s, d;                       /* start and length, 96ths of a beat */
+    uint8_t p, v;
+} pnote_t;
+static pad_t pads[NPADS + 1];
+static pnote_t ph[NPADS + 1][MAXPH];
 
 /* the white keys and black keys by colour, left to right (key 0 = F3) */
 static const uint8_t WK[16] = PLAT_WHITE_KEYS, BK[11] = PLAT_BLACK_KEYS;
@@ -101,6 +116,13 @@ static void spell(uint32_t pc, uint32_t letter, char *out)   /* pitch class pc o
 }
 static void tonic_name(char *out) { spell(set.root, tonic_letter(), out); }
 
+static uint32_t str_len(const char *s)   /* (the device's libc has no strlen) */
+{
+    uint32_t n = 0;
+    while (s[n])
+        n++;
+    return n;
+}
 static void str_set(char *d, const char *s, uint32_t max)
 {
     uint32_t i;
@@ -134,7 +156,7 @@ static void roman_for(pad_t *p)
     if (third == 4u) {
         str_set(p->roman, UP[d], sizeof p->roman);
         if (fifth == 8u)
-            str_set(p->roman + __builtin_strlen(UP[d]), "+", 2);
+            str_set(p->roman + str_len(UP[d]), "+", 2);
     } else {
         str_set(p->roman, LO[d], sizeof p->roman);
         p->dim = fifth == 6u;
@@ -149,6 +171,11 @@ static void kit_build(void)
     for (i = 0; i < NPADS; i++) {
         pad_t *p = &pads[i];
         const uint8_t *shape = SEVENTH;
+        if (p->type != PAD_EMPTY && !p->fromkey)
+            continue;                    /* a slice dropped here stays */
+        p->type = PAD_CHORD;
+        p->fromkey = 1;
+        p->tag = 0;
         uint32_t n = 4, deg = i;
         if (i >= 8u && i < 15u) {
             shape = NINTH;
@@ -190,12 +217,13 @@ static float gain_now;
 #define QN 128u
 static volatile uint32_t q_ev[QN];
 static volatile uint32_t q_w, q_r;
-static void ev_push(uint32_t on, uint32_t note, uint32_t vel)
+enum { QE_OFF, QE_ON, QE_PSTART, QE_PSTOP };
+static void ev_push(uint32_t type, uint32_t a, uint32_t b)
 {
     uint32_t w = q_w;
     if (w - q_r >= QN)
         return;                          /* full: drop (never seen at human speed) */
-    q_ev[w % QN] = on << 16 | (note & 127u) << 8 | (vel & 127u);
+    q_ev[w % QN] = type << 16 | (a & 127u) << 8 | (b & 127u);
     __atomic_store_n(&q_w, w + 1u, __ATOMIC_RELEASE);
 }
 
@@ -231,16 +259,93 @@ static void voice_off(uint32_t note)
         }
 }
 
-static void midi_in(void)                /* audio interrupt: MIDI in plays the synth as a sound module */
+/* the tempo phrases play at (the loaded file's), and the audio clock in samples */
+static volatile uint32_t tempo = 90;
+static volatile uint32_t clock_smp;
+
+/* REC: MIDI in captured as it comes, with the audio clock (the main loop writes it out as a file when REC stops) */
+#define RECMAX 512u
+typedef struct {
+    uint32_t t;
+    uint8_t st, d1, d2, pad;
+} recev_t;
+static recev_t rec_ev[RECMAX];
+static volatile uint32_t rec_n;
+static volatile uint8_t rec_on;
+
+static void midi_in(void)                /* audio interrupt: MIDI in plays the synth (a sound module), REC keeps it */
 {
     uint32_t pkt;
     int port;
     while (plat_midi_in(&pkt, &port)) {
-        uint32_t st = (pkt >> 8) & 0xFFu, d1 = (pkt >> 16) & 0x7Fu, d2 = pkt >> 24;
-        if ((st & 0xF0u) == 0x90u && d2)
+        uint32_t st = (pkt >> 8) & 0xFFu, d1 = (pkt >> 16) & 0x7Fu, d2 = pkt >> 24, hi = st & 0xF0u;
+        if (hi == 0x90u && d2)
             voice_on(d1, d2);
-        else if ((st & 0xF0u) == 0x80u || (st & 0xF0u) == 0x90u)
+        else if (hi == 0x80u || hi == 0x90u)
             voice_off(d1);
+        if (rec_on && (hi == 0x80u || hi == 0x90u) && rec_n < RECMAX) {
+            recev_t *r = &rec_ev[rec_n];
+            r->t = clock_smp;
+            r->st = (uint8_t)(hi == 0x90u && d2 ? 0x90u : 0x80u);
+            r->d1 = (uint8_t)d1;
+            r->d2 = (uint8_t)(hi == 0x90u ? d2 : 0u);
+            __atomic_store_n(&rec_n, rec_n + 1u, __ATOMIC_RELEASE);
+        }
+    }
+}
+
+/* phrase players: one per pad and one for SLICE's preview. Times in 96ths of a beat; one-shot */
+typedef struct {
+    uint8_t on;
+    int8_t oct;
+    float pos;
+    uint64_t sounding;                   /* bit k: phrase note k is sounding */
+} player_t;
+static player_t pl[NPADS + 1];
+
+static void pl_release(uint32_t i)
+{
+    uint32_t k;
+    for (k = 0; k < pads[i].pn && k < 64u; k++)
+        if (pl[i].sounding >> k & 1u) {
+            uint32_t m = (uint32_t)clamp((int32_t)ph[i][k].p + 12 * pl[i].oct, 0, 127);
+            voice_off(m);
+            plat_midi_send(0x08u | 0x80u << 8 | m << 16, TO_USB);
+        }
+    pl[i].sounding = 0;
+}
+
+static void phrase_tick(uint32_t n)
+{
+    float dt = (float)n * (float)tempo * 96.0f / (60.0f * SR);
+    uint32_t i, k;
+    for (i = 0; i <= NPADS; i++) {
+        player_t *P = &pl[i];
+        float a, b;
+        if (!P->on)
+            continue;
+        a = P->pos;
+        b = a + dt;
+        for (k = 0; k < pads[i].pn && k < 64u; k++) {
+            const pnote_t *x = &ph[i][k];
+            uint32_t m = (uint32_t)clamp((int32_t)x->p + 12 * P->oct, 0, 127);
+            float s = (float)x->s, e = (float)x->s + (float)x->d;
+            if (s >= a && s < b) {
+                voice_on(m, x->v);
+                plat_midi_send(0x09u | 0x90u << 8 | m << 16 | (uint32_t)x->v << 24, TO_USB);
+                P->sounding |= 1ull << k;
+            }
+            if ((P->sounding >> k & 1u) && e < b && !(s >= a && s < b && e >= b)) {
+                voice_off(m);
+                plat_midi_send(0x08u | 0x80u << 8 | m << 16, TO_USB);
+                P->sounding &= ~(1ull << k);
+            }
+        }
+        P->pos = b;
+        if (P->pos >= (float)pads[i].len) {
+            pl_release(i);
+            P->on = 0;
+        }
     }
 }
 
@@ -250,13 +355,21 @@ void app_render(int32_t *lr, uint32_t n, uint32_t master_q12)
     float gain = (float)master_q12 / 4096.0f * 8300000.0f;
     static float mix[APP_BLOCK];
     while (q_r != __atomic_load_n(&q_w, __ATOMIC_ACQUIRE)) {
-        uint32_t e = q_ev[q_r % QN];
-        if (e >> 16)
-            voice_on(e >> 8 & 127u, e & 127u);
-        else
-            voice_off(e >> 8 & 127u);
+        uint32_t e = q_ev[q_r % QN], type = e >> 16, a = e >> 8 & 127u, b = e & 127u;
+        if (type == QE_ON)
+            voice_on(a, b);
+        else if (type == QE_OFF)
+            voice_off(a);
+        else if (a <= NPADS) {           /* a phrase: start (b: the octave + 8) or stop */
+            pl_release(a);
+            pl[a].on = type == QE_PSTART;
+            pl[a].oct = (int8_t)((int32_t)b - 8);
+            pl[a].pos = 0.0f;
+        }
         q_r++;
     }
+    phrase_tick(n);
+    clock_smp += n;
     midi_in();
     if (n > APP_BLOCK)
         n = APP_BLOCK;
@@ -319,6 +432,10 @@ void app_render(int32_t *lr, uint32_t n, uint32_t master_q12)
 void app_panic(void)
 {
     uint32_t i;
+    for (i = 0; i <= NPADS; i++) {
+        pl[i].on = 0;
+        pl[i].sounding = 0;
+    }
     for (i = 0; i < NVOICES; i++) {
         vo[i].stage = 0;
         vo[i].gate = 0;
@@ -343,7 +460,7 @@ static void notes_on(uint32_t k, const uint8_t *notes, uint32_t n, uint32_t vel)
     for (i = 0; i < n && i < MAXN; i++) {
         int32_t m = clamp((int32_t)notes[i] + 12 * set.octave, 0, 127);
         h->note[h->n++] = (uint8_t)m;
-        ev_push(1, (uint32_t)m, vel);
+        ev_push(QE_ON, (uint32_t)m, vel);
         plat_midi_send(0x09u | 0x90u << 8 | (uint32_t)m << 16 | vel << 24, TO_USB);
     }
 }
@@ -352,10 +469,240 @@ static void notes_off(uint32_t k)
     uint32_t i;
     held_t *h = &held[k];
     for (i = 0; i < h->n; i++) {
-        ev_push(0, h->note[i], 0);
+        ev_push(QE_OFF, h->note[i], 0);
         plat_midi_send(0x08u | 0x80u << 8 | (uint32_t)h->note[i] << 16, TO_USB);
     }
     h->n = 0;
+}
+
+/* ================================================================= slicing === */
+/* the loaded file cut into slices, by its hits (where notes land together, the louder the likelier) or on a grid */
+#define MAXSL 64u
+static uint32_t sl_s[MAXSL], sl_e[MAXSL], nsl, sel;
+static uint8_t sl_mode;                  /* 0 hits, 1 grid */
+static uint8_t sl_sens = 55, sl_grid = 4;
+static int32_t cur_file = -1;
+static const char *const GRID_NAME[7] = {"1/16", "1/8", "1/4", "1/2", "1 BAR", "2 BARS", "4 BARS"};
+static uint32_t grid_len(uint32_t g)
+{
+    static const uint16_t BEATS96[4] = {24, 48, 96, 192};
+    return g < 4u ? BEATS96[g] : PPQ * song_bpb * (g == 4u ? 1u : g == 5u ? 2u : 4u);
+}
+static int note_used(const note_t *n) { return trk[N_TRK(n) % MAXTRK].on; }
+
+static void slice_auto(void)
+{
+    uint32_t i;
+    nsl = 0;
+    if (!song_n)
+        return;
+    if (sl_mode) {                       /* the grid: every interval with a note starting in it (any track) */
+        uint32_t step = grid_len(sl_grid), t, k = 0;
+        for (t = 0; t < song_len && nsl < MAXSL; t += step) {
+            while (k < song_n && N_START(&song[k]) < t)
+                k++;
+            if (k < song_n && N_START(&song[k]) < t + step) {
+                sl_s[nsl] = t;
+                sl_e[nsl] = t + step < song_len ? t + step : song_len;
+                nsl++;
+            }
+        }
+    } else {                             /* hits: onsets within 1/16 of a 16th merge, weighted by velocity */
+        static uint32_t on_t[MAXSL * 4u], on_w[MAXSL * 4u];
+        uint32_t non = 0, mx = 0, thr, gap, last_end = 0, last = 0;
+        for (i = 0; i < song_n; i++) {
+            const note_t *n = &song[i];
+            if (!note_used(n))
+                continue;
+            if (N_START(n) + n->d > last_end)
+                last_end = N_START(n) + n->d;
+            if (non && N_START(n) - on_t[non - 1u] < 6u)
+                on_w[non - 1u] += n->v;
+            else if (non < MAXSL * 4u) {
+                on_t[non] = N_START(n);
+                on_w[non++] = n->v;
+            }
+        }
+        for (i = 0; i < non; i++)
+            if (on_w[i] > mx)
+                mx = on_w[i];
+        thr = mx * (100u - sl_sens) * 85u / 10000u;
+        gap = 12u + (100u - sl_sens) * 180u / 100u;   /* 1/8 of a beat .. 2 beats */
+        for (i = 0; i < non && nsl < MAXSL; i++)
+            if (on_w[i] >= thr && (!nsl || on_t[i] - last >= gap)) {
+                if (nsl)
+                    sl_e[nsl - 1u] = on_t[i];
+                sl_s[nsl] = last = on_t[i];
+                nsl++;
+            }
+        if (nsl)
+            sl_e[nsl - 1u] = last_end > sl_s[nsl - 1u] + 24u ? last_end : sl_s[nsl - 1u] + 24u;
+    }
+    if (sel >= nsl)
+        sel = nsl ? nsl - 1u : 0u;
+}
+
+/* a pitch-class spelling for chords found in a file: flats in flat keys, sharps otherwise */
+static void pc_name(uint32_t pc, char *out)
+{
+    static const char *const SH[12] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
+    static const char *const FL[12] = {"C", "Db", "D", "Eb", "E", "F", "Gb", "G", "Ab", "A", "Bb", "B"};
+    char t[4];
+    tonic_name(t);
+    str_set(out, (t[1] == 'b' || (t[0] == 'F' && !t[1])) ? FL[pc % 12u] : SH[pc % 12u], 4);
+}
+
+/* slice i into pad slot dst: a chord when every note lands together, else a phrase */
+static int slice_to(uint32_t i, uint32_t dst)
+{
+    pad_t *p = &pads[dst];
+    uint32_t k, s = sl_s[i], e = sl_e[i], first = 0xFFFFFFFFu, chord = 1;
+    uint8_t ps[MAXPH];
+    uint32_t nps = 0;
+    p->pn = 0;
+    for (k = 0; k < song_n; k++) {
+        const note_t *n = &song[k];
+        uint32_t t = N_START(n);
+        if (t < s || !note_used(n))
+            continue;
+        if (t >= e)
+            break;
+        if (first == 0xFFFFFFFFu)
+            first = t;
+        if (t - first > 10u)
+            chord = 0;
+        if (p->pn < MAXPH) {
+            pnote_t *x = &ph[dst][p->pn++];
+            x->s = (uint16_t)(t - s);
+            x->d = (uint16_t)(t + n->d > e ? e - t : n->d);
+            x->p = n->p;
+            x->v = n->v;
+        }
+    }
+    if (!p->pn)
+        return -1;
+    p->fromkey = 0;
+    p->tag = (uint8_t)(i + 1u);
+    p->len = (uint16_t)(e - s > 0xFFFFu ? 0xFFFFu : e - s);
+    for (k = 0; k < p->pn; k++) {        /* the distinct pitches, low to high */
+        uint32_t j, q = ph[dst][k].p, at = nps;
+        for (j = 0; j < nps; j++)
+            if (ps[j] >= q)
+                break;
+        if (j < nps && ps[j] == q)
+            continue;
+        for (at = nps; at > j; at--)
+            ps[at] = ps[at - 1u];
+        ps[j] = (uint8_t)q;
+        nps++;
+    }
+    if (chord && nps >= 2u) {            /* a chord: its lowest notes, named from the bass if that fits */
+        uint32_t best = 0xFFu, j, r;
+        p->type = PAD_CHORD;
+        p->n = (uint8_t)(nps < MAXN ? nps : MAXN);
+        for (k = 0; k < p->n; k++) {
+            p->note[k] = ps[k];
+            pc_name(ps[k] % 12u, p->nm[k]);
+        }
+        p->qual[0] = 0;
+        for (r = 0; r < 12u && best == 0xFFu; r++) {   /* each pitch class as the root, the bass first */
+            uint32_t root = (ps[0] + r) % 12u, mask = 0;
+            for (k = 0; k < p->n; k++)
+                mask |= 1u << ((p->note[k] + 12u - root) % 12u);
+            if (!(mask & 1u))
+                continue;
+            for (j = 0; j < NQUAL; j++)
+                if (QUAL[j].mask == mask) {
+                    best = root;
+                    str_set(p->qual, QUAL[j].name, sizeof p->qual);
+                    break;
+                }
+        }
+        p->root_pc = (uint8_t)(best == 0xFFu ? ps[0] % 12u : best);
+        if (best == 0xFFu)
+            str_set(p->qual, "?", sizeof p->qual);
+        else if (best != ps[0] % 12u) {   /* a slash chord: the bass after the quality */
+            char b[4];
+            pc_name(ps[0] % 12u, b);
+            if (str_len(p->qual) + 1u + str_len(b) < sizeof p->qual) {
+                char *q = p->qual + str_len(p->qual);
+                *q++ = '/';
+                str_set(q, b, 4);
+            }
+        }
+        if (best != ps[0] % 12u)         /* the root name, not the bass, on the first line */
+            for (k = 0; k < p->n; k++)
+                if (p->note[k] % 12u == p->root_pc) {
+                    pc_name(p->root_pc, p->nm[0]);
+                    break;
+                }
+        pc_name(p->root_pc, p->nm[0]);
+        p->deg = 0xFF;                   /* its degree in the key, if it has one */
+        p->roman[0] = 0;
+        p->dim = 0;
+        for (j = 0; j < 7u; j++)
+            if ((set.root + SCALES[set.scale][j]) % 12u == p->root_pc) {
+                p->deg = (uint8_t)j;
+                roman_for(p);
+                break;
+            }
+    } else {
+        p->type = PAD_PHRASE;
+        p->deg = 0xFF;
+    }
+    return 0;
+}
+
+static void fmt_pos(uint32_t t, char *o)   /* bar.beat.16th, from 1 */
+{
+    uint32_t bar = t / (PPQ * song_bpb) + 1u, beat = t / PPQ % song_bpb + 1u, six = t % PPQ / 24u + 1u;
+    char *q = o;
+    if (bar >= 10u)
+        *q++ = (char)('0' + bar / 10u % 10u);
+    *q++ = (char)('0' + bar % 10u);
+    *q++ = '.';
+    *q++ = (char)('0' + beat);
+    *q++ = '.';
+    *q++ = (char)('0' + six);
+    *q = 0;
+}
+static void fmt_len(uint32_t t, char *o)
+{
+    uint32_t bar = PPQ * song_bpb, n;
+    char *q = o;
+    const char *u;
+    if (t % bar == 0u) {
+        n = t / bar;
+        u = n == 1u ? " BAR" : " BARS";
+    } else if (t % PPQ == 0u) {
+        n = t / PPQ;
+        u = n == 1u ? " BEAT" : " BEATS";
+    } else if (t % (PPQ / 2u) == 0u) {   /* half beats: "1.5 BEATS" */
+        n = t / PPQ;
+        if (n >= 10u)
+            *q++ = (char)('0' + n / 10u % 10u);
+        *q++ = (char)('0' + n % 10u);
+        *q++ = '.';
+        *q++ = '5';
+        *q = 0;
+        u = " BEATS";
+        q = o + str_len(o);
+        while (*u)
+            *q++ = *u++;
+        *q = 0;
+        return;
+    } else {
+        n = (t + 12u) / 24u;
+        u = "/16";
+    }
+    if (n >= 10u)
+        *q++ = (char)('0' + n / 10u % 10u);
+    *q++ = (char)('0' + n % 10u);
+    *q = 0;
+    q = o + str_len(o);
+    while (*u)
+        *q++ = *u++;
+    *q = 0;
 }
 
 /* ===================================================================== init === */
@@ -367,15 +714,33 @@ static void settings_defaults(void)
     set.octave = 0;
 }
 
+static int file_load(int32_t i)
+{
+    if (i < 0 || (uint32_t)i >= nfiles || fs_open(&files[i]) || smf_load()) {
+        song_n = 0;
+        nsl = 0;
+        return -1;
+    }
+    cur_file = i;
+    tempo = song_bpm;
+    sel = 0;
+    slice_auto();
+    return 0;
+}
+
 void app_init(void)
 {
     if (plat_store_load(OBJ_SETTINGS, &set, sizeof set) != (int)sizeof set || set.magic != SET_MAGIC
         || set.root > 11u || set.scale >= NSCALES || set.octave < -2 || set.octave > 2)
         settings_defaults();
     kit_build();
+    disk_init();
+    if (nfiles)
+        file_load(0);
 }
 
 /* ======================================================================= UI === */
+enum { SCR_HOME, SCR_SLICE, SCR_FILES, SCR_DISK };
 static struct {
     char msg[2][24];
     uint32_t msg_until;
@@ -383,6 +748,8 @@ static struct {
     int32_t pad;                         /* the pad played last (-1 none yet) */
     int32_t root_lit;                    /* the black key lit as the root (-1 none) */
     uint8_t oct_mod;                     /* OCT held and used as a modifier: its release steps nothing */
+    uint8_t screen, disk_state, trk_cur;
+    int32_t file_cur;
     uint8_t redraw;
 } ui = {.pad = -1, .root_lit = -1};
 
@@ -428,20 +795,211 @@ static void rekey(void)
     app_say("KEY", t);
 }
 
+static void pad_title(const pad_t *p, char *t)   /* "S3 Am9", "S5 2 BARS", "Bm7b5" */
+{
+    t[0] = 0;
+    if (p->tag) {
+        char d[4] = {'S', (char)('0' + p->tag / 10u), (char)('0' + p->tag % 10u), 0};
+        if (p->tag < 10u) {
+            d[1] = d[2];
+            d[2] = 0;
+        }
+        text_cat(t, d);
+        text_cat(t, " ");
+    }
+    if (p->type == PAD_CHORD) {
+        text_cat(t, p->nm[0]);
+        text_cat(t, p->qual);
+    } else {
+        char l[12];
+        fmt_len(p->len, l);
+        text_cat(t, l);
+    }
+}
+
+static void pad_play(uint32_t i, uint32_t k, uint32_t vel)
+{
+    const pad_t *p = &pads[i];
+    if (p->type == PAD_CHORD)
+        notes_on(k, p->note, p->n, vel);
+    else if (p->type == PAD_PHRASE)
+        ev_push(QE_PSTART, i, (uint32_t)(set.octave + 8));
+    ui.pad = (int32_t)i;
+    ui.root_lit = p->deg < 7u ? p->deg : -1;
+}
+
+static void preview_slice(void)
+{
+    if (!nsl || slice_to(sel, PREVIEW))
+        return;
+    if (pads[PREVIEW].type == PAD_CHORD) {   /* a chord previews as the phrase it is, half a beat at least */
+        uint32_t k;
+        pads[PREVIEW].pn = 0;
+        for (k = 0; k < pads[PREVIEW].n; k++) {
+            ph[PREVIEW][k].s = 0;
+            ph[PREVIEW][k].d = (uint16_t)(pads[PREVIEW].len > 48u ? pads[PREVIEW].len : 48u);
+            ph[PREVIEW][k].p = pads[PREVIEW].note[k];
+            ph[PREVIEW][k].v = 100;
+            pads[PREVIEW].pn++;
+        }
+    }
+    ev_push(QE_PSTART, PREVIEW, 8);
+}
+
+/* REC stopped: the capture written out as RECnn.MID, then loaded and sliced */
+static uint8_t smfbuf[RECMAX * 8u + 64u];
+static void rec_save(void)
+{
+    uint32_t i, n = rec_n, w = 0, mtrk, last = 0, t0 = 0, nn;
+    char name[12] = "REC01   MID";
+    if (!n) {
+        app_say("REC", "NOTHING CAME IN");
+        return;
+    }
+    for (i = 0; i < n; i++)              /* the first note on starts the file */
+        if (rec_ev[i].st == 0x90u) {
+            t0 = rec_ev[i].t;
+            break;
+        }
+    for (nn = 1; nn < 100u; nn++) {      /* the first free RECnn */
+        uint32_t f, used = 0;
+        name[3] = (char)('0' + nn / 10u);
+        name[4] = (char)('0' + nn % 10u);
+        for (f = 0; f < nfiles; f++)
+            if (files[f].name[0] == 'R' && files[f].name[1] == 'E' && files[f].name[2] == 'C' &&
+                files[f].name[3] == name[3] && files[f].name[4] == name[4])
+                used = 1;
+        if (!used)
+            break;
+    }
+    {
+        static const uint8_t HDR[] = {'M', 'T', 'h', 'd', 0, 0, 0, 6, 0, 0, 0, 1, 0, PPQ,
+                                      'M', 'T', 'r', 'k', 0, 0, 0, 0};
+        uint32_t us = 60000000u / tempo;
+        __builtin_memcpy(smfbuf, HDR, sizeof HDR);
+        w = sizeof HDR;
+        mtrk = w;
+        smfbuf[w++] = 0;                 /* the tempo */
+        smfbuf[w++] = 0xFF;
+        smfbuf[w++] = 0x51;
+        smfbuf[w++] = 3;
+        smfbuf[w++] = (uint8_t)(us >> 16);
+        smfbuf[w++] = (uint8_t)(us >> 8);
+        smfbuf[w++] = (uint8_t)us;
+    }
+    for (i = 0; i < n; i++) {
+        const recev_t *r = &rec_ev[i];
+        uint32_t t, d, v, k, bytes[4], nb = 0;
+        if (r->t < t0)
+            continue;
+        t = (uint32_t)((uint64_t)(r->t - t0) * tempo * PPQ / (60u * 44100u));
+        d = t >= last ? t - last : 0u;
+        last = t;
+        v = d;
+        bytes[nb++] = v & 0x7Fu;
+        while ((v >>= 7) && nb < 4u)
+            bytes[nb++] = (v & 0x7Fu) | 0x80u;
+        for (k = nb; k-- > 0;)
+            smfbuf[w++] = (uint8_t)bytes[k];
+        smfbuf[w++] = r->st;
+        smfbuf[w++] = r->d1;
+        smfbuf[w++] = r->d2;
+    }
+    smfbuf[w++] = 0;                     /* the end of the track */
+    smfbuf[w++] = 0xFF;
+    smfbuf[w++] = 0x2F;
+    smfbuf[w++] = 0;
+    {
+        uint32_t len = w - mtrk;
+        smfbuf[mtrk - 4u] = (uint8_t)(len >> 24);
+        smfbuf[mtrk - 3u] = (uint8_t)(len >> 16);
+        smfbuf[mtrk - 2u] = (uint8_t)(len >> 8);
+        smfbuf[mtrk - 1u] = (uint8_t)len;
+    }
+    if (fs_write(name, smfbuf, w)) {
+        app_say("REC", "DRIVE FULL");
+        return;
+    }
+    fs_scan();
+    for (i = 0; i < nfiles; i++)
+        if (files[i].name[0] == 'R' && files[i].name[3] == name[3] && files[i].name[4] == name[4]) {
+            file_load((int32_t)i);
+            ui.file_cur = (int32_t)i;
+            break;
+        }
+    ui.screen = SCR_SLICE;
+    {
+        char t[12] = "REC00.MID";
+        t[3] = name[3];
+        t[4] = name[4];
+        app_say("SAVED", t);
+    }
+}
+
+static void disk_enter(void)
+{
+    uint32_t k;
+    for (k = 0; k < NKEYS; k++)
+        notes_off(k);
+    dc_flush();
+    plat_disk_mode(&DISK);
+    ui.screen = SCR_DISK;
+    ui.disk_state = PLAT_DISK_WAITING;
+    ui.redraw = 1;
+}
+static void disk_leave(void)
+{
+    plat_disk_mode(0);
+    dc_sec = -1;                         /* the computer may have written anything */
+    fs_scan();
+    ui.file_cur = 0;
+    file_load(nfiles ? 0 : -1);
+    ui.screen = nfiles ? SCR_FILES : SCR_HOME;
+    ui.redraw = 1;
+}
+
+void app_loop(void)
+{
+    if (ui.screen == SCR_DISK) {
+        int st = plat_disk_poll();
+        if (st != ui.disk_state) {
+            ui.disk_state = (uint8_t)st;
+            ui.redraw = 1;
+        }
+        if (st == PLAT_DISK_EJECTED)
+            disk_leave();
+    }
+}
+
 static void input(void)
 {
     uint32_t keys, btn = plat_buttons(), i;
     int32_t e;
     touch_poll();
     keys = touch_keys();
-    /* white keys: pads */
+    /* white keys: the pads; in SLICE, a key drops the selected slice on its pad */
     for (i = 0; i < 16u; i++) {
         uint32_t k = WK[i], bit = 1u << k;
         if ((keys & bit) && !(ui.keys & bit)) {
             uint32_t vel = touch_vel(k);
-            notes_on(k, pads[i].note, pads[i].n, vel ? vel : 100u);
-            ui.pad = (int32_t)i;
-            ui.root_lit = pads[i].deg;
+            if (ui.screen == SCR_SLICE && nsl) {
+                char t[16], d[4] = {'P', 'A', 'D', 0};
+                ev_push(QE_PSTOP, i, 8);
+                if (!slice_to(sel, i)) {
+                    char n[8] = " ";
+                    pad_title(&pads[i], t);
+                    n[1] = (char)('0' + (i + 1u) / 10u);
+                    n[2] = (char)('0' + (i + 1u) % 10u);
+                    n[3] = 0;
+                    if (i + 1u < 10u) {
+                        n[1] = n[2];
+                        n[2] = 0;
+                    }
+                    text_cat(d, n);
+                    app_say(d, t);
+                }
+            }
+            pad_play(i, k, vel ? vel : 100u);
             ui.redraw = 1;
         } else if (!(keys & bit) && (ui.keys & bit)) {
             notes_off(k);
@@ -481,6 +1039,8 @@ static void input(void)
         }
         if (!down)
             continue;
+        if (ui.screen == SCR_DISK && i != B_HOME)
+            continue;                    /* the drive is the computer's until it ejects (or HOME) */
         if (i == B_SAVE) {
             if (plat_store_save(OBJ_SETTINGS, &set, sizeof set) == 0) {
                 set_dirty = 0;
@@ -489,18 +1049,45 @@ static void input(void)
                 app_say("SAVE", "FAILED");
             }
         } else if (i == B_PLAY) {
-            uint32_t k;
-            for (k = 0; k < NKEYS; k++)
-                notes_off(k);
-            app_say("ALL", "NOTES OFF");
+            if (ui.screen == SCR_SLICE)
+                preview_slice();
+            else {
+                uint32_t k;
+                for (k = 0; k < NKEYS; k++)
+                    notes_off(k);
+                for (k = 0; k <= NPADS; k++)
+                    ev_push(QE_PSTOP, k, 8);
+                app_say("ALL", "NOTES OFF");
+            }
         } else if (i == B_HOME) {
+            if (ui.screen == SCR_DISK)
+                disk_leave();
+            ui.screen = SCR_HOME;
             ui.msg_until = 0;
-            ui.redraw = 1;
+        } else if (i == B_SEL) {         /* SLICE: the slices, again the files */
+            if (ui.screen == SCR_SLICE)
+                ui.screen = SCR_FILES;
+            else
+                ui.screen = song_n ? SCR_SLICE : SCR_FILES;
+            if (ui.file_cur < 0 || (uint32_t)ui.file_cur >= nfiles)
+                ui.file_cur = cur_file < 0 ? 0 : cur_file;
+        } else if (i == B_GLO) {         /* SYS: the USB drive, for now */
+            disk_enter();
+        } else if (i == B_REC) {
+            if (!rec_on) {
+                __atomic_store_n(&rec_n, 0u, __ATOMIC_RELEASE);
+                rec_on = 1;
+                app_say("REC", "PLAY MIDI IN");
+            } else {
+                rec_on = 0;
+                rec_save();
+            }
         } else {
             static const char *const LABEL[NB] = {"FX", "SLICE", "TRIM", "LIB", "KEY", "SYS", "HOME", "SAVE",
                                                   "ARP", "MODE", "PLAY", "REC", "OCT-", "OCT+"};
             app_say(LABEL[i], "COMING SOON");
         }
+        ui.redraw = 1;
     }
     /* ALGORITHM (ROOT): the key's root; with OCT held, the scale */
     if ((e = plat_enc(EN_ALGO)) != 0) {
@@ -512,9 +1099,55 @@ static void input(void)
         }
         rekey();
     }
-    for (i = 0; i < NE; i++)             /* the others: drained for now */
-        if (i != EN_ALGO)
-            (void)plat_enc((int)i);
+    /* SELECT and K1 .. K4: what the screen's bottom bar says */
+    {
+        int32_t es = plat_enc(EN_SELECT), k1 = plat_enc(EN_K1), k2 = plat_enc(EN_K2), k3 = plat_enc(EN_K3),
+                k4 = plat_enc(EN_K4);
+        (void)plat_enc(EN_PRESET);
+        if (ui.screen == SCR_SLICE && nsl) {
+            if (es) {
+                sel = (uint32_t)clamp((int32_t)sel + es, 0, (int32_t)nsl - 1);
+                preview_slice();
+            }
+            if (k1) {
+                sl_mode ^= 1u;
+                slice_auto();
+            }
+            if (k2) {
+                if (sl_mode)
+                    sl_grid = (uint8_t)clamp(sl_grid + k2, 0, 6);
+                else
+                    sl_sens = (uint8_t)clamp(sl_sens + 5 * k2, 0, 100);
+                slice_auto();
+            }
+            if (k3 || k4) {              /* trim by 16ths */
+                int32_t s = (int32_t)sl_s[sel] + 24 * k3, en = (int32_t)sl_e[sel] + 24 * k4;
+                s = clamp(s, 0, (int32_t)sl_e[sel] - 24);
+                en = clamp(en, s + 24, (int32_t)song_len);
+                sl_s[sel] = (uint32_t)s;
+                sl_e[sel] = (uint32_t)en;
+                preview_slice();
+            }
+            if (es || k1 || k2 || k3 || k4)
+                ui.redraw = 1;
+        } else if (ui.screen == SCR_FILES) {
+            if (es && nfiles) {
+                ui.file_cur = clamp(ui.file_cur + es, 0, (int32_t)nfiles - 1);
+                if (file_load(ui.file_cur))
+                    app_say("CAN'T READ", files[ui.file_cur].name);
+                ui.trk_cur = 0;
+            }
+            if (k1 && ntrk)
+                ui.trk_cur = (uint8_t)clamp(ui.trk_cur + k1, 0, (int32_t)ntrk - 1);
+            if (k2 && ntrk) {
+                trk[ui.trk_cur].on ^= 1u;
+                if (!sl_mode)            /* the grid's cuts stay; the hits move with the notes */
+                    slice_auto();
+            }
+            if (es || k1 || k2)
+                ui.redraw = 1;
+        }
+    }
     if (keys != ui.keys || btn != ui.btn)
         ui.redraw = 1;
     ui.keys = keys;
@@ -523,15 +1156,18 @@ static void input(void)
 
 void app_input_only(void) { input(); }
 
-/* the lights: loaded pads dim, held pads full; the seven degree keys dim, the root full; SAVE lit while changed */
+/* the lights: loaded pads dim, held or playing pads full, an empty pad dark; in SLICE the pads breathe as drop
+ * targets (the mid level); the seven degree keys dim, the root full; REC lit while recording, SAVE while changed */
 static void lights(void)
 {
-    uint32_t i, bright = 0, dim = 0, btn = 0;
+    uint32_t i, bright = 0, dim = 0, btn = 0, mid = 0;
     for (i = 0; i < 16u; i++) {
         uint32_t bit = 1u << WK[i];
-        if (ui.keys & bit)
+        if ((ui.keys & bit) || pl[i].on)
             bright |= bit;
-        else
+        else if (ui.screen == SCR_SLICE && nsl)
+            mid |= bit;
+        else if (pads[i].type != PAD_EMPTY)
             dim |= bit;
     }
     for (i = 0; i < 7u; i++) {
@@ -543,10 +1179,17 @@ static void lights(void)
     }
     if (set_dirty)
         btn |= 1u << B_SAVE;
+    if (rec_on)
+        btn |= 1u << B_REC;
+    btn |= 1u << (ui.screen == SCR_SLICE || ui.screen == SCR_FILES ? B_SEL : ui.screen == SCR_DISK ? B_GLO : B_HOME);
     plat_lights(btn | ui.btn, bright, 0, dim, 1);
+    plat_lights_mid(0, mid);
 }
 
 /* ------------------------------------------------------------------ drawing --- */
+static const uint16_t AMBER = RGB(242, 181, 82), AMBER_DIM = RGB(122, 90, 46), TEAL = RGB(79, 179, 166),
+                      TEAL_DIM = RGB(31, 74, 69), REDC = RGB(224, 68, 60);
+
 static void deg_sign(int32_t x, int32_t y, uint16_t c)   /* a small degree sign: a 4 px ring */
 {
     cv_rect(x + 1, y, 2, 1, c);
@@ -555,117 +1198,394 @@ static void deg_sign(int32_t x, int32_t y, uint16_t c)   /* a small degree sign:
     cv_rect(x + 3, y + 1, 1, 2, c);
 }
 
-static void draw(void)
+static void top_bar(const char *pill, const char *right, uint16_t right_c)
 {
-    char t[32];
-    uint32_t i, now = plat_ms();
+    uint32_t now = plat_ms();
     int32_t x;
-    const pad_t *p = ui.pad >= 0 ? &pads[ui.pad] : 0;
-    int playing = p && (ui.keys >> WK[ui.pad] & 1u);
-    static const uint16_t AMBER = RGB(242, 181, 82), AMBER_DIM = RGB(122, 90, 46), TEAL = RGB(79, 179, 166);
-
-    /* band 1 (0 .. 120): the top bar, the chord */
-    cv_begin(240, 120, C_BLACK);
     if (now < ui.msg_until) {
         x = cv_text(10, 5, &FONT_B, ui.msg[0], C_WHITE);
         cv_text(x + 8, 5, &FONT_B, ui.msg[1], AMBER);
     } else {
-        cv_text(10, 6, &FONT_XS, "KIT 01  DIATONIC", C_GRAY);
-        key_text(t);
-        x = 230 - text_w(&FONT_XS, t) - 8;
-        cv_rect(x - 4, 5, text_w(&FONT_XS, t) + 16, 17, AMBER);
-        cv_text(x + 4, 6, &FONT_XS, t, C_BLACK);
+        x = 8;
+        if (pill) {
+            int32_t w = text_w(&FONT_XS, pill);
+            cv_rect(6, 5, w + 10, 17, C_WHITE);
+            cv_text(11, 6, &FONT_XS, pill, C_BLACK);
+            x = w + 24;
+        }
+        if (rec_on) {
+            cv_rect(x, 9, 9, 9, REDC);
+            x = cv_text(x + 13, 6, &FONT_XS, "REC", REDC) + 10;
+        }
+        if (right)
+            cv_text(232 - text_w(&FONT_XS, right), 6, &FONT_XS, right, right_c);
     }
     cv_rect(0, 27, 240, 1, C_LINE);
-    if (p) {
-        int32_t w, rw, qw;
-        /* "PAD 2  ii" with a degree sign when diminished */
+}
+
+static void bottom_bar(int32_t y, const char *const lbl[4], char val[4][12])
+{
+    uint32_t i;
+    cv_rect(0, y, 240, 1, C_LINE);
+    for (i = 0; i < 4u; i++) {
+        int32_t cx = (int32_t)i * 60;
+        cv_text(cx + (60 - text_w(&FONT_XS, lbl[i])) / 2, y + 7, &FONT_XS, lbl[i], C_GRAY);
+        cv_text(cx + (60 - text_w(&FONT_B, val[i])) / 2, y + 24, &FONT_B, val[i], C_WHITE);
+    }
+}
+
+static void draw_home(void)
+{
+    char t[32];
+    uint32_t i;
+    int32_t x;
+    const pad_t *p = ui.pad >= 0 ? &pads[ui.pad] : 0;
+    int playing = p && ((ui.keys >> WK[ui.pad] & 1u) || pl[ui.pad].on);
+
+    cv_begin(240, 120, C_BLACK);
+    key_text(t);
+    if (plat_ms() < ui.msg_until)
+        top_bar(0, 0, 0);
+    else {
+        int32_t w = text_w(&FONT_XS, t);
+        top_bar(0, 0, 0);
+        cv_text(10, 6, &FONT_XS, cur_file >= 0 ? files[cur_file].name : "KIT 01  DIATONIC", C_GRAY);
+        cv_rect(226 - w, 5, w + 10, 17, AMBER);
+        cv_text(231 - w, 6, &FONT_XS, t, C_BLACK);
+    }
+    if (p && p->type == PAD_CHORD) {
+        int32_t rw, qw, w;
+        char r[2] = {p->nm[0][0], 0};
+        const char *acc = p->nm[0] + 1;
         t[0] = 0;
-        text_cat(t, "PAD ");
+        pad_title(p, t);
         {
+            char h[24] = "PAD ";
             char d[4] = {(char)('0' + (ui.pad + 1) / 10), (char)('0' + (ui.pad + 1) % 10), 0, 0};
-            text_cat(t, ui.pad + 1 >= 10 ? d : d + 1);
+            text_cat(h, ui.pad + 1 >= 10 ? d : d + 1);
+            if (p->tag) {
+                char sn[6] = "  S";
+                sn[3] = (char)('0' + p->tag / 10u);
+                sn[4] = (char)('0' + p->tag % 10u);
+                if (p->tag < 10u) {
+                    sn[3] = sn[4];
+                    sn[4] = 0;
+                }
+                text_cat(h, sn);
+            }
+            x = cv_text(10, 36, &FONT_XS, h, C_GRAY);
         }
-        x = cv_text(10, 36, &FONT_XS, t, C_GRAY);
         x = cv_text(x + 10, 36, &FONT_XS, p->roman, C_GRAY);
         if (p->dim)
             deg_sign(x + 1, 38, C_GRAY);
-        /* the chord: its root in the big font, the quality beside it (the big font has capitals only) */
-        {
-            char r[2] = {p->nm[0][0], 0};
-            const char *acc = p->nm[0] + 1;
-            rw = text_w(&FONT_L, r) + text_w(&FONT_B, acc);
-            qw = text_w(&FONT_B, p->qual);
-            w = rw + qw + 4;
-            x = (240 - w) / 2;
-            x = cv_text(x, 58, &FONT_L, r, playing ? AMBER : AMBER_DIM);
-            if (*acc)
-                x = cv_text(x, 58, &FONT_B, acc, playing ? AMBER : AMBER_DIM);
-            cv_text(x + 3, 72, &FONT_B, p->qual, playing ? AMBER : AMBER_DIM);
-        }
-        /* the chord tones */
+        rw = text_w(&FONT_L, r) + text_w(&FONT_B, acc);
+        qw = text_w(&FONT_B, p->qual);
+        w = rw + qw + 4;
+        x = (240 - w) / 2;
+        x = cv_text(x, 58, &FONT_L, r, playing ? AMBER : AMBER_DIM);
+        if (*acc)
+            x = cv_text(x, 58, &FONT_B, acc, playing ? AMBER : AMBER_DIM);
+        cv_text(x + 3, 72, &FONT_B, p->qual, playing ? AMBER : AMBER_DIM);
         {
             int32_t tw = 0;
             for (i = 0; i < p->n; i++)
                 tw += text_w(&FONT_XS, p->nm[i]) + 14;
             x = (240 - tw + 14) / 2;
             for (i = 0; i < p->n; i++) {
-                const char *nm = p->nm[i];
-                int32_t nw = text_w(&FONT_XS, nm);
-                int root = i == 0u;
+                const char *nm = i ? p->nm[i] : p->nm[0];
+                char tmp[4];
+                int32_t nw;
+                int root = p->note[i] % 12u == p->root_pc;
+                if (i)
+                    nm = p->nm[i];
+                else {
+                    pc_name(p->note[0] % 12u, tmp);
+                    nm = p->fromkey ? p->nm[0] : tmp;
+                }
+                nw = text_w(&FONT_XS, nm);
                 cv_rect(x - 4, 97, nw + 8, 16, root ? TEAL : C_LINE);
                 cv_text(x, 97, &FONT_XS, nm, root ? C_BLACK : C_GRAY);
                 x += nw + 14;
             }
         }
+    } else if (p && p->type == PAD_PHRASE) {
+        char h[16] = "PAD ";
+        char d[4] = {(char)('0' + (ui.pad + 1) / 10), (char)('0' + (ui.pad + 1) % 10), 0, 0};
+        text_cat(h, ui.pad + 1 >= 10 ? d : d + 1);
+        cv_text(10, 36, &FONT_XS, h, C_GRAY);
+        pad_title(p, t);
+        cv_text((240 - text_w(&FONT_M, t)) / 2, 58, &FONT_M, t, playing ? TEAL : TEAL_DIM);
+        {
+            char n[16];
+            uint32_t k = p->pn, q = 0;
+            char *o = n;
+            if (k >= 10u)
+                *o++ = (char)('0' + k / 10u);
+            *o++ = (char)('0' + k % 10u);
+            *o = 0;
+            str_set(t, "PHRASE  ", sizeof t);
+            text_cat(t, n);
+            text_cat(t, " NOTES");
+            (void)q;
+            cv_text((240 - text_w(&FONT_XS, t)) / 2, 97, &FONT_XS, t, C_GRAY);
+        }
     } else {
         cv_text((240 - text_w(&FONT_M, "PLAY A PAD")) / 2, 58, &FONT_M, "PLAY A PAD", C_GRAY);
-        cv_text((240 - text_w(&FONT_XS, "white keys: chords   black keys: bass")) / 2, 92, &FONT_XS,
-                "white keys: chords   black keys: bass", C_DIM);
+        cv_text((240 - text_w(&FONT_XS, "SLICE: chop MIDI files onto pads")) / 2, 92, &FONT_XS,
+                "SLICE: chop MIDI files onto pads", C_DIM);
     }
     cv_blit(0, 0);
 
-    /* band 2 (120 .. 240): the pad strip, the degree strip, the bottom bar */
     cv_begin(240, 120, C_BLACK);
-    for (i = 0; i < 16u; i++) {          /* the 16 pads as the white keys run */
-        int held = (int)(ui.keys >> WK[i] & 1u);
-        uint16_t c = held ? AMBER : (i < 8u ? AMBER_DIM : RGB(31, 74, 69));
+    for (i = 0; i < 16u; i++) {
+        int on = (int)(ui.keys >> WK[i] & 1u) || pl[i].on;
+        uint16_t c = pads[i].type == PAD_PHRASE ? (on ? TEAL : TEAL_DIM)
+                     : pads[i].type == PAD_CHORD ? (on ? AMBER : AMBER_DIM) : C_LINE;
         cv_rect(6 + (int32_t)i * 14, 8, 12, 14, c);
     }
     cv_text(6, 30, &FONT_XS, "ROOT", TEAL);
-    for (i = 0; i < 7u; i++) {           /* the seven degree keys */
+    for (i = 0; i < 7u; i++) {
         int lit = (int32_t)i == ui.root_lit;
         int32_t cx = 46 + (int32_t)i * 27;
         char d[2] = {(char)('1' + i), 0};
         cv_rect(cx, 28, 24, 20, lit ? TEAL : C_LINE);
         cv_text(cx + (24 - text_w(&FONT_XS, d)) / 2, 30, &FONT_XS, d, lit ? C_BLACK : C_GRAY);
     }
-    cv_rect(0, 68, 240, 1, C_LINE);
     {
-        static const char *const LBL[4] = {"OCT", "KEY", "SCALE", "VOL"};
+        static const char *const LBL[4] = {"OCT", "KEY", "SCALE", "BPM"};
         char v[4][12];
         int32_t o = set.octave;
+        uint32_t b = tempo;
         v[0][0] = o < 0 ? '-' : '+';
         v[0][1] = (char)('0' + (o < 0 ? -o : o));
         v[0][2] = 0;
         tonic_name(v[1]);
         str_set(v[2], SCALE_SHORT[set.scale], sizeof v[2]);
-        {
-            uint32_t pct = plat_master() * 100u / 4096u;
-            char *q = v[3];
-            if (pct >= 100u)
-                *q++ = '1';
-            if (pct >= 10u)
-                *q++ = (char)('0' + (pct / 10u) % 10u);
-            *q++ = (char)('0' + pct % 10u);
-            *q = 0;
+        v[3][0] = (char)(b >= 100u ? '0' + b / 100u : ' ');
+        v[3][1] = (char)('0' + b / 10u % 10u);
+        v[3][2] = (char)('0' + b % 10u);
+        v[3][3] = 0;
+        bottom_bar(68, LBL, v);
+    }
+    cv_blit(0, 120);
+}
+
+/* the file as a waveform: each note a struck sound (attack, decay, a short tail), louder the harder it's played */
+static uint32_t wv_lo, wv_len;
+static float amp_at(uint32_t t)
+{
+    uint32_t i;
+    float sum = 0.0f;
+    for (i = 0; i < song_n; i++) {
+        const note_t *n = &song[i];
+        uint32_t s = N_START(n);
+        float dt, env;
+        if (s > t)
+            break;
+        if (!note_used(n))
+            continue;
+        dt = (float)(t - s) / (float)PPQ;
+        if (dt > (float)n->d / (float)PPQ + 0.6f)
+            continue;
+        env = dt < (float)n->d / (float)PPQ ? fm_minf(1.0f, dt * 40.0f) * (fm_expf(-dt * 1.4f) * 0.75f + 0.25f)
+                                            : 0.25f * fm_expf(-(dt - (float)n->d / (float)PPQ) * 7.0f);
+        sum += (float)n->v / 127.0f * env * 0.55f;
+    }
+    return fm_tanhf(sum);
+}
+
+static void draw_slice(void)
+{
+    char t[32];
+    uint32_t i;
+    int32_t x;
+    cv_begin(240, 120, C_BLACK);
+    top_bar("SLICE", cur_file >= 0 ? files[cur_file].name : "NO FILE", C_GRAY);
+    if (!nsl) {
+        cv_text(10, 50, &FONT_B, "NO SLICES", C_GRAY);
+        cv_text(10, 72, &FONT_XS, "SLICE again: pick a file", C_DIM);
+        cv_text(10, 88, &FONT_XS, "SYS: copy files over USB", C_DIM);
+        cv_blit(0, 0);
+        cv_begin(240, 120, C_BLACK);
+        cv_blit(0, 120);
+        return;
+    }
+    {                                    /* the view: 4 bars around the selection at most */
+        uint32_t bar = PPQ * song_bpb, vb = 4u * bar;
+        wv_len = song_len < vb ? song_len : vb;
+        wv_lo = sl_s[sel] > bar ? (sl_s[sel] - bar) / bar * bar : 0u;
+        if (wv_lo + wv_len > song_len)
+            wv_lo = song_len - wv_len;
+    }
+    /* the waveform, rows 34 .. 119 here and on into the next band: drawn per band */
+    for (x = 0; x < 240; x++) {
+        uint32_t tt = wv_lo + (uint32_t)((uint64_t)wv_len * (uint32_t)x / 240u);
+        int in = tt >= sl_s[sel] && tt < sl_e[sel];
+        float a = amp_at(tt) * (0.6f + 0.4f * (float)((tt * 2654435761u) >> 24) / 255.0f);
+        int32_t h = (int32_t)(a * 46.0f), cy = 80;
+        cv_rect(x, cy - h, 1, 2 * h + 1, in ? AMBER : AMBER_DIM);
+    }
+    for (i = 0; i < nsl; i++) {          /* the cuts */
+        int32_t sx;
+        if (sl_s[i] < wv_lo || sl_s[i] >= wv_lo + wv_len)
+            continue;
+        sx = (int32_t)((uint64_t)(sl_s[i] - wv_lo) * 240u / wv_len);
+        cv_rect(sx, 32, 1, 96, i == sel ? RGB(92, 207, 122) : C_DIM);
+    }
+    if (sl_e[sel] > wv_lo && sl_e[sel] <= wv_lo + wv_len)
+        cv_rect((int32_t)((uint64_t)(sl_e[sel] - wv_lo) * 240u / wv_len) - 1, 32, 2, 96, RGB(224, 98, 92));
+    for (i = 0; i <= wv_len / (PPQ * song_bpb); i++) {   /* bar numbers */
+        char b[4];
+        uint32_t bn = (wv_lo + i * PPQ * song_bpb) / (PPQ * song_bpb) + 1u;
+        int32_t bx = (int32_t)((uint64_t)i * PPQ * song_bpb * 240u / wv_len);
+        b[0] = (char)(bn >= 10u ? '0' + bn / 10u : '0' + bn);
+        b[1] = (char)(bn >= 10u ? '0' + bn % 10u : 0);
+        b[2] = 0;
+        if (bx < 232)
+            cv_text(bx + 2, 30, &FONT_T, b, C_GRAY);
+    }
+    cv_blit(0, 0);
+
+    cv_begin(240, 120, C_BLACK);
+    for (x = 0; x < 240; x++) {          /* the waveform's lower half (rows 120 .. 127 of it) */
+        uint32_t tt = wv_lo + (uint32_t)((uint64_t)wv_len * (uint32_t)x / 240u);
+        int in = tt >= sl_s[sel] && tt < sl_e[sel];
+        float a = amp_at(tt) * (0.6f + 0.4f * (float)((tt * 2654435761u) >> 24) / 255.0f);
+        int32_t h = (int32_t)(a * 46.0f), bot = 80 + h - 120;
+        if (bot >= 0)
+            cv_rect(x, 0, 1, bot + 1, in ? AMBER : AMBER_DIM);
+    }
+    {
+        uint32_t i2;
+        for (i2 = 0; i2 < nsl; i2++) {
+            int32_t sx;
+            if (sl_s[i2] < wv_lo || sl_s[i2] >= wv_lo + wv_len)
+                continue;
+            sx = (int32_t)((uint64_t)(sl_s[i2] - wv_lo) * 240u / wv_len);
+            cv_rect(sx, 0, 1, 8, i2 == sel ? RGB(92, 207, 122) : C_DIM);
         }
-        for (i = 0; i < 4u; i++) {
-            int32_t cx = (int32_t)i * 60;
-            cv_text(cx + (60 - text_w(&FONT_XS, LBL[i])) / 2, 76, &FONT_XS, LBL[i], C_GRAY);
-            cv_text(cx + (60 - text_w(&FONT_B, v[i])) / 2, 93, &FONT_B, v[i], C_WHITE);
+        if (sl_e[sel] > wv_lo && sl_e[sel] <= wv_lo + wv_len)
+            cv_rect((int32_t)((uint64_t)(sl_e[sel] - wv_lo) * 240u / wv_len) - 1, 0, 2, 8, RGB(224, 98, 92));
+    }
+    if (!slice_to(sel, PREVIEW)) {       /* the slice: its number and what it is */
+        pad_title(&pads[PREVIEW], t);
+        cv_text(10, 14, &FONT_B, t, pads[PREVIEW].type == PAD_CHORD ? AMBER : TEAL);
+    }
+    {
+        char a[10], b[10];
+        fmt_pos(sl_s[sel], a);
+        fmt_pos(sl_e[sel], b);
+        str_set(t, a, sizeof t);
+        text_cat(t, " - ");
+        text_cat(t, b);
+        cv_text(230 - text_w(&FONT_XS, t), 16, &FONT_XS, t, C_GRAY);
+    }
+    cv_text(10, 40, &FONT_T, "WHITE KEY: DROP ON PAD    PLAY: HEAR IT", C_DIM);
+    {
+        static const char *const LBL[4] = {"MODE", "SENS", "START", "END"};
+        static const char *const LBLG[4] = {"MODE", "GRID", "START", "END"};
+        char v[4][12];
+        str_set(v[0], sl_mode ? "GRID" : "HITS", 12);
+        if (sl_mode)
+            str_set(v[1], GRID_NAME[sl_grid], 12);
+        else {
+            v[1][0] = (char)(sl_sens >= 100u ? '1' : '0' + sl_sens / 10u);
+            v[1][1] = (char)(sl_sens >= 100u ? '0' : '0' + sl_sens % 10u);
+            v[1][2] = (char)(sl_sens >= 100u ? '0' : 0);
+            v[1][3] = 0;
+        }
+        fmt_pos(sl_s[sel], v[2]);
+        fmt_pos(sl_e[sel], v[3]);
+        bottom_bar(68, sl_mode ? LBLG : LBL, v);
+    }
+    cv_blit(0, 120);
+}
+
+static void draw_files(void)
+{
+    char t[32];
+    uint32_t i;
+    cv_begin(240, 120, C_BLACK);
+    {
+        char kb[12];
+        uint32_t f = fs_free_kb(), n = 0;
+        if (f >= 100u)
+            kb[n++] = (char)('0' + f / 100u);
+        if (f >= 10u)
+            kb[n++] = (char)('0' + f / 10u % 10u);
+        kb[n++] = (char)('0' + f % 10u);
+        kb[n] = 0;
+        text_cat(kb, " KB FREE");
+        top_bar("FILES", kb, C_GRAY);
+    }
+    if (!nfiles) {
+        cv_text(10, 44, &FONT_B, "NO MIDI FILES YET", C_GRAY);
+        cv_text(10, 66, &FONT_XS, "SYS: the FM-1 becomes a USB drive.", C_DIM);
+        cv_text(10, 82, &FONT_XS, "Copy .mid files on, then eject.", C_DIM);
+        cv_text(10, 98, &FONT_XS, "Or REC: record MIDI coming in.", C_DIM);
+    } else {
+        int32_t first = ui.file_cur > 3 ? ui.file_cur - 3 : 0;
+        for (i = 0; i < 5u && (uint32_t)(first + (int32_t)i) < nfiles; i++) {
+            int32_t f = first + (int32_t)i, y = 32 + (int32_t)i * 17;
+            int cur = f == ui.file_cur;
+            if (cur)
+                cv_rect(4, y, 232, 16, AMBER);
+            cv_text(10, y, &FONT_XS, files[f].name, cur ? C_BLACK : (f == cur_file ? C_WHITE : C_GRAY));
         }
     }
+    cv_blit(0, 0);
+
+    cv_begin(240, 120, C_BLACK);
+    cv_rect(0, 0, 240, 1, C_LINE);
+    for (i = 0; i < ntrk && i < 4u; i++) {
+        int32_t y = 4 + (int32_t)i * 15;
+        int cur = i == ui.trk_cur;
+        cv_rect(8, y + 3, 9, 9, trk[i].on ? TEAL : C_LINE);
+        cv_text(24, y, &FONT_XS, trk[i].name, cur ? C_WHITE : C_GRAY);
+        {
+            char c[8];
+            uint32_t n = trk[i].count, k = 0;
+            if (n >= 100u)
+                c[k++] = (char)('0' + n / 100u % 10u);
+            if (n >= 10u)
+                c[k++] = (char)('0' + n / 10u % 10u);
+            c[k++] = (char)('0' + n % 10u);
+            c[k] = 0;
+            cv_text(200 - text_w(&FONT_XS, c), y, &FONT_XS, c, C_DIM);
+        }
+        if (cur)
+            cv_rect(4, y + 4, 2, 8, C_WHITE);
+    }
+    (void)t;
+    {
+        static const char *const LBL[4] = {"FILE", "TRACK", "ON/OFF", "SLICES"};
+        char v[4][12];
+        uint32_t n = nsl;
+        str_set(v[0], "SELECT", 12);
+        str_set(v[1], ntrk ? "K1" : "-", 12);
+        str_set(v[2], ntrk ? (trk[ui.trk_cur].on ? "ON" : "OFF") : "-", 12);
+        v[3][0] = (char)(n >= 10u ? '0' + n / 10u : '0' + n);
+        v[3][1] = (char)(n >= 10u ? '0' + n % 10u : 0);
+        v[3][2] = 0;
+        bottom_bar(68, LBL, v);
+    }
+    cv_blit(0, 120);
+}
+
+static void draw_disk(void)
+{
+    const char *st = ui.disk_state == PLAT_DISK_MOUNTED ? "CONNECTED" : "WAITING FOR A COMPUTER";
+    cv_begin(240, 120, C_BLACK);
+    top_bar("USB DRIVE", 0, 0);
+    cv_text((240 - text_w(&FONT_M, "USB DRIVE")) / 2, 44, &FONT_M, "USB DRIVE", C_WHITE);
+    cv_text((240 - text_w(&FONT_XS, st)) / 2, 82, &FONT_XS, st, ui.disk_state == PLAT_DISK_MOUNTED ? TEAL : AMBER);
+    cv_blit(0, 0);
+    cv_begin(240, 120, C_BLACK);
+    cv_text(12, 4, &FONT_XS, "1  Connect USB to a computer.", C_GRAY);
+    cv_text(12, 22, &FONT_XS, "2  Copy .mid files onto CHORDSMITH.", C_GRAY);
+    cv_text(12, 40, &FONT_XS, "3  Eject it. Files show in SLICE.", C_GRAY);
+    cv_text(12, 76, &FONT_XS, "No USB MIDI while the drive is on.", C_DIM);
+    cv_text(12, 94, &FONT_XS, "HOME: leave drive mode.", C_DIM);
     cv_blit(0, 120);
 }
 
@@ -673,33 +1593,109 @@ void app_ui_init(void)
 {
     touch_on(1);
     lcd_fill(0, 0, 240, 240, C_BLACK);
+    ui.file_cur = cur_file;
     ui.redraw = 1;
 }
 
 void app_frame(void)
 {
-    static uint32_t last_pct;
-    uint32_t now = plat_ms(), pct = plat_master() * 100u / 4096u;
+    static uint32_t last_on;
+    uint32_t now = plat_ms(), i, on = 0;
     input();
     lights();
     ann_tick(now);
-    if (pct != last_pct || (ui.msg_until && now >= ui.msg_until)) {
-        last_pct = pct;
-        if (now >= ui.msg_until)
-            ui.msg_until = 0;
+    for (i = 0; i <= NPADS; i++)         /* a phrase starting or ending lights the screen too */
+        on |= (uint32_t)pl[i].on << i;
+    if (on != last_on) {
+        last_on = on;
+        ui.redraw = 1;
+    }
+    if (ui.msg_until && now >= ui.msg_until) {
+        ui.msg_until = 0;
         ui.redraw = 1;
     }
     if (ui.redraw) {
         ui.redraw = 0;
-        draw();
+        if (ui.screen == SCR_SLICE)
+            draw_slice();
+        else if (ui.screen == SCR_FILES)
+            draw_files();
+        else if (ui.screen == SCR_DISK)
+            draw_disk();
+        else
+            draw_home();
     }
 }
 
 #ifdef PLAT_HOST
+/* the simulator's own commands: "import PATH NAME83" puts a file on the drive as a computer would; "dumpdisk PATH"
+ * writes the drive's image out (checked with a FAT library) */
+int app_host_cmd(const char *cmd, const char *a, const char *b, const char *c, const char *d)
+{
+    (void)c, (void)d;
+    if (!strcmp(cmd, "import")) {
+        static uint8_t buf[96 * 1024];
+        char n83[12] = "           ";
+        FILE *f = fopen(a, "rb");
+        size_t n;
+        uint32_t i, k = 0;
+        if (!f) {
+            printf("  import: no %s\n", a);
+            return 1;
+        }
+        n = fread(buf, 1, sizeof buf, f);
+        fclose(f);
+        for (i = 0; b[i] && b[i] != '.' && k < 8u; i++)
+            n83[k++] = (char)(b[i] >= 'a' && b[i] <= 'z' ? b[i] - 32 : b[i]);
+        n83[8] = 'M';
+        n83[9] = 'I';
+        n83[10] = 'D';
+        printf("  import %s: %d\n", b, fs_write(n83, buf, (uint32_t)n));
+        fs_scan();
+        return 1;
+    }
+    if (!strcmp(cmd, "dumpdisk")) {
+        FILE *f = fopen(a, "wb");
+        uint32_t i;
+        dc_flush();
+        for (i = 0; i < DISK_BLOCKS; i++)
+            fwrite(plat_data(DISK_LO + i * 512u), 1, 512, f);
+        fclose(f);
+        return 1;
+    }
+    if (!strcmp(cmd, "loadimg")) {      /* "loadimg PATH": the drive as a computer left it */
+        static uint8_t img[DISK_BLOCKS * 512u];
+        FILE *f = fopen(a, "rb");
+        uint32_t i;
+        if (!f || fread(img, 1, sizeof img, f) != sizeof img) {
+            printf("  loadimg: can't read %s\n", a);
+            if (f)
+                fclose(f);
+            return 1;
+        }
+        fclose(f);
+        dc_sec = -1;
+        for (i = 0; i < DISK_BLOCKS / 8u; i++) {
+            plat_data_erase(DISK_LO + i * 4096u);
+            plat_data_write(DISK_LO + i * 4096u, img + i * 4096u, 4096u);
+        }
+        fs_scan();
+        for (i = 0; i < nfiles; i++)
+            printf("  file %u: %s (%u bytes)\n", i, files[i].name, files[i].size);
+        return 1;
+    }
+    if (!strcmp(cmd, "load")) {          /* "load N": as SELECT on FILES */
+        ui.file_cur = atoi(a);
+        printf("  load %d: %d\n", ui.file_cur, file_load(ui.file_cur));
+        return 1;
+    }
+    return 0;
+}
+
 int app_expect(const char *what, int *got)
 {
     uint32_t i;
-    if (!strcmp(what, "voices")) {       /* voices sounding (attack or sustain) */
+    if (!strcmp(what, "voices")) {
         *got = 0;
         for (i = 0; i < NVOICES; i++)
             *got += vo[i].stage == 1 || vo[i].stage == 2;
@@ -715,8 +1711,30 @@ int app_expect(const char *what, int *got)
         *got = ui.root_lit;
     else if (!strcmp(what, "dirty"))
         *got = set_dirty;
-    else if (!strncmp(what, "padnote", 7))  /* padnoteN: pad 1's note N */
+    else if (!strncmp(what, "padnote", 7))
         *got = ui.pad >= 0 ? pads[ui.pad].note[atoi(what + 7) % MAXN] : -1;
+    else if (!strcmp(what, "files"))
+        *got = (int)nfiles;
+    else if (!strcmp(what, "notes"))
+        *got = (int)song_n;
+    else if (!strcmp(what, "tracks"))
+        *got = (int)ntrk;
+    else if (!strcmp(what, "slices"))
+        *got = (int)nsl;
+    else if (!strcmp(what, "bpm"))
+        *got = (int)tempo;
+    else if (!strcmp(what, "screen"))
+        *got = ui.screen;
+    else if (!strncmp(what, "padtype", 7))
+        *got = pads[atoi(what + 7) % NPADS].type;
+    else if (!strncmp(what, "padtag", 6))   /* padtagN: the slice pad N holds (0: the key's chord) */
+        *got = pads[atoi(what + 6) % NPADS].tag;
+    else if (!strncmp(what, "padn", 4))   /* padnN: pad N's phrase notes */
+        *got = pads[atoi(what + 4) % NPADS].pn;
+    else if (!strncmp(what, "playing", 7))
+        *got = pl[atoi(what + 7) % (NPADS + 1)].on;
+    else if (!strcmp(what, "recn"))
+        *got = (int)rec_n;
     else
         return 0;
     return 1;

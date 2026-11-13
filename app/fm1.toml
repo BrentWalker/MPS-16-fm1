@@ -7,6 +7,7 @@ o2 = []                        # separate units compiled at -O2 (an app's DSP)
 words = "words.tsv"
 ble = false
 ble_central = false
+msc = true                     # USB drive mode: MIDI files copied onto the FM-1
 # the site (tools/make_site.py, tools/publish_site.sh)
 tagline = "chords and phrases on 16 pads"
 repo = "https://github.com/BrentWalker/chordsmith-fm"
