@@ -892,7 +892,7 @@ static void rec_save(void)
         uint32_t t, d, v, k, bytes[4], nb = 0;
         if (r->t < t0)
             continue;
-        t = (uint32_t)((uint64_t)(r->t - t0) * tempo * PPQ / (60u * 44100u));
+        t = (uint32_t)((float)(r->t - t0) * (float)(tempo * PPQ) / (60.0f * 44100.0f));
         d = t >= last ? t - last : 0u;
         last = t;
         v = d;
@@ -1419,7 +1419,7 @@ static void draw_slice(void)
     }
     /* the waveform, rows 34 .. 119 here and on into the next band: drawn per band */
     for (x = 0; x < 240; x++) {
-        uint32_t tt = wv_lo + (uint32_t)((uint64_t)wv_len * (uint32_t)x / 240u);
+        uint32_t tt = wv_lo + (uint32_t)((uint32_t)wv_len * (uint32_t)x / 240u);
         int in = tt >= sl_s[sel] && tt < sl_e[sel];
         float a = amp_at(tt) * (0.6f + 0.4f * (float)((tt * 2654435761u) >> 24) / 255.0f);
         int32_t h = (int32_t)(a * 46.0f), cy = 80;
@@ -1429,15 +1429,15 @@ static void draw_slice(void)
         int32_t sx;
         if (sl_s[i] < wv_lo || sl_s[i] >= wv_lo + wv_len)
             continue;
-        sx = (int32_t)((uint64_t)(sl_s[i] - wv_lo) * 240u / wv_len);
+        sx = (int32_t)((uint32_t)(sl_s[i] - wv_lo) * 240u / wv_len);
         cv_rect(sx, 32, 1, 96, i == sel ? RGB(92, 207, 122) : C_DIM);
     }
     if (sl_e[sel] > wv_lo && sl_e[sel] <= wv_lo + wv_len)
-        cv_rect((int32_t)((uint64_t)(sl_e[sel] - wv_lo) * 240u / wv_len) - 1, 32, 2, 96, RGB(224, 98, 92));
+        cv_rect((int32_t)((uint32_t)(sl_e[sel] - wv_lo) * 240u / wv_len) - 1, 32, 2, 96, RGB(224, 98, 92));
     for (i = 0; i <= wv_len / (PPQ * song_bpb); i++) {   /* bar numbers */
         char b[4];
         uint32_t bn = (wv_lo + i * PPQ * song_bpb) / (PPQ * song_bpb) + 1u;
-        int32_t bx = (int32_t)((uint64_t)i * PPQ * song_bpb * 240u / wv_len);
+        int32_t bx = (int32_t)((uint32_t)i * PPQ * song_bpb * 240u / wv_len);
         b[0] = (char)(bn >= 10u ? '0' + bn / 10u : '0' + bn);
         b[1] = (char)(bn >= 10u ? '0' + bn % 10u : 0);
         b[2] = 0;
@@ -1448,7 +1448,7 @@ static void draw_slice(void)
 
     cv_begin(240, 120, C_BLACK);
     for (x = 0; x < 240; x++) {          /* the waveform's lower half (rows 120 .. 127 of it) */
-        uint32_t tt = wv_lo + (uint32_t)((uint64_t)wv_len * (uint32_t)x / 240u);
+        uint32_t tt = wv_lo + (uint32_t)((uint32_t)wv_len * (uint32_t)x / 240u);
         int in = tt >= sl_s[sel] && tt < sl_e[sel];
         float a = amp_at(tt) * (0.6f + 0.4f * (float)((tt * 2654435761u) >> 24) / 255.0f);
         int32_t h = (int32_t)(a * 46.0f), bot = 80 + h - 120;
@@ -1461,11 +1461,11 @@ static void draw_slice(void)
             int32_t sx;
             if (sl_s[i2] < wv_lo || sl_s[i2] >= wv_lo + wv_len)
                 continue;
-            sx = (int32_t)((uint64_t)(sl_s[i2] - wv_lo) * 240u / wv_len);
+            sx = (int32_t)((uint32_t)(sl_s[i2] - wv_lo) * 240u / wv_len);
             cv_rect(sx, 0, 1, 8, i2 == sel ? RGB(92, 207, 122) : C_DIM);
         }
         if (sl_e[sel] > wv_lo && sl_e[sel] <= wv_lo + wv_len)
-            cv_rect((int32_t)((uint64_t)(sl_e[sel] - wv_lo) * 240u / wv_len) - 1, 0, 2, 8, RGB(224, 98, 92));
+            cv_rect((int32_t)((uint32_t)(sl_e[sel] - wv_lo) * 240u / wv_len) - 1, 0, 2, 8, RGB(224, 98, 92));
     }
     if (!slice_to(sel, PREVIEW)) {       /* the slice: its number and what it is */
         pad_title(&pads[PREVIEW], t);

@@ -118,7 +118,7 @@ static int smf_load(void)
             hi = st & 0xF0u;
             ch = st & 0x0Fu;
             if (hi == 0x90u || hi == 0x80u) {
-                uint32_t p = rd8() & 0x7Fu, v = rd8() & 0x7Fu, k, t96 = (uint32_t)((uint64_t)tick * PPQ / div);
+                uint32_t p = rd8() & 0x7Fu, v = rd8() & 0x7Fu, k, t96 = tick / div * PPQ + tick % div * PPQ / div;
                 if (ch == 9u)
                     T->drums = 1;
                 if (hi == 0x90u && v) {

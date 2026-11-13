@@ -1,6 +1,6 @@
 # The template's build settings (tools/build.py)
 name = "CHORDSMITH"              # APP_NAME is in app.h; this names the build's files
-id_prefix = "FM-1_11"          # package identity (each firmware its own): dev FM-1_1100, releases FM-1_11XXYYZZ
+id_prefix = "FM-1_83"          # package identity (each firmware its own): dev FM-1_1100, releases FM-1_11XXYYZZ
 usb_manufacturer = "BeatSmith"
 usb_product = "ChordSmith FM"
 o2 = []                        # separate units compiled at -O2 (an app's DSP)
@@ -11,7 +11,7 @@ msc = true                     # USB drive mode: MIDI files copied onto the FM-1
 # the site (tools/make_site.py, tools/publish_site.sh)
 tagline = "chords and phrases on 16 pads"
 repo = "https://github.com/BrentWalker/chordsmith-fm"
-licence = "TBD"              # the app code's licence: to be chosen (fm1-base stays MPL-2.0)
+licence = "LicenseRef-ChordSmith-TBD"   # the app code's licence: to be chosen (fm1-base stays MPL-2.0)
 credits = "Built on fm1-base by Charles Vestal and felucca-bsp by Leo Kuroshita."
 # firmware.json, for firmware hubs (docs/FIRMWARE-JSON.md): the build writes it from these and the keys above
 author = "Brent Walker (BeatSmith)"
