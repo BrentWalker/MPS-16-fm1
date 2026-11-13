@@ -5,17 +5,17 @@ usb_manufacturer = "BeatSmith"
 usb_product = "ChordSmith FM"
 o2 = []                        # separate units compiled at -O2 (an app's DSP)
 words = "words.tsv"
-ble = true                     # Bluetooth MIDI (--no-ble builds without it)
-ble_central = true             # and the FM-1 connects to Bluetooth MIDI devices too
+ble = false
+ble_central = false
 # the site (tools/make_site.py, tools/publish_site.sh)
 tagline = "chords and phrases on 16 pads"
-repo = "https://github.com/Brentwalker/chordsmith-fm"
-licence = "MPL-2.0"
-credits = ""                   # a sentence for the installer's footer: what your firmware is built from
+repo = "https://github.com/BrentWalker/chordsmith-fm"
+licence = "TBD"              # the app code's licence: to be chosen (fm1-base stays MPL-2.0)
+credits = "Built on fm1-base by Charles Vestal and felucca-bsp by Leo Kuroshita."
 # firmware.json, for firmware hubs (docs/FIRMWARE-JSON.md): the build writes it from these and the keys above
 author = "Brent Walker (BeatSmith)"
-description = "The smallest complete firmware for the FM-1, made to be copied. The keys play a simple voice with velocity and pressure, your settings save, MIDI goes in and out over USB and Bluetooth and comes in over TRS, and it works with a screen reader."
-tags = ["synth", "utility"]    # from the list in docs/FIRMWARE-JSON.md; the build refuses another
-install = "https://charlesvestal.github.io/fm1-base/install/"   # the page that installs it
-site = "https://charlesvestal.github.io/fm1-base/"
-screenshot = "docs/img/screen-playing.png"   # for the hubs' cards: a square PNG, at least 240 x 240, in your repository
+description = "Chords and phrases on 16 pads. The white keys play the chords of any key and scale, the black keys play its scale degrees and light up with each chord's root. Early development."
+tags = ["chords", "synth", "midi"]
+install = "https://github.com/BrentWalker/chordsmith-fm"   # an install page comes later
+site = "https://github.com/BrentWalker/chordsmith-fm"
+screenshot = "docs/img/screen-playing.png"
