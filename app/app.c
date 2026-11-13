@@ -116,7 +116,7 @@ static void spell(uint32_t pc, uint32_t letter, char *out)   /* pitch class pc o
 }
 static void tonic_name(char *out) { spell(set.root, tonic_letter(), out); }
 
-static uint32_t str_len(const char *s)   /* (the device's libc has no strlen) */
+static uint32_t cs_len(const char *s)   /* (the device's libc has no strlen) */
 {
     uint32_t n = 0;
     while (s[n])
@@ -156,7 +156,7 @@ static void roman_for(pad_t *p)
     if (third == 4u) {
         str_set(p->roman, UP[d], sizeof p->roman);
         if (fifth == 8u)
-            str_set(p->roman + str_len(UP[d]), "+", 2);
+            str_set(p->roman + cs_len(UP[d]), "+", 2);
     } else {
         str_set(p->roman, LO[d], sizeof p->roman);
         p->dim = fifth == 6u;
@@ -624,8 +624,8 @@ static int slice_to(uint32_t i, uint32_t dst)
         else if (best != ps[0] % 12u) {   /* a slash chord: the bass after the quality */
             char b[4];
             pc_name(ps[0] % 12u, b);
-            if (str_len(p->qual) + 1u + str_len(b) < sizeof p->qual) {
-                char *q = p->qual + str_len(p->qual);
+            if (cs_len(p->qual) + 1u + cs_len(b) < sizeof p->qual) {
+                char *q = p->qual + cs_len(p->qual);
                 *q++ = '/';
                 str_set(q, b, 4);
             }
@@ -686,7 +686,7 @@ static void fmt_len(uint32_t t, char *o)
         *q++ = '5';
         *q = 0;
         u = " BEATS";
-        q = o + str_len(o);
+        q = o + cs_len(o);
         while (*u)
             *q++ = *u++;
         *q = 0;
@@ -699,7 +699,7 @@ static void fmt_len(uint32_t t, char *o)
         *q++ = (char)('0' + n / 10u % 10u);
     *q++ = (char)('0' + n % 10u);
     *q = 0;
-    q = o + str_len(o);
+    q = o + cs_len(o);
     while (*u)
         *q++ = *u++;
     *q = 0;

@@ -3,7 +3,7 @@
   "id": "chordsmith",
   "name": "BeatSmith",
   "author": "Brent Walker (BeatSmith)",
-  "license": "TBD",
+  "license": "LicenseRef-ChordSmith-TBD",
   "tagline": "chords and phrases on 16 pads",
   "description": "Chords and phrases on 16 pads. The white keys play the chords of any key and scale, the black keys play its scale degrees and light up with each chord's root. Early development.",
   "tags": ["chords", "synth", "midi"],
