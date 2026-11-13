@@ -297,6 +297,65 @@ static int fs_write(const char *name83, const uint8_t *data, uint32_t n)
     return 0;
 }
 
+/* a root entry by its 8.3 name ("KIT01   CSK"): its index, -1 none */
+static int32_t fs_find(const char *name83)
+{
+    uint32_t i;
+    for (i = 0; i < ROOT_ENTRIES; i++) {
+        const uint8_t *e = blk_read(ROOT_LBA + i / 16u) + (i % 16u) * 32u;
+        if (e[0] == 0)
+            break;
+        if (e[0] != 0xE5 && e[11] != 0x0F && !(e[11] & 0x18u) && !__builtin_memcmp(e, name83, 11))
+            return (int32_t)i;
+    }
+    return -1;
+}
+
+/* delete a file by its 8.3 name: its clusters freed, its entry marked deleted. 0 = gone (or never there) */
+static int fs_delete(const char *name83)
+{
+    static uint8_t b[512];
+    int32_t i = fs_find(name83);
+    uint32_t c, guard = NCLUST;
+    if (i < 0)
+        return 0;
+    {
+        const uint8_t *e = blk_read(ROOT_LBA + (uint32_t)i / 16u) + ((uint32_t)i % 16u) * 32u;
+        c = e[26] | e[27] << 8;
+    }
+    while (c >= 2u && c < NCLUST + 2u && guard--) {
+        uint32_t nx = fat_get(c);
+        fat_set(c, 0);
+        c = nx;
+    }
+    __builtin_memcpy(b, blk_read(ROOT_LBA + (uint32_t)i / 16u), 512u);
+    b[((uint32_t)i % 16u) * 32u] = 0xE5;
+    blk_write(ROOT_LBA + (uint32_t)i / 16u, b);
+    dc_flush();
+    return 0;
+}
+
+/* read a file by its 8.3 name into dst (at most max bytes): the bytes read, -1 none */
+static int32_t fs_read(const char *name83, void *dst, uint32_t max)
+{
+    int32_t i = fs_find(name83);
+    file_t f;
+    uint32_t k, n;
+    if (i < 0)
+        return -1;
+    {
+        const uint8_t *e = blk_read(ROOT_LBA + (uint32_t)i / 16u) + ((uint32_t)i % 16u) * 32u;
+        f.clus = (uint16_t)(e[26] | e[27] << 8);
+        f.size = (uint32_t)(e[28] | e[29] << 8 | e[30] << 16 | (uint32_t)e[31] << 24);
+    }
+    if (fs_open(&f))
+        return -1;
+    n = fsize < max ? fsize : max;
+    for (k = 0; k < n; k++)
+        ((uint8_t *)dst)[k] = (uint8_t)fs_byte(k);
+    return (int32_t)n;
+}
+
 static uint32_t fs_free_kb(void)
 {
     uint32_t c, n = 0;

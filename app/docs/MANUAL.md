@@ -1,129 +1,145 @@
-# TEMPLATE
+# ChordSmith FM
 
-TEMPLATE is the smallest complete firmware for the M-VAVE FM-1, and it's made to be copied. As you use a control,
-its name shows on the screen. The keys play a simple voice with velocity and pressure, and a few controls do
-something: they set the octave, the wave and the volume, and save your settings. MIDI goes out over USB and
-Bluetooth. Like a finished firmware, it installs, updates, runs in the browser and speaks to a screen reader.
-
-This manual is an example too. Copy it with the template and write your own firmware's manual from it.
-
-![The TEMPLATE screen at rest: the name at the top, the 14 buttons in four rows, the seven knobs with their counts, the keys, then OCT +0, PRESET SINE, VOL 50%](img/screen-ready.png "TEMPLATE at rest")
-
----
+ChordSmith FM is a chord and phrase player for the M-VAVE FM-1 by BeatSmith. Its 16 pads hold chords and phrases:
+the chords of any key, slices of MIDI files you copy onto it, or progressions from its library.
 
 ## Contents
 
 1. Install
-2. The screen
-3. Controls
-4. Saving
-5. MIDI and audio
-6. The screen reader
-7. Troubleshooting
+2. Playing: the pads and the degree keys
+3. The controls
+4. KEY: the key, the scale lock, transposing by degrees
+5. FX: strum, arp, humanize, inversion, a bass note
+6. LIB: the chord library
+7. MIDI files: the USB drive and REC
+8. SLICE and FILES
+9. Kits and saving
+10. MIDI and sound
+11. Troubleshooting
 
 ---
 
 ## 1. Install
 
-To try it first, open the emulator. It runs the same code in your browser, with sound, and you can play it with a
-mouse, a touch screen or your computer keyboard.
+To try it first, open the emulator in a browser. It runs the same code, with sound.
 
-To install it from the browser, use Chrome or Edge. Connect the FM-1 by USB, open the installer and press Install.
-The browser asks once to allow MIDI, so allow it. Don't unplug the cable while it writes.
+To install it, use Chrome or Edge on a computer. Connect the FM-1 by USB, open the installer and press Install. Allow
+MIDI when the browser asks. Don't unplug the cable while it writes. From a terminal:
+`python3 tools/fm1_install.py chordsmith-VERSION.fwsc`.
 
-To install it from a terminal, run `python3 tools/fm1_install.py template-VERSION.fwsc`.
+To go back to the stock firmware, use the installer's last section with M-VAVE's own firmware file. On its first
+start ChordSmith FM sets up its drive in the FM-1's spare flash.
 
-To go back to the stock firmware, use the installer's last section, which writes M-VAVE's own firmware back. You
-can recover an FM-1 that doesn't start, too. For details, see felucca-bsp's `tools/fm1_rescue.sh`.
+## 2. Playing
 
----
+![HOME: pad 2 playing Bm7b5](img/screen-playing.png)
 
-## 2. The screen
+The **16 white keys are pads**, left to right. A new kit holds the key's chords: pads 1 to 7 the seventh chords on
+each degree, pad 8 the first an octave up, pads 9 to 15 the ninth chords, pad 16 a sus4 on V.
 
-![TEMPLATE while a key is held: C4 in the header with V 90 P 64, FX lit among the buttons, K3 at 3, the key filled on the keyboard](img/screen-playing.png "A key held, FX pressed, K3 turned")
+The **first seven black keys are the scale's degrees**, a bass note an octave under the pads. When a pad plays, the
+black key of its chord's root lights up. The last four black keys are kept for later.
 
-| Part | What it shows |
+The lights: an empty pad is dark, a loaded pad glows, a playing pad is lit. In SLICE and LIB the pads breathe to show
+they take a drop.
+
+HOME shows the chord, its numeral in the key, its notes with the root marked, the 16 pads (amber chords, teal
+phrases) and the degree keys.
+
+## 3. The controls
+
+| Control | Does |
 | --- | --- |
-| Header | The name, and BLE, which lights while a computer or tablet is connected over Bluetooth. While you play a key, it shows the note, the velocity it landed at (V) and how hard you're pressing it (P). After a change, a message shows here for a moment. |
-| Buttons | All 14, by their names. A button lights while you hold it. |
-| Knobs | The seven encoders, each with a count of its turns. A knob lights for a moment as you turn it. |
-| Keys | The 27 keys, black above white. A held key fills up to its velocity, and white over that shows its pressure. |
-| Bottom line | The octave, the wave (on PRESET) and the volume (MASTER). |
+| White keys | Play a pad. In SLICE or LIB, drop the selected slice or chord on that pad |
+| Black keys 1-7 | Play the scale's degrees |
+| ALGORITHM (ROOT) | The key's root. With OCT- or OCT+ held, the scale |
+| PRESETS (KIT) | The kit, 1 to 8 |
+| SELECT | Pick a slice, a file or a library row |
+| K1 to K4 | What the screen's bottom bar says |
+| OCT- / OCT+ | The octave. Both together: the scale lock on or off |
+| HOME | The pads. Leaves any screen |
+| SEL (SLICE) | SLICE; again, FILES |
+| ENV | Coming later (TRIM) |
+| LFO (LIB) | The chord library |
+| EDIT (KEY) | The key screen |
+| FX | Chord FX; again, the second page |
+| GLO (SYS) | The USB drive |
+| SAVE | Save the settings and the kit |
+| PLAY | In SLICE and LIB, hear the selection; in KEY, detect the file's key; elsewhere, all notes off |
+| REC | Record MIDI coming in, again to stop and save it |
 
----
+On HOME, K1 is the strum, K2 the arp, K3 humanize and K4 the tempo.
 
-## 3. Controls
+## 4. KEY
 
-| Control | What it does |
-| --- | --- |
-| Keys | Play the voice, louder the harder they land. Each key also sends its note with its velocity over USB and Bluetooth, on channel 1. Press a held key harder to send aftertouch. The last key you pressed is the one that sounds. |
-| OCT− · OCT+ | Set the octave, from −2 to +2. |
-| PRESET | Picks the wave: sine or triangle. |
-| MASTER | Sets the volume. |
-| SAVE | Saves the octave, the wave and whether Bluetooth is on or off. SAVE lights while there's something to save. |
-| REC | Press it to find and connect a Bluetooth MIDI device. Hold it for a second to switch Bluetooth off or on. For details, see MIDI and audio. |
-| Every other button and knob | Shows its name on the screen, and does nothing else. This is where you wire up your own firmware. |
+![The KEY screen](img/screen-key.png)
 
----
+K1 the root, K2 the scale (minor, major, the modes, harmonic and melodic minor), K3 the step shift, K4 the lock.
 
-## 4. Saving
+With the **scale lock** on, every note that plays, from chord pads, phrases and the degree keys, snaps to the key.
+The **step shift** then moves every note by scale degrees: Am7 two steps up becomes Cmaj7, still in the key.
 
-Press SAVE to keep the octave, the wave and whether Bluetooth is on. They come back the next time the FM-1 starts. SAVE stays lit while
-there are changes to save.
+PLAY on this screen finds the key of the loaded file.
 
-![After OCT+ and PRESET: OCT +1 and PRESET TRIANGLE, SAVE waiting](img/screen-settings.png "OCT+ and PRESET changed, not saved yet")
+## 5. FX
 
----
+![The FX screen](img/screen-fx.png)
 
-## 5. MIDI and audio
+FX shapes the chord pads (phrases play as they were played).
 
-MIDI comes in over USB, Bluetooth and the TRS jack. A note on any channel plays the voice, and a note off releases
-it. The keys send notes with their velocity, and poly aftertouch, out over USB and Bluetooth.
+- **Strum**: the notes one after another, 2 ms to 200 ms apart.
+- **Arp**: up, down, up and down, or random, while the key is held. Its rate is on page 2: 1/4 to 1/32, triplets too.
+- **Humanize**: each note a little late and its velocity a little off.
+- **Invert**: the lowest note up an octave (or the highest down), up to three times.
+- **Bass note** (page 2): the root an octave under the chord.
 
-Over Bluetooth, TEMPLATE shows up as "FM-1". On a Mac, open Audio MIDI Setup, choose Window > Show MIDI Studio,
-click the Bluetooth button, then click Connect next to FM-1. On an iPad or iPhone, connect from a music app's
-Bluetooth MIDI settings.
+## 6. LIB
 
-To switch Bluetooth off, hold REC for a second. The screen says BLUETOOTH OFF, and the FM-1 stops advertising and
-drops any connection. Hold REC again to switch it back on. To keep your choice for the next time the FM-1 starts,
-press SAVE.
+![The chord library](img/screen-lib.png)
 
-To connect TEMPLATE to a Bluetooth MIDI device, such as a keyboard or a controller, first put the device in its
-pairing or advertising mode. Then press REC, and the screen says BLE SCANNING. Turn ALGORITHM to pick the device
-by its name, and press REC again to connect. DEV in the header lights while it's connected, and the bottom line
-shows the last message it sent. To disconnect, press REC once more.
+The library is built from the key. K3 picks the group: the seven **chords** of a type (K1: triads, 7ths, 9ths, sus2,
+sus4, add9), or ten four-bar **progressions** in a rhythm (K2: sustain, stabs, arp 8ths) with a bass line. SELECT
+picks a row and plays it; a white key drops it on that pad. K4 builds a whole kit: the chords on pads 1 to 8, the
+progressions on 9 to 16.
 
-The keys sense how hard you play them, with no change to the FM-1. The 20 lowest keys
-(F3 to C5) give velocity and pressure. The top seven give velocity only.
+## 7. MIDI files
 
-Over the USB cable, the FM-1 is also a sound card. Your computer can record what it plays from an input named
-"TEMPLATE FM-1". It can also play through the FM-1: choose "TEMPLATE FM-1" as the output, and you'll hear it from
-the FM-1's speaker and headphones, mixed with the FM-1's own sound, at MASTER's volume.
+![The USB drive](img/screen-drive.png)
 
----
+**The USB drive**: press SYS. The FM-1 shows the computer a drive called CHORDSMITH (about 270 KB). Copy `.mid` files
+onto it, then eject it. There's no USB MIDI while the drive is on; HOME leaves drive mode.
 
-## 6. The screen reader
+**REC**: press REC and play MIDI into the FM-1 (USB or the TRS jack). Press REC again: the recording is saved on the
+drive as RECnn.MID and opens in SLICE.
 
-TEMPLATE tells a screen reader what's on its screen, through the
-[FM-1 Screen Reader](https://charlesvestal.github.io/fm1-reader/). When the reader starts listening, it hears the
-name and the settings, and then each change as it happens. The emulator does the same, with your own screen
-reader or with its built-in voice.
+## 8. SLICE and FILES
 
----
+![SLICE](img/screen-slice.png)
 
-## 7. Troubleshooting
+SLICE shows the file as a waveform, four bars at a time, with its cuts. K1 the mode: **hits** (cuts where notes land
+together; K2 the sensitivity) or **grid** (K2 the length, 1/16 to 4 bars). SELECT picks a slice and plays it, K3 and
+K4 move its start and end by 16ths. A white key drops it on that pad: a **chord pad** when its notes land together
+(named, with its numeral in the key), else a **phrase pad** that plays at the tempo.
 
-If you hear no sound, turn MASTER up. The voice plays only while you hold a key.
+![FILES](img/screen-files.png)
 
-If the installer doesn't find the FM-1, use Chrome or Edge, and allow MIDI when the browser asks. Close any other
-programs that use the FM-1's MIDI port.
+SLICE again opens FILES: SELECT picks the file, K1 a track and K2 turns it on or off. Drum tracks start off.
 
-If the FM-1 doesn't start after an install, it starts in SAFE MODE after two failed starts. There's no sound, but
-USB works, so the web installer can reach it. Install again, or put the stock firmware back from the same page.
-Press PLAY to try starting the firmware again. If even safe mode fails twice, the FM-1 drops into the chip's own
-update mode.
+## 9. Kits and saving
 
-To put the FM-1 in update mode, hold REC while you switch it on. If you installed m-bootloader with the web
-installer, the installer can reach the FM-1 from there, and holding PLAY instead opens m-bootloader's recovery
-menu. Without m-bootloader, REC starts the chip's own update mode, which only the rescue can reach. For details,
-see felucca-bsp's `tools/fm1_rescue.sh`.
+A kit is the 16 pads. The KIT knob (PRESETS) switches between eight; an empty one starts with the key's chords.
+**SAVE** keeps the settings and the kit, as a file on the drive (KIT01.CSK to KIT08.CSK). Turning KIT without SAVE
+leaves the old kit's changes unsaved.
+
+## 10. MIDI and sound
+
+Every note goes out over USB MIDI on channel 1. MIDI in from USB or the TRS jack plays the built-in synth, a simple
+twelve-voice sound for now. MASTER is the volume.
+
+## 11. Troubleshooting
+
+If the installer doesn't find the FM-1, use Chrome or Edge, allow MIDI, and close other programs that use its MIDI
+port. If the FM-1 doesn't start after an install, it starts in SAFE MODE after two failed starts; USB still works,
+so the installer can reach it to install again or put the stock firmware back.
+
+If a file doesn't show in FILES, it isn't a standard MIDI file, or it's too big (96 KB at most).

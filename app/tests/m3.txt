@@ -1,0 +1,151 @@
+# Milestone 3: kits on the drive, the KEY screen and scale lock, chord FX, the library. From base/:
+#   ../app/build/host/chordsmith_host ../app/tests/m3.txt ../app/build/host
+wait 600
+expect kit 1
+# KEY: lock on, two degrees up: pad 1's Am7 (A C E G) sounds as Cmaj7 (C E G B)
+tap EDIT
+wait 30
+expect screen 4
+turn K4 1
+turn K3 2
+wait 30
+expect lock 1
+expect steps 2
+key 0 down
+wait 40
+expect cbuf0_0 60
+expect cbuf0_1 64
+expect cbuf0_2 67
+expect cbuf0_3 71
+shot key.png
+key 0 up
+wait 300
+turn K3 -2
+turn K4 -1
+wait 30
+expect lock 0
+# OCT- and OCT+ together: the lock on, and no octave step
+press OCT-
+press OCT+
+wait 30
+release OCT+
+release OCT-
+wait 30
+expect lock 1
+expect octave 0
+press OCT-
+press OCT+
+wait 30
+release OCT+
+release OCT-
+expect lock 0
+# FX: strum 100 ms: the first note at once, all four after 300 ms
+tap FX
+wait 30
+expect screen 5
+turn K1 10
+wait 30
+expect strum 50
+key 0 down
+wait 15
+expect voices 1
+wait 400
+expect voices 4
+shot fx.png
+key 0 up
+wait 300
+turn K1 -10
+# arp up: one note at a time
+turn K2 1
+key 0 down
+wait 500
+expect voices 1
+wav arp.wav
+wait 1200
+wavstop
+key 0 up
+wait 300
+turn K2 -1
+# inversion 1: A C E G -> C E G A
+turn K4 1
+key 0 down
+wait 40
+expect cbuf0_0 60
+expect cbuf0_3 69
+key 0 up
+wait 200
+turn K4 -1
+# page 2: a bass note under the chord (A2)
+tap FX
+wait 30
+turn K2 1
+expect bass 1
+key 0 down
+wait 40
+expect cbn0 5
+expect cbuf0_0 45
+expect voices 5
+shot fx2.png
+key 0 up
+wait 300
+turn K2 -1
+# LIB: the chords (7ths), the second one previewed, dropped on pad 3
+tap LFO
+wait 30
+expect screen 6
+turn SELECT 1
+wait 40
+expect playing16 1
+shot lib.png
+key 4 down
+wait 30
+key 4 up
+expect padtype2 1
+# the progressions in stabs: the third one on pad 5 (4 bars, 56 notes)
+turn K3 1
+wait 30
+turn SELECT 2
+wait 40
+shot lib_prog.png
+key 7 down
+wait 30
+key 7 up
+expect padtype4 2
+expect padn4 56
+wav prog.wav
+wait 2500
+wavstop
+# K4: a whole kit
+turn K4 1
+wait 30
+expect padtype0 1
+expect padtype8 2
+expect padtype15 2
+# SAVE keeps the kit; KIT to 2 (empty: the key's chords), back to 1
+tap SAVE
+wait 50
+expect dirty 0
+turn PRESET 1
+wait 30
+expect kit 2
+expect padtype8 1
+turn PRESET -1
+wait 30
+expect kit 1
+expect padtype8 2
+tap SAVE
+wait 50
+reboot
+wait 600
+expect kit 1
+expect padtype8 2
+# HOME: K4 the tempo
+tap HOME
+wait 30
+turn K4 5
+wait 30
+expect bpm 95
+key 14 down
+wait 40
+shot home.png
+key 14 up

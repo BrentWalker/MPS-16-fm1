@@ -13,13 +13,23 @@
 #include "smf.c"                         /* standard MIDI files, read from it */
 
 /* ================================================================ settings === */
-#define SET_MAGIC 0x43534631u            /* "CSF1" */
+#define SET_MAGIC 0x43534632u            /* "CSF2" */
 typedef struct {
     uint32_t magic;
     uint8_t root;                        /* 0 = C .. 11 = B */
     uint8_t scale;                       /* SCALES[] */
     int8_t octave;                       /* -2 .. +2 */
-    uint8_t rsv;
+    uint8_t lock;                        /* scale lock: every note snaps to the key */
+    int8_t steps;                        /* scale transpose, in degrees (-7 .. 7), with the lock on */
+    uint8_t kit;                         /* the kit in use, 1 .. NKITS */
+    uint8_t strum;                       /* chord FX: strum, 2 ms steps (0 .. 100) */
+    uint8_t arp;                         /* 0 off, 1 up, 2 down, 3 up-down, 4 random */
+    uint8_t arprate;                     /* ARP_RATE[] */
+    uint8_t human;                       /* humanize, % (0 .. 50): time and velocity */
+    int8_t inv;                          /* inversion, -3 .. 3 */
+    uint8_t bass;                        /* a bass note under every chord */
+    uint8_t bpm;                         /* 0: the file's tempo; else this */
+    uint8_t rsv[3];
 } settings_t;
 static settings_t set;
 static uint8_t set_dirty;
@@ -55,7 +65,7 @@ static const quality_t QUAL[] = {
 /* ==================================================================== kit === */
 #define NPADS 16u
 #define MAXN 6u
-#define MAXPH 48u                        /* notes in a phrase pad */
+#define MAXPH 64u                        /* notes in a phrase pad */
 #define PREVIEW NPADS                    /* the extra slot SLICE auditions from */
 typedef struct {
     uint8_t type;                        /* PAD_CHORD or PAD_PHRASE */
@@ -71,14 +81,23 @@ typedef struct {
     char nm[MAXN][4];                    /* each note spelled in the key ("C#", "Bb") */
     char roman[6];                       /* "ii" */
     uint8_t dim;                         /* the roman numeral takes a degree sign */
+    char title[14];                      /* a progression's name ("i VI III VII"), else empty */
 } pad_t;
 enum { PAD_EMPTY, PAD_CHORD, PAD_PHRASE };
 typedef struct {
     uint16_t s, d;                       /* start and length, 96ths of a beat */
     uint8_t p, v;
 } pnote_t;
-static pad_t pads[NPADS + 1];
-static pnote_t ph[NPADS + 1][MAXPH];
+/* the kit: every pad and its phrase, one block, saved whole as a file on the drive (KITnn.CSK) */
+#define KIT_MAGIC 0x314B5343u            /* "CSK1" */
+#define NKITS 8u
+static struct {
+    uint32_t magic, size;
+    pad_t pad[NPADS + 1];
+    pnote_t ph[NPADS + 1][MAXPH];
+} K;
+#define pads K.pad
+#define ph K.ph
 
 /* the white keys and black keys by colour, left to right (key 0 = F3) */
 static const uint8_t WK[16] = PLAT_WHITE_KEYS, BK[11] = PLAT_BLACK_KEYS;
@@ -122,6 +141,63 @@ static uint32_t cs_len(const char *s)   /* (the device's libc has no strlen) */
     while (s[n])
         n++;
     return n;
+}
+/* scale lock (set.lock): a note snaps to the key's scale (a tie goes down), then moves set.steps degrees */
+static int32_t keyed(int32_t p)
+{
+    const uint8_t *sc = SCALES[set.scale];
+    int32_t rel, best = 0, bd = 99, i, k, idx = 0, oct, nn;
+    if (!set.lock)
+        return p;
+    rel = ((p - set.root) % 12 + 12) % 12;
+    for (i = 0; i < 7; i++)
+        for (k = -12; k <= 12; k += 12) {
+            int32_t c = sc[i] + k, d = c > rel ? c - rel : rel - c;
+            if (d < bd) {
+                bd = d;
+                best = c;
+            }
+        }
+    p += best - rel;
+    if (!set.steps)
+        return p;
+    rel = ((p - set.root) % 12 + 12) % 12;
+    for (i = 0; i < 7; i++)
+        if (sc[i] == rel)
+            idx = i;
+    oct = (p - set.root - rel) / 12;
+    if (p - set.root - rel < 0 && (p - set.root - rel) % 12)
+        oct--;
+    nn = idx + set.steps;
+    oct += nn >= 0 ? nn / 7 : -((6 - nn) / 7);
+    nn = ((nn % 7) + 7) % 7;
+    return set.root + 12 * oct + sc[nn];
+}
+
+static void num_text(int32_t v, char *o, int sign)   /* "12", "+3", "-2" */
+{
+    char t[8];
+    uint32_t u = (uint32_t)(v < 0 ? -v : v), n = 0;
+    do
+        t[n++] = (char)('0' + u % 10u);
+    while ((u /= 10u) && n < 7u);
+    if (v < 0)
+        *o++ = '-';
+    else if (sign)
+        *o++ = '+';
+    while (n)
+        *o++ = t[--n];
+    *o = 0;
+}
+
+static void text_cat_n(char *d, const char *s, uint32_t max)   /* append, never past max - 1 characters */
+{
+    uint32_t n = 0;
+    while (n + 1u < max && d[n])
+        n++;
+    while (n + 1u < max && *s)
+        d[n++] = *s++;
+    d[n] = 0;
 }
 static void str_set(char *d, const char *s, uint32_t max)
 {
@@ -220,7 +296,7 @@ static float gain_now;
 #define QN 128u
 static volatile uint32_t q_ev[QN];
 static volatile uint32_t q_w, q_r;
-enum { QE_OFF, QE_ON, QE_PSTART, QE_PSTOP };
+enum { QE_OFF, QE_ON, QE_PSTART, QE_PSTOP, QE_CSTART, QE_CSTOP };
 static void ev_push(uint32_t type, uint32_t a, uint32_t b)
 {
     uint32_t w = q_w;
@@ -299,25 +375,35 @@ static void midi_in(void)                /* audio interrupt: MIDI in plays the s
     }
 }
 
-/* phrase players: one per pad and one for SLICE's preview. Times in 96ths of a beat; one-shot */
+/* phrase players: one per pad and one for SLICE's preview. Times in 96ths of a beat; one-shot. Each note's output
+ * (octave and scale lock applied) is kept while it sounds, so its note off matches whatever changed meanwhile */
 typedef struct {
     uint8_t on;
     int8_t oct;
     float pos;
-    uint64_t sounding;                   /* bit k: phrase note k is sounding */
+    uint8_t snd[MAXPH];                  /* the note sounding for phrase note k, + 1; 0 none */
 } player_t;
 static player_t pl[NPADS + 1];
+
+static void out_on(uint32_t m, uint32_t v)
+{
+    voice_on(m, v);
+    plat_midi_send(0x09u | 0x90u << 8 | m << 16 | v << 24, TO_USB);
+}
+static void out_off(uint32_t m)
+{
+    voice_off(m);
+    plat_midi_send(0x08u | 0x80u << 8 | m << 16, TO_USB);
+}
 
 static void pl_release(uint32_t i)
 {
     uint32_t k;
-    for (k = 0; k < pads[i].pn && k < 64u; k++)
-        if (pl[i].sounding >> k & 1u) {
-            uint32_t m = (uint32_t)clamp((int32_t)ph[i][k].p + 12 * pl[i].oct, 0, 127);
-            voice_off(m);
-            plat_midi_send(0x08u | 0x80u << 8 | m << 16, TO_USB);
+    for (k = 0; k < MAXPH; k++)
+        if (pl[i].snd[k]) {
+            out_off(pl[i].snd[k] - 1u);
+            pl[i].snd[k] = 0;
         }
-    pl[i].sounding = 0;
 }
 
 static void phrase_tick(uint32_t n)
@@ -331,19 +417,20 @@ static void phrase_tick(uint32_t n)
             continue;
         a = P->pos;
         b = a + dt;
-        for (k = 0; k < pads[i].pn && k < 64u; k++) {
+        for (k = 0; k < pads[i].pn && k < MAXPH; k++) {
             const pnote_t *x = &ph[i][k];
-            uint32_t m = (uint32_t)clamp((int32_t)x->p + 12 * P->oct, 0, 127);
             float s = (float)x->s, e = (float)x->s + (float)x->d;
-            if (s >= a && s < b) {
-                voice_on(m, x->v);
-                plat_midi_send(0x09u | 0x90u << 8 | m << 16 | (uint32_t)x->v << 24, TO_USB);
-                P->sounding |= 1ull << k;
+            int starts = s >= a && s < b;
+            if (starts) {
+                uint32_t m = (uint32_t)clamp(keyed((int32_t)x->p + 12 * P->oct), 0, 127);
+                if (P->snd[k])
+                    out_off(P->snd[k] - 1u);
+                out_on(m, x->v);
+                P->snd[k] = (uint8_t)(m + 1u);
             }
-            if ((P->sounding >> k & 1u) && e < b && !(s >= a && s < b && e >= b)) {
-                voice_off(m);
-                plat_midi_send(0x08u | 0x80u << 8 | m << 16, TO_USB);
-                P->sounding &= ~(1ull << k);
+            if (P->snd[k] && e < b && !(starts && e >= b)) {
+                out_off(P->snd[k] - 1u);
+                P->snd[k] = 0;
             }
         }
         P->pos = b;
@@ -351,6 +438,107 @@ static void phrase_tick(uint32_t n)
             pl_release(i);
             P->on = 0;
         }
+    }
+}
+
+/* chord players: a chord pad while its key is held, through the chord FX: strum (the notes one after another),
+ * arp (the notes in turn at a rate, until the key is let go), humanize (time and velocity off by a little). The main
+ * loop writes the chord's notes (voiced, octave and scale lock applied) into cbuf, then asks for the start */
+#define MAXC 8u
+typedef struct {
+    uint8_t on, n, cur;                  /* cur: the arp's note sounding + 1, 0 none */
+    uint8_t note[MAXC], vel[MAXC], sounded[MAXC];
+    uint32_t at[MAXC];                   /* each note's start, samples from the press */
+    uint32_t t, next, idx;
+} cplay_t;
+static cplay_t cp[NPADS];
+static uint8_t cbuf[NPADS][MAXC], cbuf_n[NPADS];
+static const float ARP_RATE[6] = {1.0f, 0.5f, 0.3333333f, 0.25f, 0.1666667f, 0.125f};   /* of a beat */
+static const char *const ARP_RATE_NAME[6] = {"1/4", "1/8", "1/8T", "1/16", "1/16T", "1/32"};
+static const char *const ARP_NAME[5] = {"OFF", "UP", "DOWN", "UP-DN", "RAND"};
+static uint32_t rng_state = 0x2545F491u;
+static uint32_t rnd(void)
+{
+    rng_state = rng_state * 1664525u + 1013904223u;
+    return rng_state >> 8;
+}
+static uint32_t human_vel(uint32_t v)
+{
+    int32_t h = set.human, r = (int32_t)(rnd() % 201u) - 100;
+    return (uint32_t)clamp((int32_t)v + (int32_t)v * h * r / 10000, 1, 127);
+}
+
+static void cp_stop(uint32_t i)
+{
+    cplay_t *c = &cp[i];
+    uint32_t k;
+    if (c->cur) {
+        out_off(c->cur - 1u);
+        c->cur = 0;
+    }
+    for (k = 0; k < c->n; k++)
+        if (c->sounded[k]) {
+            out_off(c->note[k]);
+            c->sounded[k] = 0;
+        }
+    c->on = 0;
+}
+
+static void cp_start(uint32_t i, uint32_t vel)
+{
+    cplay_t *c = &cp[i];
+    uint32_t k, ss = (uint32_t)set.strum * 2u * 441u / 10u;   /* 2 ms steps, in samples */
+    cp_stop(i);
+    c->n = cbuf_n[i] < MAXC ? cbuf_n[i] : (uint8_t)MAXC;
+    for (k = 0; k < c->n; k++) {
+        c->note[k] = cbuf[i][k];
+        c->vel[k] = (uint8_t)human_vel(vel);
+        c->sounded[k] = 0;
+        c->at[k] = k * ss + (set.human ? rnd() % (set.human * 26u + 1u) : 0u);   /* up to ~30 ms late */
+    }
+    c->t = 0;
+    c->next = 0;
+    c->idx = 0;
+    c->cur = 0;
+    c->vel[0] = c->vel[0] ? c->vel[0] : 1;
+    c->on = c->n != 0;
+}
+
+static void chord_tick(uint32_t n)
+{
+    uint32_t i, k;
+    for (i = 0; i < NPADS; i++) {
+        cplay_t *c = &cp[i];
+        if (!c->on)
+            continue;
+        if (set.arp && c->n) {
+            while (c->next < c->t + n) {
+                uint32_t len = c->n, j = c->idx, pick, step;
+                if (set.arp == 1u)
+                    pick = j % len;
+                else if (set.arp == 2u)
+                    pick = len - 1u - j % len;
+                else if (set.arp == 3u) {
+                    uint32_t per = len > 1u ? 2u * len - 2u : 1u, q = j % per;
+                    pick = q < len ? q : per - q;
+                } else
+                    pick = rnd() % len;
+                if (c->cur)
+                    out_off(c->cur - 1u);
+                out_on(c->note[pick], human_vel(c->vel[0]));
+                c->cur = (uint8_t)(c->note[pick] + 1u);
+                c->idx++;
+                step = (uint32_t)(60.0f * SR / (float)tempo * ARP_RATE[set.arprate % 6u]);
+                c->next += step ? step : 1u;
+            }
+        } else {
+            for (k = 0; k < c->n; k++)
+                if (!c->sounded[k] && c->at[k] < c->t + n) {
+                    out_on(c->note[k], c->vel[k]);
+                    c->sounded[k] = 1;
+                }
+        }
+        c->t += n;
     }
 }
 
@@ -366,6 +554,10 @@ void app_render(int32_t *lr, uint32_t n, uint32_t master_q12)
             voice_on(a, b);
         else if (type == QE_OFF)
             voice_off(a);
+        else if (type == QE_CSTART && a < NPADS)
+            cp_start(a, b);
+        else if (type == QE_CSTOP && a < NPADS)
+            cp_stop(a);
         else if (a <= NPADS) {           /* a phrase: start (b: the octave + 8) or stop */
             pl_release(a);
             pl[a].on = type == QE_PSTART;
@@ -375,6 +567,7 @@ void app_render(int32_t *lr, uint32_t n, uint32_t master_q12)
         q_r++;
     }
     phrase_tick(n);
+    chord_tick(n);
     clock_smp += n;
     midi_in();
     if (n > APP_BLOCK)
@@ -439,8 +632,16 @@ void app_panic(void)
 {
     uint32_t i;
     for (i = 0; i <= NPADS; i++) {
+        uint32_t k;
         pl[i].on = 0;
-        pl[i].sounding = 0;
+        for (k = 0; k < MAXPH; k++)
+            pl[i].snd[k] = 0;
+        if (i < NPADS) {
+            cp[i].on = 0;
+            cp[i].cur = 0;
+            for (k = 0; k < MAXC; k++)
+                cp[i].sounded[k] = 0;
+        }
     }
     for (i = 0; i < NVOICES; i++) {
         vo[i].stage = 0;
@@ -464,7 +665,7 @@ static void notes_on(uint32_t k, const uint8_t *notes, uint32_t n, uint32_t vel)
     held_t *h = &held[k];
     h->n = 0;
     for (i = 0; i < n && i < MAXN; i++) {
-        int32_t m = clamp((int32_t)notes[i] + 12 * set.octave, 0, 127);
+        int32_t m = clamp(keyed((int32_t)notes[i] + 12 * set.octave), 0, 127);
         h->note[h->n++] = (uint8_t)m;
         ev_push(QE_ON, (uint32_t)m, vel);
         plat_midi_send(0x09u | 0x90u << 8 | (uint32_t)m << 16 | vel << 24, TO_USB);
@@ -711,13 +912,55 @@ static void fmt_len(uint32_t t, char *o)
     *q = 0;
 }
 
+#include "lib.c"                         /* the chord library, built from the key */
+
 /* ===================================================================== init === */
 static void settings_defaults(void)
 {
+    __builtin_memset(&set, 0, sizeof set);
     set.magic = SET_MAGIC;
     set.root = 9;                        /* A minor */
-    set.scale = 0;
-    set.octave = 0;
+    set.kit = 1;
+    set.arprate = 3;                     /* 1/16 */
+}
+
+/* kits: KIT01.CSK .. KIT08.CSK on the drive, each the whole pad block (K) */
+static void kit_name(uint32_t n, char *o)
+{
+    __builtin_memcpy(o, "KIT00   CSK", 12);
+    o[3] = (char)('0' + n / 10u);
+    o[4] = (char)('0' + n % 10u);
+}
+static int kit_save(void)
+{
+    char nm[12];
+    kit_name(set.kit, nm);
+    K.magic = KIT_MAGIC;
+    K.size = sizeof K;
+    fs_delete(nm);
+    return fs_write(nm, (const uint8_t *)&K, sizeof K);
+}
+static void players_stop(void)
+{
+    uint32_t k;
+    for (k = 0; k <= NPADS; k++) {
+        ev_push(QE_PSTOP, k, 8);
+        if (k < NPADS)
+            ev_push(QE_CSTOP, k, 0);
+    }
+}
+/* 1: the kit was there; 0: an empty slot, filled with the key's chords */
+static int kit_load(uint32_t n)
+{
+    char nm[12];
+    kit_name(n, nm);
+    if (fs_read(nm, &K, sizeof K) == (int32_t)sizeof K && K.magic == KIT_MAGIC && K.size == sizeof K) {
+        kit_build();                     /* the key's own chords follow the key as it is now */
+        return 1;
+    }
+    __builtin_memset(&K, 0, sizeof K);
+    kit_build();
+    return 0;
 }
 
 static int file_load(int32_t i)
@@ -728,7 +971,7 @@ static int file_load(int32_t i)
         return -1;
     }
     cur_file = i;
-    tempo = song_bpm;
+    tempo = set.bpm ? set.bpm : song_bpm;
     sel = 0;
     slice_auto();
     return 0;
@@ -737,16 +980,20 @@ static int file_load(int32_t i)
 void app_init(void)
 {
     if (plat_store_load(OBJ_SETTINGS, &set, sizeof set) != (int)sizeof set || set.magic != SET_MAGIC
-        || set.root > 11u || set.scale >= NSCALES || set.octave < -2 || set.octave > 2)
+        || set.root > 11u || set.scale >= NSCALES || set.octave < -2 || set.octave > 2 || set.kit < 1u ||
+        set.kit > NKITS || set.steps < -7 || set.steps > 7 || set.arp > 4u || set.arprate > 5u || set.human > 50u ||
+        set.inv < -3 || set.inv > 3 || set.strum > 100u)
         settings_defaults();
-    kit_build();
     disk_init();
+    kit_load(set.kit);
+    if (set.bpm)
+        tempo = set.bpm;
     if (nfiles)
         file_load(0);
 }
 
 /* ======================================================================= UI === */
-enum { SCR_HOME, SCR_SLICE, SCR_FILES, SCR_DISK };
+enum { SCR_HOME, SCR_SLICE, SCR_FILES, SCR_DISK, SCR_KEY, SCR_FX, SCR_LIB };
 static struct {
     char msg[2][24];
     uint32_t msg_until;
@@ -754,7 +1001,7 @@ static struct {
     int32_t pad;                         /* the pad played last (-1 none yet) */
     int32_t root_lit;                    /* the black key lit as the root (-1 none) */
     uint8_t oct_mod;                     /* OCT held and used as a modifier: its release steps nothing */
-    uint8_t screen, disk_state, trk_cur;
+    uint8_t screen, disk_state, trk_cur, fx_page;
     int32_t file_cur;
     uint8_t redraw;
 } ui = {.pad = -1, .root_lit = -1};
@@ -813,7 +1060,9 @@ static void pad_title(const pad_t *p, char *t)   /* "S3 Am9", "S5 2 BARS", "Bm7b
         text_cat(t, d);
         text_cat(t, " ");
     }
-    if (p->type == PAD_CHORD) {
+    if (p->title[0]) {
+        text_cat(t, p->title);
+    } else if (p->type == PAD_CHORD) {
         text_cat(t, p->nm[0]);
         text_cat(t, p->qual);
     } else {
@@ -823,27 +1072,95 @@ static void pad_title(const pad_t *p, char *t)   /* "S3 Am9", "S5 2 BARS", "Bm7b
     }
 }
 
+/* a chord pad's notes as they will sound: inverted, a bass note under it, the octave, the scale lock; into cbuf */
+static void chord_build(uint32_t i)
+{
+    const pad_t *p = &pads[i];
+    int32_t v[MAXC + 1], out[MAXC + 1];
+    uint32_t n = 0, k, j, no = 0;
+    int32_t inv = set.inv;
+    for (k = 0; k < p->n && n < MAXC; k++)
+        v[n++] = p->note[k];
+    for (k = 1; k < n; k++)              /* low to high */
+        for (j = k; j > 0 && v[j - 1] > v[j]; j--) {
+            int32_t t = v[j];
+            v[j] = v[j - 1];
+            v[j - 1] = t;
+        }
+    while (n > 1 && inv != 0) {          /* an inversion: the lowest note up an octave, or the highest down */
+        if (inv > 0) {
+            int32_t lo = v[0] + 12;
+            for (k = 0; k + 1 < n; k++)
+                v[k] = v[k + 1];
+            v[n - 1] = lo;
+            inv--;
+        } else {
+            int32_t hi = v[n - 1] - 12;
+            for (k = n - 1; k > 0; k--)
+                v[k] = v[k - 1];
+            v[0] = hi;
+            inv++;
+        }
+        for (k = 1; k < n; k++)
+            for (j = k; j > 0 && v[j - 1] > v[j]; j--) {
+                int32_t t = v[j];
+                v[j] = v[j - 1];
+                v[j - 1] = t;
+            }
+    }
+    if (set.bass && n) {                 /* the root, an octave under the lowest note */
+        int32_t r = v[0] - (((v[0] - p->root_pc) % 12 + 12) % 12);   /* the root at or under the lowest note */
+        out[no++] = r - 12;
+    }
+    for (k = 0; k < n; k++)
+        out[no++] = v[k];
+    cbuf_n[i] = 0;
+    for (k = 0; k < no && cbuf_n[i] < MAXC; k++) {
+        int32_t m = clamp(keyed(out[k] + 12 * set.octave), 0, 127);
+        for (j = 0; j < cbuf_n[i]; j++)
+            if (cbuf[i][j] == (uint8_t)m)
+                break;
+        if (j == cbuf_n[i])
+            cbuf[i][cbuf_n[i]++] = (uint8_t)m;
+    }
+}
+
 static void pad_play(uint32_t i, uint32_t k, uint32_t vel)
 {
     const pad_t *p = &pads[i];
-    if (p->type == PAD_CHORD)
-        notes_on(k, p->note, p->n, vel);
+    (void)k;
+    if (p->type == PAD_CHORD) {
+        chord_build(i);
+        ev_push(QE_CSTART, i, vel);
+    }
     else if (p->type == PAD_PHRASE)
         ev_push(QE_PSTART, i, (uint32_t)(set.octave + 8));
     ui.pad = (int32_t)i;
     ui.root_lit = p->deg < 7u ? p->deg : -1;
 }
 
+static void preview_pad(void);
 static void preview_slice(void)
 {
     if (!nsl || slice_to(sel, PREVIEW))
         return;
-    if (pads[PREVIEW].type == PAD_CHORD) {   /* a chord previews as the phrase it is, half a beat at least */
+    preview_pad();
+}
+static void preview_lib(void)
+{
+    lib_make(lib_sel, PREVIEW);
+    preview_pad();
+}
+static void preview_pad(void)            /* the PREVIEW slot played once; a chord as a held beat */
+{
+    if (pads[PREVIEW].type == PAD_CHORD) {
         uint32_t k;
+        if (pads[PREVIEW].len < 96u)
+            pads[PREVIEW].len = 96;
         pads[PREVIEW].pn = 0;
         for (k = 0; k < pads[PREVIEW].n; k++) {
             ph[PREVIEW][k].s = 0;
-            ph[PREVIEW][k].d = (uint16_t)(pads[PREVIEW].len > 48u ? pads[PREVIEW].len : 48u);
+            ph[PREVIEW][k].d = (uint16_t)(pads[PREVIEW].len - 8u);
             ph[PREVIEW][k].p = pads[PREVIEW].note[k];
             ph[PREVIEW][k].v = 100;
             pads[PREVIEW].pn++;
@@ -988,6 +1305,13 @@ static void input(void)
         uint32_t k = WK[i], bit = 1u << k;
         if ((keys & bit) && !(ui.keys & bit)) {
             uint32_t vel = touch_vel(k);
+            if (ui.screen == SCR_LIB) {
+                char t[20];
+                ev_push(QE_PSTOP, i, 8);
+                lib_make(lib_sel, i);
+                pad_title(&pads[i], t);
+                app_say("PAD", t);
+            }
             if (ui.screen == SCR_SLICE && nsl) {
                 char t[16], d[4] = {'P', 'A', 'D', 0};
                 ev_push(QE_PSTOP, i, 8);
@@ -1008,7 +1332,7 @@ static void input(void)
             pad_play(i, k, vel ? vel : 100u);
             ui.redraw = 1;
         } else if (!(keys & bit) && (ui.keys & bit)) {
-            notes_off(k);
+            ev_push(QE_CSTOP, i, 0);
             ui.redraw = 1;
         }
     }
@@ -1030,7 +1354,16 @@ static void input(void)
         uint32_t bit = 1u << i;
         int down = (btn & bit) && !(ui.btn & bit), up = !(btn & bit) && (ui.btn & bit);
         if (i == B_OCTDN || i == B_OCTUP) {
-            if (down)
+            uint32_t other = 1u << (i == B_OCTUP ? B_OCTDN : B_OCTUP);
+            if (down && (btn & other)) { /* both: the scale lock on or off */
+                set.lock ^= 1u;
+                set_dirty = 1;
+                ui.oct_mod = 1;
+                kit_build();
+                app_say("SCALE LOCK", set.lock ? "ON" : "OFF");
+                continue;
+            }
+            if (down && !(ui.btn & other))
                 ui.oct_mod = 0;
             if (up && !ui.oct_mod) {
                 int32_t o = clamp(set.octave + (i == B_OCTUP ? 1 : -1), -2, 2);
@@ -1048,21 +1381,37 @@ static void input(void)
         if (ui.screen == SCR_DISK && i != B_HOME)
             continue;                    /* the drive is the computer's until it ejects (or HOME) */
         if (i == B_SAVE) {
-            if (plat_store_save(OBJ_SETTINGS, &set, sizeof set) == 0) {
+            char t[8] = "KIT 0";
+            t[5] = (char)('0' + set.kit);
+            t[6] = 0;
+            if (plat_store_save(OBJ_SETTINGS, &set, sizeof set) == 0 && kit_save() == 0) {
                 set_dirty = 0;
-                app_say("SAVED", "");
+                app_say("SAVED", t);
             } else {
                 app_say("SAVE", "FAILED");
             }
         } else if (i == B_PLAY) {
             if (ui.screen == SCR_SLICE)
                 preview_slice();
-            else {
+            else if (ui.screen == SCR_LIB)
+                preview_lib();
+            else if (ui.screen == SCR_KEY && song_n) {
+                char t[24];
+                key_detect();
+                rekey();
+                tonic_name(t);
+                text_cat(t, " ");
+                text_cat(t, SCALE_NAME[set.scale]);
+                app_say("DETECTED", t);
+            } else {
                 uint32_t k;
                 for (k = 0; k < NKEYS; k++)
                     notes_off(k);
-                for (k = 0; k <= NPADS; k++)
+                for (k = 0; k <= NPADS; k++) {
                     ev_push(QE_PSTOP, k, 8);
+                    if (k < NPADS)
+                        ev_push(QE_CSTOP, k, 0);
+                }
                 app_say("ALL", "NOTES OFF");
             }
         } else if (i == B_HOME) {
@@ -1077,6 +1426,15 @@ static void input(void)
                 ui.screen = song_n ? SCR_SLICE : SCR_FILES;
             if (ui.file_cur < 0 || (uint32_t)ui.file_cur >= nfiles)
                 ui.file_cur = cur_file < 0 ? 0 : cur_file;
+        } else if (i == B_EDIT) {        /* KEY */
+            ui.screen = SCR_KEY;
+        } else if (i == B_FX) {          /* FX: again, the second page */
+            ui.fx_page = ui.screen == SCR_FX ? (uint8_t)!ui.fx_page : 0u;
+            ui.screen = SCR_FX;
+        } else if (i == B_LFO) {         /* LIB */
+            ui.screen = SCR_LIB;
+            if (lib_sel >= lib_count())
+                lib_sel = 0;
         } else if (i == B_GLO) {         /* SYS: the USB drive, for now */
             disk_enter();
         } else if (i == B_REC) {
@@ -1109,7 +1467,20 @@ static void input(void)
     {
         int32_t es = plat_enc(EN_SELECT), k1 = plat_enc(EN_K1), k2 = plat_enc(EN_K2), k3 = plat_enc(EN_K3),
                 k4 = plat_enc(EN_K4);
-        (void)plat_enc(EN_PRESET);
+        int32_t ek = plat_enc(EN_PRESET);
+        if (ek) {                        /* KIT: the next kit, loaded at once (SAVE keeps changes first) */
+            uint32_t nk = (uint32_t)clamp((int32_t)set.kit + ek, 1, (int32_t)NKITS);
+            if (nk != set.kit) {
+                char t[8] = "KIT 0";
+                players_stop();
+                set.kit = (uint8_t)nk;
+                set_dirty = 1;
+                t[5] = (char)('0' + nk);
+                t[6] = 0;
+                app_say(t, kit_load(nk) ? "" : "EMPTY: KEY CHORDS");
+                ui.pad = -1;
+            }
+        }
         if (ui.screen == SCR_SLICE && nsl) {
             if (es) {
                 sel = (uint32_t)clamp((int32_t)sel + es, 0, (int32_t)nsl - 1);
@@ -1133,6 +1504,65 @@ static void input(void)
                 sl_s[sel] = (uint32_t)s;
                 sl_e[sel] = (uint32_t)en;
                 preview_slice();
+            }
+            if (es || k1 || k2 || k3 || k4)
+                ui.redraw = 1;
+        } else if (ui.screen == SCR_HOME || ui.screen == SCR_FX) {
+            int page2 = ui.screen == SCR_FX && ui.fx_page;
+            if (!page2) {
+                if (k1)
+                    set.strum = (uint8_t)clamp(set.strum + 5 * k1, 0, 100);
+                if (k2)
+                    set.arp = (uint8_t)clamp(set.arp + k2, 0, 4);
+                if (k3)
+                    set.human = (uint8_t)clamp(set.human + 5 * k3, 0, 50);
+                if (k4 && ui.screen == SCR_FX)
+                    set.inv = (int8_t)clamp(set.inv + k4, -3, 3);
+                if (k4 && ui.screen == SCR_HOME) {   /* HOME's K4: the tempo */
+                    set.bpm = (uint8_t)clamp((int32_t)tempo + k4, 40, 240);
+                    tempo = set.bpm;
+                }
+            } else {
+                if (k1)
+                    set.arprate = (uint8_t)clamp(set.arprate + k1, 0, 5);
+                if (k2)
+                    set.bass = (uint8_t)(k2 > 0);
+            }
+            if (k1 || k2 || k3 || k4) {
+                set_dirty = 1;
+                ui.redraw = 1;
+            }
+        } else if (ui.screen == SCR_KEY) {
+            if (k1)
+                set.root = (uint8_t)(((int32_t)set.root + k1 % 12 + 12) % 12);
+            if (k2)
+                set.scale = (uint8_t)(((int32_t)set.scale + k2 % (int32_t)NSCALES + (int32_t)NSCALES) % (int32_t)NSCALES);
+            if (k3)
+                set.steps = (int8_t)clamp(set.steps + k3, -7, 7);
+            if (k4)
+                set.lock = (uint8_t)(k4 > 0);
+            if (k1 || k2 || k3 || k4) {
+                kit_build();
+                set_dirty = 1;
+                ui.redraw = 1;
+            }
+        } else if (ui.screen == SCR_LIB) {
+            if (es) {
+                lib_sel = (uint8_t)clamp((int32_t)lib_sel + es, 0, (int32_t)lib_count() - 1);
+                preview_lib();
+            }
+            if (k1)
+                lib_type = (uint8_t)clamp(lib_type + k1, 0, (int32_t)NCTYPES - 1);
+            if (k2)
+                lib_rhy = (uint8_t)clamp(lib_rhy + k2, 0, (int32_t)NRHY - 1);
+            if (k3) {
+                lib_grp = (uint8_t)(k3 > 0);
+                lib_sel = 0;
+            }
+            if (k4 > 0) {
+                players_stop();
+                lib_build_kit();
+                app_say("KIT BUILT", "8 CHORDS, 8 PROGS");
             }
             if (es || k1 || k2 || k3 || k4)
                 ui.redraw = 1;
@@ -1169,7 +1599,7 @@ static void lights(void)
     uint32_t i, bright = 0, dim = 0, btn = 0, mid = 0;
     for (i = 0; i < 16u; i++) {
         uint32_t bit = 1u << WK[i];
-        if ((ui.keys & bit) || pl[i].on)
+        if ((ui.keys & bit) || pl[i].on || cp[i].on)
             bright |= bit;
         else if (ui.screen == SCR_SLICE && nsl)
             mid |= bit;
@@ -1187,7 +1617,8 @@ static void lights(void)
         btn |= 1u << B_SAVE;
     if (rec_on)
         btn |= 1u << B_REC;
-    btn |= 1u << (ui.screen == SCR_SLICE || ui.screen == SCR_FILES ? B_SEL : ui.screen == SCR_DISK ? B_GLO : B_HOME);
+    btn |= 1u << (ui.screen == SCR_SLICE || ui.screen == SCR_FILES ? B_SEL : ui.screen == SCR_DISK ? B_GLO
+                  : ui.screen == SCR_KEY ? B_EDIT : ui.screen == SCR_FX ? B_FX : ui.screen == SCR_LIB ? B_LFO : B_HOME);
     plat_lights(btn | ui.btn, bright, 0, dim, 1);
     plat_lights_mid(0, mid);
 }
@@ -1255,7 +1686,15 @@ static void draw_home(void)
     else {
         int32_t w = text_w(&FONT_XS, t);
         top_bar(0, 0, 0);
-        cv_text(10, 6, &FONT_XS, cur_file >= 0 ? files[cur_file].name : "KIT 01  DIATONIC", C_GRAY);
+        {
+            char kt[8] = "KIT 0";
+            int32_t kx;
+            kt[5] = (char)('0' + set.kit);
+            kt[6] = 0;
+            kx = cv_text(10, 6, &FONT_XS, kt, C_WHITE);
+            if (cur_file >= 0)
+                cv_text(kx + 10, 6, &FONT_XS, files[cur_file].name, C_GRAY);
+        }
         cv_rect(226 - w, 5, w + 10, 17, AMBER);
         cv_text(231 - w, 6, &FONT_XS, t, C_BLACK);
     }
@@ -1320,7 +1759,10 @@ static void draw_home(void)
         text_cat(h, ui.pad + 1 >= 10 ? d : d + 1);
         cv_text(10, 36, &FONT_XS, h, C_GRAY);
         pad_title(p, t);
-        cv_text((240 - text_w(&FONT_M, t)) / 2, 58, &FONT_M, t, playing ? TEAL : TEAL_DIM);
+        if (p->title[0])                 /* numerals need lower case: the big font has none */
+            cv_text((240 - text_w(&FONT_B, t)) / 2, 64, &FONT_B, t, playing ? TEAL : TEAL_DIM);
+        else
+            cv_text((240 - text_w(&FONT_M, t)) / 2, 58, &FONT_M, t, playing ? TEAL : TEAL_DIM);
         {
             char n[16];
             uint32_t k = p->pn, q = 0;
@@ -1358,15 +1800,13 @@ static void draw_home(void)
         cv_text(cx + (24 - text_w(&FONT_XS, d)) / 2, 30, &FONT_XS, d, lit ? C_BLACK : C_GRAY);
     }
     {
-        static const char *const LBL[4] = {"OCT", "KEY", "SCALE", "BPM"};
+        static const char *const LBL[4] = {"STRUM", "ARP", "HUMAN", "BPM"};
         char v[4][12];
-        int32_t o = set.octave;
         uint32_t b = tempo;
-        v[0][0] = o < 0 ? '-' : '+';
-        v[0][1] = (char)('0' + (o < 0 ? -o : o));
-        v[0][2] = 0;
-        tonic_name(v[1]);
-        str_set(v[2], SCALE_SHORT[set.scale], sizeof v[2]);
+        num_text(set.strum * 2, v[0], 0);
+        str_set(v[1], ARP_NAME[set.arp], sizeof v[1]);
+        num_text(set.human, v[2], 0);
+        text_cat(v[2], "%");
         v[3][0] = (char)(b >= 100u ? '0' + b / 100u : ' ');
         v[3][1] = (char)('0' + b / 10u % 10u);
         v[3][2] = (char)('0' + b % 10u);
@@ -1595,6 +2035,8 @@ static void draw_disk(void)
     cv_blit(0, 120);
 }
 
+#include "screens.c"                     /* KEY, FX, LIB */
+
 void app_ui_init(void)
 {
     touch_on(1);
@@ -1628,6 +2070,12 @@ void app_frame(void)
             draw_files();
         else if (ui.screen == SCR_DISK)
             draw_disk();
+        else if (ui.screen == SCR_KEY)
+            draw_key();
+        else if (ui.screen == SCR_FX)
+            draw_fx();
+        else if (ui.screen == SCR_LIB)
+            draw_lib();
         else
             draw_home();
     }
@@ -1739,6 +2187,25 @@ int app_expect(const char *what, int *got)
         *got = pads[atoi(what + 4) % NPADS].pn;
     else if (!strncmp(what, "playing", 7))
         *got = pl[atoi(what + 7) % (NPADS + 1)].on;
+    else if (!strcmp(what, "kit"))
+        *got = set.kit;
+    else if (!strcmp(what, "lock"))
+        *got = set.lock;
+    else if (!strcmp(what, "steps"))
+        *got = set.steps;
+    else if (!strcmp(what, "strum"))
+        *got = set.strum;
+    else if (!strcmp(what, "arp"))
+        *got = set.arp;
+    else if (!strcmp(what, "inv"))
+        *got = set.inv;
+    else if (!strcmp(what, "bass"))
+        *got = set.bass;
+    else if (!strncmp(what, "cbuf", 4)) {    /* cbufP_K: the note pad P's chord sounds as, K-th */
+        int p = atoi(what + 4), k = atoi(strchr(what, '_') ? strchr(what, '_') + 1 : "0");
+        *got = k < cbuf_n[p % NPADS] ? cbuf[p % NPADS][k % MAXC] : -1;
+    } else if (!strncmp(what, "cbn", 3))
+        *got = cbuf_n[atoi(what + 3) % NPADS];
     else if (!strcmp(what, "recn"))
         *got = (int)rec_n;
     else

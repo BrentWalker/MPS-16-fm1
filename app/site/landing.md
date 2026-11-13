@@ -1,20 +1,20 @@
-# TEMPLATE
+# ChordSmith FM
 
-TEMPLATE is the smallest complete firmware for the M-VAVE FM-1, and it's made to be copied. Every control shows
-its name on the screen as you use it. The keys play a simple voice with velocity and pressure, your settings save,
-MIDI goes in and out over USB and Bluetooth and comes in over TRS, and it works with a screen reader. Copy it
-to start your own firmware on fm1-base.
+ChordSmith FM turns the M-VAVE FM-1 into a chord and phrase player. The 16 white keys are pads, the black keys are
+the scale's degrees, and the keys light up with every chord's root. Copy MIDI files onto the FM-1 like a USB drive,
+or record MIDI into it, then chop them into slices like audio in a sampler and drop the slices on pads. A chord
+library builds chords and progressions in any key, and strum, arp, humanize and inversion shape every chord.
 
-![TEMPLATE while a key is held: C4 in the header with V 90 P 64, FX lit among the buttons, K3 at 3, the key filled](manual/img/screen-playing.png "TEMPLATE on the FM-1's screen")
+![ChordSmith FM's HOME screen: pad 2 playing Bm7b5, ii in A minor, its notes, the 16 pads and the seven degree keys](manual/img/screen-playing.png "ChordSmith FM on the FM-1's screen")
 
-This is version {{VERSION}}. You install it at your own risk, and the installer can put M-VAVE's own firmware back.
+This is version {{VERSION}}, an early test build by BeatSmith. You install it at your own risk, and the installer can
+put M-VAVE's own firmware back.
 
-- [Try it in the browser](emu/). Play it right here, with sound. It runs the same code as the FM-1, so you don't
-  need one.
-- [Install](install/) it from Chrome or Edge, with the FM-1 connected by USB.
-- The [Manual](manual/) explains the screen, the controls, saving and MIDI.
-- [Download {{PKG}}](firmware/{{PKG}}) to use the command-line installer: `python3 tools/fm1_install.py {{PKG}}`.
-- The [Source](https://github.com/charlesvestal/fm1-base) is under MPL-2.0. It's built on fm1-base and
+- [Try it in the browser](emu/). It runs the same code as the FM-1, with sound.
+- [Install](install/) it from Chrome or Edge on a computer, with the FM-1 connected by USB.
+- The [Manual](manual/) explains the pads, slicing, the library, the key and the FX.
+- [Download {{PKG}}](firmware/{{PKG}}) for the command-line installer: `python3 tools/fm1_install.py {{PKG}}`.
+- The [Source](https://github.com/BrentWalker/chordsmith-fm). It's built on fm1-base by Charles Vestal and
   felucca-bsp, which come from Felucca by Leo Kuroshita, Hügelton Instruments.
 
-M-VAVE and FM-1 are trademarks of their owners. TEMPLATE is not affiliated with M-VAVE.
+M-VAVE and FM-1 are trademarks of their owners. ChordSmith FM is not affiliated with M-VAVE.

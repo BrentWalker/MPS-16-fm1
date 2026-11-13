@@ -4,7 +4,8 @@ Free firmware for the M-VAVE FM-1 by BeatSmith. It turns the FM-1 into a chord a
 
 ChordSmith FM is the hardware version of ChordSmith Web, and groundwork for MPS-16. Working title.
 
-**Status:** early development. Not ready to install.
+**Status:** early test builds (0.3). Try it in the browser or install it: https://brentwalker.github.io/chordsmith-fm/
+(the site needs GitHub Pages on: Settings > Pages > gh-pages). Manual: app/docs/MANUAL.md.
 
 ## Built on
 
@@ -28,7 +29,9 @@ Host simulator (any Linux or macOS machine with a C compiler and Python 3):
 
     cd base && python3 tools/build.py ../app --host
 
-Firmware builds run on GitHub Actions through the shared FM-1 builder. See fm1-base's README for the toolchain.
+Tests: `sh tests/run_tests.sh` (host simulator: tests/basic, m2, m3). Firmware builds run on GitHub Actions through
+the shared FM-1 builder: "Build and attest firmware", or "Publish site" to rebuild the installer and emulator (it
+asks for a version). See fm1-base's README for the toolchain.
 
 ## Licence
 
