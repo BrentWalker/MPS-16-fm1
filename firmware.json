@@ -1,0 +1,18 @@
+{
+  "schema": 1,
+  "id": "chordsmith",
+  "name": "BeatSmith",
+  "author": "Brent Walker (BeatSmith)",
+  "license": "MPL-2.0",
+  "tagline": "chords and phrases on 16 pads",
+  "description": "The smallest complete firmware for the FM-1, made to be copied. The keys play a simple voice with velocity and pressure, your settings save, MIDI goes in and out over USB and Bluetooth and comes in over TRS, and it works with a screen reader.",
+  "tags": ["synth", "utility"],
+  "install": "https://charlesvestal.github.io/fm1-base/install/",
+  "site": "https://charlesvestal.github.io/fm1-base/",
+  "source": "https://github.com/Brentwalker/chordsmith-fm",
+  "hardware": {
+    "models": ["FM-1"],
+    "flash": ["856014", "B36014"],
+    "features": ["bluetooth-midi", "bluetooth-midi-devices", "usb-audio-in", "usb-audio-out", "velocity", "pressure", "screen-reader"]
+  }
+}
