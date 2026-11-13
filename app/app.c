@@ -214,6 +214,9 @@ static voice_t vo[NVOICES];
 static uint32_t vo_clock;
 static float gain_now;
 
+/* one core: the audio interrupt and the main loop share aligned 32-bit words, read and written whole; the barrier
+ * keeps the compiler from reordering a slot's write past its index */
+#define BARRIER() __asm__ volatile("" ::: "memory")
 #define QN 128u
 static volatile uint32_t q_ev[QN];
 static volatile uint32_t q_w, q_r;
@@ -224,7 +227,8 @@ static void ev_push(uint32_t type, uint32_t a, uint32_t b)
     if (w - q_r >= QN)
         return;                          /* full: drop (never seen at human speed) */
     q_ev[w % QN] = type << 16 | (a & 127u) << 8 | (b & 127u);
-    __atomic_store_n(&q_w, w + 1u, __ATOMIC_RELEASE);
+    BARRIER();
+    q_w = w + 1u;
 }
 
 static void voice_on(uint32_t note, uint32_t vel)
@@ -289,7 +293,8 @@ static void midi_in(void)                /* audio interrupt: MIDI in plays the s
             r->st = (uint8_t)(hi == 0x90u && d2 ? 0x90u : 0x80u);
             r->d1 = (uint8_t)d1;
             r->d2 = (uint8_t)(hi == 0x90u ? d2 : 0u);
-            __atomic_store_n(&rec_n, rec_n + 1u, __ATOMIC_RELEASE);
+            BARRIER();
+            rec_n = rec_n + 1u;
         }
     }
 }
@@ -354,7 +359,8 @@ void app_render(int32_t *lr, uint32_t n, uint32_t master_q12)
     uint32_t i, v;
     float gain = (float)master_q12 / 4096.0f * 8300000.0f;
     static float mix[APP_BLOCK];
-    while (q_r != __atomic_load_n(&q_w, __ATOMIC_ACQUIRE)) {
+    while (q_r != q_w) {
+        BARRIER();
         uint32_t e = q_ev[q_r % QN], type = e >> 16, a = e >> 8 & 127u, b = e & 127u;
         if (type == QE_ON)
             voice_on(a, b);
@@ -1075,7 +1081,7 @@ static void input(void)
             disk_enter();
         } else if (i == B_REC) {
             if (!rec_on) {
-                __atomic_store_n(&rec_n, 0u, __ATOMIC_RELEASE);
+                rec_n = 0;
                 rec_on = 1;
                 app_say("REC", "PLAY MIDI IN");
             } else {
