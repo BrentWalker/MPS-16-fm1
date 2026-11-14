@@ -1006,8 +1006,10 @@ static int file_load(int32_t i)
     return 0;
 }
 
+static uint8_t first_boot;               /* no settings yet: GUIDE opens by itself */
 void app_init(void)
 {
+    first_boot = plat_store_load(OBJ_SETTINGS, &set, sizeof set) != (int)sizeof set;
     if (plat_store_load(OBJ_SETTINGS, &set, sizeof set) != (int)sizeof set || set.magic != SET_MAGIC
         || set.root > 11u || set.scale >= NSCALES || set.octave < -2 || set.octave > 2 || set.kit < 1u ||
         set.kit > NKITS || set.steps < -7 || set.steps > 7 || set.arp > 4u || set.arprate > 5u || set.human > 50u ||
@@ -1022,7 +1024,7 @@ void app_init(void)
 }
 
 /* ======================================================================= UI === */
-enum { SCR_HOME, SCR_SLICE, SCR_FILES, SCR_DISK, SCR_KEY, SCR_FX, SCR_LIB, SCR_TRIM, SCR_FIND };
+enum { SCR_HOME, SCR_SLICE, SCR_FILES, SCR_DISK, SCR_KEY, SCR_FX, SCR_LIB, SCR_TRIM, SCR_FIND, SCR_GUIDE };
 enum { MODE_ROOT, MODE_LEAD };
 static struct {
     char msg[2][24];
@@ -1033,6 +1035,8 @@ static struct {
     int32_t lead_now, lead_next;         /* LEAD: the degrees of the top note sounding and the next (-1 none) */
     uint8_t f_hold;                      /* F1 .. F4 held (1 .. 4), 0 none */
     uint32_t f_at;                       /* when it went down */
+    uint8_t guide_pg;                    /* GUIDE: the page */
+    uint32_t home_at;                    /* HOME went down then (0: up); held 0.8 s, GUIDE */
     uint8_t oct_mod;                     /* OCT held and used as a modifier: its release steps nothing */
     uint8_t screen, disk_state, trk_cur, fx_page;
     int32_t file_cur;
@@ -1475,6 +1479,10 @@ static uint32_t fk_pivots(void)          /* held: the chord pads whose notes are
     return out;
 }
 
+static void guide_open(void);           /* (guide.c) */
+static void guide_lights(void);
+static uint32_t guide_count(void);
+
 static void input(void)
 {
     uint32_t keys, btn = plat_buttons(), i;
@@ -1590,6 +1598,8 @@ buttons:
             continue;
         if (ui.screen == SCR_DISK && i != B_HOME)
             continue;                    /* the drive is the computer's until it ejects (or HOME) */
+        if (ui.screen == SCR_GUIDE)
+            ui.screen = SCR_HOME;        /* a button leaves the guide and does what it does */
         if ((i == B_PLAY && (btn & 1u << B_REC)) || (i == B_REC && (btn & 1u << B_PLAY))) {
             find_enter();                /* REC and PLAY together: FIND */
             ui.redraw = 1;
@@ -1758,6 +1768,11 @@ buttons:
                 set_dirty = 1;
                 ui.redraw = 1;
             }
+        } else if (ui.screen == SCR_GUIDE) {
+            if (es) {
+                ui.guide_pg = (uint8_t)clamp((int32_t)ui.guide_pg + es, 0, (int32_t)guide_count() - 1);
+                ui.redraw = 1;
+            }
         } else if (ui.screen == SCR_FIND) {
             if (es && fd_cnt)
                 fd_sel = (uint8_t)clamp((int32_t)fd_sel + es, 0, (int32_t)fd_cnt - 1);
@@ -1853,6 +1868,16 @@ buttons:
                 ui.redraw = 1;
         }
     }
+    if (btn & 1u << B_HOME) {            /* HOME held: GUIDE */
+        uint32_t now = plat_ms();
+        if (!ui.home_at)
+            ui.home_at = now ? now : 1u;
+        else if (ui.home_at != 0xFFFFFFFFu && now - ui.home_at >= 800u) {
+            ui.home_at = 0xFFFFFFFFu;    /* once a hold */
+            guide_open();
+        }
+    } else
+        ui.home_at = 0;
     if (keys != ui.keys || btn != ui.btn)
         ui.redraw = 1;
     ui.keys = keys;
@@ -1946,6 +1971,10 @@ static void lead_update(void)
 static void lights(void)
 {
     uint32_t i, bright = 0, dim = 0, btn = 0, mid = 0;
+    if (ui.screen == SCR_GUIDE) {
+        guide_lights();
+        return;
+    }
     if (ui.screen == SCR_FIND) {         /* the notes tapped full, the rest of the key picked dim */
         uint16_t sm = fd_cnt ? scale_mask(fd_list[fd_sel] >> 4, fd_list[fd_sel] & 15u) : 0;
         for (i = 0; i < NKEYS; i++) {
@@ -2428,6 +2457,7 @@ static void draw_disk(void)
 }
 
 #include "screens.c"                     /* KEY, FX, LIB, TRIM */
+#include "guide.c"                       /* GUIDE */
 
 void app_ui_init(void)
 {
@@ -2441,6 +2471,10 @@ void app_frame(void)
 {
     static uint32_t last_on;
     uint32_t now = plat_ms(), i, on = 0;
+    if (first_boot) {
+        first_boot = 0;
+        guide_open();
+    }
     input();
     lights();
     ann_tick(now);
@@ -2479,6 +2513,8 @@ void app_frame(void)
             draw_trim();
         else if (ui.screen == SCR_FIND)
             draw_find();
+        else if (ui.screen == SCR_GUIDE)
+            draw_guide();
         else
             draw_home();
     }
@@ -2611,7 +2647,9 @@ int app_expect(const char *what, int *got)
         const pad_t *p = &pads[ui.pad];
         *got = !strcmp(what, "trims") ? p->ts : !strcmp(what, "trime") ? (int)pad_end(p) : !strcmp(what, "trimtune")
                ? p->tune : !strcmp(what, "trimlevel") ? 100 - p->cut : p->pmode;
-    } else if (!strcmp(what, "fmove"))
+    } else if (!strcmp(what, "guidepg"))
+        *got = ui.guide_pg;
+    else if (!strcmp(what, "fmove"))
         *got = set.fmove;
     else if (!strcmp(what, "pivots"))
         *got = ui.f_hold ? (int)fk_pivots() : -1;

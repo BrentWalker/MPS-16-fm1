@@ -31,6 +31,14 @@ MIDI when the browser asks. Don't unplug the cable while it writes. From a termi
 To go back to the stock firmware, use the installer's last section with M-VAVE's own firmware file. On its first
 start ChordSmith FM sets up its drive in the FM-1's spare flash.
 
+## Getting started: GUIDE
+
+![GUIDE](img/screen-guide.png)
+
+The first time ChordSmith starts, it opens **GUIDE**: twelve short pages, from playing chords to slicing a MIDI file.
+Turn **SELECT** for the next page. The keys and buttons a page talks about **blink**: press a blinking button to
+try it (that leaves the guide), and **hold HOME** to come back to the guide at any time. HOME on its own leaves it.
+
 ## 2. Playing
 
 ![HOME: pad 2 playing Bm7b5](img/screen-playing.png)
@@ -86,6 +94,7 @@ phrases) and the degree keys.
 | SELECT | Pick a slice, a file or a library row |
 | K1 to K4 | What the screen's bottom bar says |
 | OCT- / OCT+ | The octave. Both together: the scale lock on or off |
+| HOME (hold) | GUIDE: the getting-started pages |
 | HOME | The pads. Leaves any screen |
 | SEL (SLICE) | SLICE; again, FILES |
 | ENV (TRIM) | Trim the pad played last |

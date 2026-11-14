@@ -1,0 +1,20 @@
+# GUIDE: opens by itself the first time, SELECT turns pages, HOME leaves, HOME held opens it, a button leaves to do it
+wait 600
+expect screen 9
+turn SELECT 2
+wait 50
+expect guidepg 2
+tap HOME
+wait 50
+expect screen 0
+press HOME
+wait 1000
+release HOME
+wait 50
+expect screen 9
+expect guidepg 0
+turn SELECT 4
+wait 30
+tap LFO
+wait 50
+expect screen 6
