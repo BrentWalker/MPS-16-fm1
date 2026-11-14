@@ -272,3 +272,62 @@ static void draw_trim(void)
     bottom_bar(68, LBL, v);
     cv_blit(0, 120);
 }
+
+/* FIND: the notes tapped, the keys that have them all (best first), the picked key's notes with the tapped lit */
+static void draw_find(void)
+{
+    static const char *const LBL[4] = {"UNDO", "CLEAR", "", "USE"};
+    char t[24], v[4][12] = {"", "", "", "LIB"};
+    uint32_t i;
+    int32_t first = fd_sel > 2u ? (int32_t)fd_sel - 2 : 0, x = 10;
+    cv_begin(240, 120, C_BLACK);
+    str_set(t, "", sizeof t);
+    num_text(fd_cnt, t, 0);
+    text_cat(t, fd_cnt == 1u ? " KEY" : " KEYS");
+    top_bar("FIND", fd_n ? t : "TAP NOTES", C_GRAY);
+    if (!fd_n) {
+        cv_text((240 - text_w(&FONT_B, "TAP A FEW NOTES")) / 2, 50, &FONT_B, "TAP A FEW NOTES", AMBER);
+        cv_text((240 - text_w(&FONT_XS, "ANY KEYS, WHITE OR BLACK")) / 2, 80, &FONT_XS, "ANY KEYS, WHITE OR BLACK",
+                C_GRAY);
+        cv_blit(0, 0);
+        cv_begin(240, 120, C_BLACK);
+        bottom_bar(68, LBL, v);
+        cv_blit(0, 120);
+        return;
+    }
+    for (i = 0; i < fd_n; i++) {         /* the notes tapped */
+        char n[4];
+        pc_name(fd_seq[i], n);
+        cv_rect(x, 28, text_w(&FONT_XS, n) + 8, 16, i == 0 ? AMBER : C_LINE);
+        cv_text(x + 4, 30, &FONT_XS, n, i == 0 ? C_BLACK : C_WHITE);
+        x += text_w(&FONT_XS, n) + 12;
+    }
+    for (i = 0; i < 4u && (uint32_t)first + i < fd_cnt; i++) {   /* the keys */
+        uint32_t r = (uint32_t)first + i;
+        int cur = r == fd_sel;
+        int32_t y = 50 + (int32_t)i * 17;
+        if (cur)
+            cv_rect(4, y, 232, 16, AMBER);
+        fd_name(fd_list[r], t);
+        cv_text(10, y + 1, &FONT_XS, t, cur ? C_BLACK : C_WHITE);
+    }
+    cv_blit(0, 0);
+
+    cv_begin(240, 120, C_BLACK);
+    if (fd_cnt) {                        /* the picked key's notes, the ones tapped lit */
+        uint32_t e = fd_list[fd_sel], root = e >> 4, sc = e & 15u, l = letter_of(root, sc);
+        for (i = 0; i < 7u; i++) {
+            char n[4];
+            uint32_t pc = (root + SCALES[sc][i]) % 12u;
+            int on = (fd_pcs >> pc) & 1u;
+            int32_t cx = 6 + (int32_t)i * 33;
+            spell(pc, l + i, n);
+            cv_rect(cx, 6, 30, 24, on ? AMBER : C_LINE);
+            cv_text(cx + (30 - text_w(&FONT_B, n)) / 2, 7, &FONT_B, n, on ? C_BLACK : C_GRAY);
+        }
+        cv_text(10, 40, &FONT_XS, "SELECT: PICK  K4: USE IT IN LIB", C_DIM);
+    } else
+        cv_text(10, 20, &FONT_XS, "NO KEY HAS ALL OF THEM: UNDO", AMBER);
+    bottom_bar(68, LBL, v);
+    cv_blit(0, 120);
+}

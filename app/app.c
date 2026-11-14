@@ -136,12 +136,13 @@ static int32_t deg_pitch(int32_t j)      /* scale degree j (any: wraps into octa
 /* spelling: the key's notes take consecutive letters from the tonic's, so a key never mixes sharps and flats */
 static const uint8_t LETTER_PC[7] = {0, 2, 4, 5, 7, 9, 11};
 static int minorish(void) { return SCALES[set.scale][2] == 3u; }
-static uint32_t tonic_letter(void)
+static uint32_t letter_of(uint32_t root, uint32_t scale)   /* the tonic's letter in a key, 0 = C */
 {
     static const uint8_t MAJ[12] = {0, 1, 1, 2, 2, 3, 3, 4, 5, 5, 6, 6};   /* C Db D Eb E F F# G Ab A Bb B */
     static const uint8_t MIN[12] = {0, 0, 1, 2, 2, 3, 3, 4, 4, 5, 6, 6};   /* C C# D Eb E F F# G G# A Bb B */
-    return (minorish() ? MIN : MAJ)[set.root];
+    return (SCALES[scale % NSCALES][2] == 3u ? MIN : MAJ)[root % 12u];
 }
+static uint32_t tonic_letter(void) { return letter_of(set.root, set.scale); }
 static void spell(uint32_t pc, uint32_t letter, char *out)   /* pitch class pc on letter (0 = C): "F#", "Bb" */
 {
     int32_t d = (int32_t)((pc + 18u - LETTER_PC[letter % 7u]) % 12u) - 6;
@@ -1020,7 +1021,7 @@ void app_init(void)
 }
 
 /* ======================================================================= UI === */
-enum { SCR_HOME, SCR_SLICE, SCR_FILES, SCR_DISK, SCR_KEY, SCR_FX, SCR_LIB, SCR_TRIM };
+enum { SCR_HOME, SCR_SLICE, SCR_FILES, SCR_DISK, SCR_KEY, SCR_FX, SCR_LIB, SCR_TRIM, SCR_FIND };
 enum { MODE_ROOT, MODE_LEAD };
 static struct {
     char msg[2][24];
@@ -1329,12 +1330,112 @@ void app_loop(void)
     }
 }
 
+/* FIND (REC and PLAY together): tap a few notes on any keys and pick a key that has them all; it opens LIB */
+#define FD_MAX 12u
+static uint8_t fd_seq[FD_MAX], fd_n;     /* the pitch classes tapped, in order, each once */
+static uint16_t fd_pcs;
+static uint8_t fd_list[12u * NSCALES], fd_cnt, fd_sel;   /* the keys that fit: root << 4 | scale, best first */
+static uint16_t scale_mask(uint32_t root, uint32_t scale)
+{
+    uint32_t j;
+    uint16_t m = 0;
+    for (j = 0; j < 7u; j++)
+        m |= (uint16_t)(1u << (root + SCALES[scale][j]) % 12u);
+    return m;
+}
+static int32_t fd_score(uint32_t root, uint32_t scale)
+{
+    /* the first note tapped as the tonic, then any note tapped, then major and minor before the modes */
+    return (fd_n && root == fd_seq[0] ? 40 : 0) + ((fd_pcs >> root) & 1u ? 20 : 0) +
+           (scale <= 1u ? 10 : scale <= 5u ? 5 : 0);
+}
+static void fd_rank(void)
+{
+    uint32_t r, sc, i, j;
+    fd_cnt = 0;
+    fd_sel = 0;
+    if (!fd_n)
+        return;
+    for (r = 0; r < 12u; r++) {
+        uint32_t root = (fd_seq[0] + r) % 12u;   /* from the first note up, so ties read from there */
+        for (sc = 0; sc < NSCALES; sc++)
+            if ((scale_mask(root, sc) & fd_pcs) == fd_pcs)
+                fd_list[fd_cnt++] = (uint8_t)(root << 4 | sc);
+    }
+    for (i = 1; i < fd_cnt; i++) {       /* best first; equal scores keep their order */
+        uint8_t x = fd_list[i];
+        int32_t sx = fd_score(x >> 4, x & 15u);
+        for (j = i; j > 0 && fd_score(fd_list[j - 1] >> 4, fd_list[j - 1] & 15u) < sx; j--)
+            fd_list[j] = fd_list[j - 1];
+        fd_list[j] = x;
+    }
+}
+static void fd_name(uint32_t e, char *t)   /* "D MAJOR" */
+{
+    spell(e >> 4, letter_of(e >> 4, e & 15u), t);
+    text_cat(t, " ");
+    text_cat(t, SCALE_NAME[e & 15u]);
+}
+static void find_enter(void)
+{
+    uint32_t k;
+    if (rec_on) {                        /* REC went down first: no take */
+        rec_on = 0;
+        rec_n = 0;
+    }
+    players_stop();
+    for (k = 0; k < NKEYS; k++)
+        notes_off(k);
+    fd_n = 0;
+    fd_pcs = 0;
+    fd_rank();
+    ui.screen = SCR_FIND;
+    app_say("FIND KEY", "TAP A FEW NOTES");
+}
+static void find_keys(uint32_t keys)     /* every key a note, from F3 */
+{
+    uint32_t k;
+    for (k = 0; k < NKEYS; k++) {
+        uint32_t bit = 1u << k;
+        if ((keys & bit) && !(ui.keys & bit)) {
+            uint8_t m = (uint8_t)clamp(53 + (int32_t)k + 12 * set.octave, 0, 127);
+            uint32_t vel = touch_vel(k), pc = m % 12u;
+            notes_on(k, &m, 1, vel ? vel : 100u);
+            if (!((fd_pcs >> pc) & 1u) && fd_n < FD_MAX) {
+                fd_seq[fd_n++] = (uint8_t)pc;
+                fd_pcs |= (uint16_t)(1u << pc);
+                fd_rank();
+            }
+            ui.redraw = 1;
+        } else if (!(keys & bit) && (ui.keys & bit))
+            notes_off(k);
+    }
+}
+static void find_use(void)
+{
+    char t[24];
+    if (!fd_cnt)
+        return;
+    set.root = (uint8_t)(fd_list[fd_sel] >> 4);
+    set.scale = (uint8_t)(fd_list[fd_sel] & 15u);
+    kit_build();
+    set_dirty = 1;
+    lib_sel = 0;
+    ui.screen = SCR_LIB;
+    fd_name(fd_list[fd_sel], t);
+    app_say("KEY", t);
+}
+
 static void input(void)
 {
     uint32_t keys, btn = plat_buttons(), i;
     int32_t e;
     touch_poll();
     keys = touch_keys();
+    if (ui.screen == SCR_FIND) {
+        find_keys(keys);
+        goto buttons;
+    }
     /* white keys: the pads; in SLICE, a key drops the selected slice on its pad */
     for (i = 0; i < 16u; i++) {
         uint32_t k = WK[i], bit = 1u << k;
@@ -1389,7 +1490,7 @@ static void input(void)
             notes_off(k);
         }
     }
-    /* buttons */
+buttons:
     for (i = 0; i < NB; i++) {
         uint32_t bit = 1u << i;
         int down = (btn & bit) && !(ui.btn & bit), up = !(btn & bit) && (ui.btn & bit);
@@ -1420,6 +1521,13 @@ static void input(void)
             continue;
         if (ui.screen == SCR_DISK && i != B_HOME)
             continue;                    /* the drive is the computer's until it ejects (or HOME) */
+        if ((i == B_PLAY && (btn & 1u << B_REC)) || (i == B_REC && (btn & 1u << B_PLAY))) {
+            find_enter();                /* REC and PLAY together: FIND */
+            ui.redraw = 1;
+            continue;
+        }
+        if (ui.screen == SCR_FIND && (i == B_PLAY || i == B_REC))
+            continue;
         if (i == B_SAVE) {
             char t[8] = "KIT 0";
             t[5] = (char)('0' + set.kit);
@@ -1581,6 +1689,23 @@ static void input(void)
                 set_dirty = 1;
                 ui.redraw = 1;
             }
+        } else if (ui.screen == SCR_FIND) {
+            if (es && fd_cnt)
+                fd_sel = (uint8_t)clamp((int32_t)fd_sel + es, 0, (int32_t)fd_cnt - 1);
+            if (k1 && fd_n) {            /* UNDO: the last note */
+                fd_n--;
+                fd_pcs &= (uint16_t)~(1u << fd_seq[fd_n]);
+                fd_rank();
+            }
+            if (k2) {                    /* CLEAR */
+                fd_n = 0;
+                fd_pcs = 0;
+                fd_rank();
+            }
+            if (k4 > 0)
+                find_use();
+            if (es || k1 || k2 || k4)
+                ui.redraw = 1;
         } else if (ui.screen == SCR_TRIM && ui.pad >= 0) {
             pad_t *p = &pads[ui.pad];
             if (p->type == PAD_PHRASE) {
@@ -1750,6 +1875,19 @@ static void lead_update(void)
 static void lights(void)
 {
     uint32_t i, bright = 0, dim = 0, btn = 0, mid = 0;
+    if (ui.screen == SCR_FIND) {         /* the notes tapped full, the rest of the key picked dim */
+        uint16_t sm = fd_cnt ? scale_mask(fd_list[fd_sel] >> 4, fd_list[fd_sel] & 15u) : 0;
+        for (i = 0; i < NKEYS; i++) {
+            uint32_t pc = (uint32_t)(53 + (int32_t)i + 12 * set.octave) % 12u;
+            if ((ui.keys >> i & 1u) || (fd_pcs >> pc & 1u))
+                bright |= 1u << i;
+            else if (sm >> pc & 1u)
+                dim |= 1u << i;
+        }
+        plat_lights(ui.btn | 1u << B_PLAY | 1u << B_REC, bright, 0, dim, 1);
+        plat_lights_mid(0, 0);
+        return;
+    }
     for (i = 0; i < 16u; i++) {
         uint32_t bit = 1u << WK[i];
         if ((ui.keys & bit) || pl[i].on || cp[i].on)
@@ -2249,6 +2387,8 @@ void app_frame(void)
             draw_lib();
         else if (ui.screen == SCR_TRIM)
             draw_trim();
+        else if (ui.screen == SCR_FIND)
+            draw_find();
         else
             draw_home();
     }
@@ -2381,7 +2521,13 @@ int app_expect(const char *what, int *got)
         const pad_t *p = &pads[ui.pad];
         *got = !strcmp(what, "trims") ? p->ts : !strcmp(what, "trime") ? (int)pad_end(p) : !strcmp(what, "trimtune")
                ? p->tune : !strcmp(what, "trimlevel") ? 100 - p->cut : p->pmode;
-    } else if (!strcmp(what, "mode"))
+    } else if (!strcmp(what, "fdn"))
+        *got = fd_n;
+    else if (!strcmp(what, "fdcount"))
+        *got = fd_cnt;
+    else if (!strcmp(what, "fdtop"))     /* the key picked: root * 16 + scale */
+        *got = fd_cnt ? fd_list[fd_sel] : -1;
+    else if (!strcmp(what, "mode"))
         *got = set.mode;
     else if (!strcmp(what, "leadnow"))
         *got = ui.lead_now;

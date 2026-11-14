@@ -77,6 +77,7 @@ phrases) and the degree keys.
 | SAVE | Save the settings and the kit |
 | PLAY | In SLICE and LIB, hear the selection; in KEY, detect the file's key; elsewhere, all notes off |
 | REC | Record MIDI coming in, again to stop and save it |
+| REC + PLAY | FIND: tap a few notes, pick a key that has them |
 | SEQ (MODE) | The black keys: ROOT or LEAD |
 
 On HOME, K1 is the strum, K2 the arp, K3 humanize and K4 the tempo.
@@ -91,6 +92,16 @@ With the **scale lock** on, every note that plays, from chord pads, phrases and 
 The **step shift** then moves every note by scale degrees: Am7 two steps up becomes Cmaj7, still in the key.
 
 PLAY on this screen finds the key of the loaded file.
+
+### FIND: a key from a few notes
+
+![FIND: D, F#, A and B tapped](img/screen-find.png)
+
+Press **REC and PLAY together**. Every key, white and black, is now a note from F3 up: tap a few notes of a melody or
+a chord you have in your head. FIND lists every key that has all of them, best first: the first note you tapped as
+the tonic, then major and minor before the modes. SELECT picks one; the keyboard lights its notes, the ones you
+tapped full. K1 takes back the last note, K2 clears them all. **K4 uses the key** and opens LIB, its chords ready
+to drop on the pads. HOME leaves the key as it was.
 
 ## 5. FX
 

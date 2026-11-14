@@ -92,3 +92,48 @@ expect trimmode 0
 shot trim_chord.png
 tap HOME
 wait 50
+# FIND: REC and PLAY together, tap D F# A B, the best key D major, into LIB
+press REC
+wait 20
+press PLAY
+wait 20
+release PLAY
+release REC
+wait 50
+expect screen 8
+expect fdn 0
+key 9 down
+wait 20
+key 9 up
+key 13 down
+wait 20
+key 13 up
+key 16 down
+wait 20
+key 16 up
+key 18 down
+wait 20
+key 18 up
+key 21 down
+wait 20
+key 21 up
+wait 50
+expect fdn 4
+expect fdtop 33
+shot find.png
+turn K1 1
+wait 20
+expect fdn 3
+key 6 down
+wait 20
+key 6 up
+wait 30
+expect fdn 4
+turn K4 1
+wait 50
+expect screen 6
+expect root 2
+expect scale 1
+shot find_lib.png
+tap HOME
+wait 50
