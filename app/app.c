@@ -83,14 +83,22 @@ typedef struct {
     char roman[6];                       /* "ii" */
     uint8_t dim;                         /* the roman numeral takes a degree sign */
     char title[14];                      /* a progression's name ("i VI III VII"), else empty */
+    /* TRIM (0 everywhere: as it came) */
+    uint16_t ts, te;                     /* a phrase's window, 96ths: from ts to te (0: its length) */
+    int8_t tune;                         /* semitones, -12 .. 12 */
+    uint8_t cut;                         /* the level: 100 - cut, % */
+    uint8_t pmode;                       /* a phrase: PM_ONESHOT, PM_GATE, PM_LOOP */
+    uint8_t rsv;
 } pad_t;
+enum { PM_ONESHOT, PM_GATE, PM_LOOP };
+static const char *const PM_NAME[3] = {"ONE-SHOT", "GATE", "LOOP"};
 enum { PAD_EMPTY, PAD_CHORD, PAD_PHRASE };
 typedef struct {
     uint16_t s, d;                       /* start and length, 96ths of a beat */
     uint8_t p, v;
 } pnote_t;
 /* the kit: every pad and its phrase, one block, saved whole as a file on the drive (KITnn.CSK) */
-#define KIT_MAGIC 0x314B5343u            /* "CSK1" */
+#define KIT_MAGIC 0x324B5343u            /* "CSK2" (CSK1: before TRIM) */
 #define NKITS 8u
 static struct {
     uint32_t magic, size;
@@ -99,6 +107,14 @@ static struct {
 } K;
 #define pads K.pad
 #define ph K.ph
+static uint32_t pad_end(const pad_t *p) { return p->te && p->te <= p->len ? p->te : p->len; }
+static void trim_reset(pad_t *p)
+{
+    p->ts = p->te = 0;
+    p->tune = 0;
+    p->cut = 0;
+    p->pmode = PM_ONESHOT;
+}
 
 /* the white keys and black keys by colour, left to right (key 0 = F3) */
 static const uint8_t WK[16] = PLAT_WHITE_KEYS, BK[11] = PLAT_BLACK_KEYS;
@@ -416,17 +432,23 @@ static void phrase_tick(uint32_t n)
         float a, b;
         if (!P->on)
             continue;
+        const pad_t *pd = &pads[i];
+        float ws = (float)pd->ts, we = (float)pad_end(pd);
+        uint32_t lv = 100u - (pd->cut > 100u ? 100u : pd->cut);
+        if (P->pos < ws)
+            P->pos = ws;                 /* (the start moved past it) */
         a = P->pos;
         b = a + dt;
-        for (k = 0; k < pads[i].pn && k < MAXPH; k++) {
+        for (k = 0; k < pd->pn && k < MAXPH; k++) {
             const pnote_t *x = &ph[i][k];
-            float s = (float)x->s, e = (float)x->s + (float)x->d;
-            int starts = s >= a && s < b;
+            float s = (float)x->s, e = fm_minf((float)x->s + (float)x->d, we);
+            int starts = s >= a && s < b && s >= ws && s < we;
             if (starts) {
-                uint32_t m = (uint32_t)clamp(keyed((int32_t)x->p + 12 * P->oct), 0, 127);
+                uint32_t m = (uint32_t)clamp(keyed((int32_t)x->p + 12 * P->oct + pd->tune), 0, 127);
+                uint32_t v = (uint32_t)x->v * lv / 100u;
                 if (P->snd[k])
                     out_off(P->snd[k] - 1u);
-                out_on(m, x->v);
+                out_on(m, v ? v : 1u);
                 P->snd[k] = (uint8_t)(m + 1u);
             }
             if (P->snd[k] && e < b && !(starts && e >= b)) {
@@ -435,9 +457,12 @@ static void phrase_tick(uint32_t n)
             }
         }
         P->pos = b;
-        if (P->pos >= (float)pads[i].len) {
+        if (P->pos >= we) {
             pl_release(i);
-            P->on = 0;
+            if (pd->pmode == PM_LOOP && i < NPADS && we > ws)
+                P->pos = ws + (P->pos - we);   /* again from the start, on the beat */
+            else
+                P->on = 0;
         }
     }
 }
@@ -563,7 +588,7 @@ void app_render(int32_t *lr, uint32_t n, uint32_t master_q12)
             pl_release(a);
             pl[a].on = type == QE_PSTART;
             pl[a].oct = (int8_t)((int32_t)b - 8);
-            pl[a].pos = 0.0f;
+            pl[a].pos = (float)pads[a].ts;
         }
         q_r++;
     }
@@ -768,6 +793,7 @@ static int slice_to(uint32_t i, uint32_t dst)
     uint8_t ps[MAXPH];
     uint32_t nps = 0;
     p->pn = 0;
+    trim_reset(p);
     for (k = 0; k < song_n; k++) {
         const note_t *n = &song[k];
         uint32_t t = N_START(n);
@@ -994,7 +1020,7 @@ void app_init(void)
 }
 
 /* ======================================================================= UI === */
-enum { SCR_HOME, SCR_SLICE, SCR_FILES, SCR_DISK, SCR_KEY, SCR_FX, SCR_LIB };
+enum { SCR_HOME, SCR_SLICE, SCR_FILES, SCR_DISK, SCR_KEY, SCR_FX, SCR_LIB, SCR_TRIM };
 enum { MODE_ROOT, MODE_LEAD };
 static struct {
     char msg[2][24];
@@ -1119,7 +1145,7 @@ static void chord_build(uint32_t i)
         out[no++] = v[k];
     cbuf_n[i] = 0;
     for (k = 0; k < no && cbuf_n[i] < MAXC; k++) {
-        int32_t m = clamp(keyed(out[k] + 12 * set.octave), 0, 127);
+        int32_t m = clamp(keyed(out[k] + 12 * set.octave + p->tune), 0, 127);
         for (j = 0; j < cbuf_n[i]; j++)
             if (cbuf[i][j] == (uint8_t)m)
                 break;
@@ -1132,12 +1158,18 @@ static void pad_play(uint32_t i, uint32_t k, uint32_t vel)
 {
     const pad_t *p = &pads[i];
     (void)k;
+    vel = vel * (100u - (p->cut > 100u ? 100u : p->cut)) / 100u;
+    if (!vel)
+        vel = 1;
     if (p->type == PAD_CHORD) {
         chord_build(i);
         ev_push(QE_CSTART, i, vel);
+    } else if (p->type == PAD_PHRASE) {
+        if (p->pmode == PM_LOOP && pl[i].on)   /* LOOP: a second press stops it */
+            ev_push(QE_PSTOP, i, 8);
+        else
+            ev_push(QE_PSTART, i, (uint32_t)(set.octave + 8));
     }
-    else if (p->type == PAD_PHRASE)
-        ev_push(QE_PSTART, i, (uint32_t)(set.octave + 8));
     ui.pad = (int32_t)i;
     ui.root_lit = p->deg < 7u ? p->deg : -1;
 }
@@ -1336,6 +1368,8 @@ static void input(void)
             ui.redraw = 1;
         } else if (!(keys & bit) && (ui.keys & bit)) {
             ev_push(QE_CSTOP, i, 0);
+            if (pads[i].type == PAD_PHRASE && pads[i].pmode == PM_GATE)
+                ev_push(QE_PSTOP, i, 8);  /* GATE: only while held */
             ui.redraw = 1;
         }
     }
@@ -1436,6 +1470,11 @@ static void input(void)
             set.mode = set.mode == MODE_LEAD ? MODE_ROOT : MODE_LEAD;
             set_dirty = 1;
             app_say("MODE", set.mode == MODE_LEAD ? "LEAD" : "ROOT");
+        } else if (i == B_ENV) {         /* TRIM: the pad played last (a white key there picks another) */
+            if (ui.pad < 0 || pads[ui.pad].type == PAD_EMPTY)
+                app_say("TRIM", "PLAY A PAD FIRST");
+            else
+                ui.screen = SCR_TRIM;
         } else if (i == B_EDIT) {        /* KEY */
             ui.screen = SCR_KEY;
         } else if (i == B_FX) {          /* FX: again, the second page */
@@ -1542,6 +1581,30 @@ static void input(void)
                 set_dirty = 1;
                 ui.redraw = 1;
             }
+        } else if (ui.screen == SCR_TRIM && ui.pad >= 0) {
+            pad_t *p = &pads[ui.pad];
+            if (p->type == PAD_PHRASE) {
+                if (k1 || k2) {          /* by 16ths, at least one between them */
+                    int32_t st = (int32_t)p->ts + 24 * k1, en = (int32_t)pad_end(p) + 24 * k2, len = p->len;
+                    st = clamp(st, 0, len - 24 > 0 ? len - 24 : 0);
+                    en = clamp(en, st + 24 < len ? st + 24 : len, len);
+                    if (st >= en)
+                        st = en > 24 ? en - 24 : 0;
+                    p->ts = (uint16_t)st;
+                    p->te = (uint16_t)(en >= len ? 0 : en);
+                }
+                if (es)
+                    p->pmode = (uint8_t)clamp(p->pmode + es, PM_ONESHOT, PM_LOOP);
+            }
+            if (k3)
+                p->tune = (int8_t)clamp(p->tune + k3, -12, 12);
+            if (k4)
+                p->cut = (uint8_t)(100 - clamp(100 - (int32_t)p->cut + 5 * k4, 0, 100));
+            if (k3 && p->type == PAD_CHORD && cp[ui.pad].on) {
+                chord_build((uint32_t)ui.pad);   /* heard at once while held */
+            }
+            if (es || k1 || k2 || k3 || k4)
+                ui.redraw = 1;
         } else if (ui.screen == SCR_KEY) {
             if (k1)
                 set.root = (uint8_t)(((int32_t)set.root + k1 % 12 + 12) % 12);
@@ -1645,7 +1708,9 @@ static void lead_update(void)
         uint32_t nat = 0xFFFFFFFFu;
         for (k = 0; k < pads[src].pn && k < MAXPH; k++) {
             const pnote_t *x = &ph[src][k];
-            int32_t m = keyed((int32_t)x->p + 12 * P->oct);
+            int32_t m = keyed((int32_t)x->p + 12 * P->oct + pads[src].tune);
+            if (x->s < pads[src].ts || x->s >= pad_end(&pads[src]))
+                continue;
             if ((float)x->s <= pos && pos < (float)x->s + (float)x->d) {
                 if (m > top)
                     top = m;
@@ -1710,7 +1775,7 @@ static void lights(void)
     if (rec_on)
         btn |= 1u << B_REC;
     btn |= 1u << (ui.screen == SCR_SLICE || ui.screen == SCR_FILES ? B_SEL : ui.screen == SCR_DISK ? B_GLO
-                  : ui.screen == SCR_KEY ? B_EDIT : ui.screen == SCR_FX ? B_FX : ui.screen == SCR_LIB ? B_LFO : B_HOME);
+                  : ui.screen == SCR_KEY ? B_EDIT : ui.screen == SCR_FX ? B_FX : ui.screen == SCR_LIB ? B_LFO : ui.screen == SCR_TRIM ? B_ENV : B_HOME);
     plat_lights(btn | ui.btn, bright, 0, dim, 1);
     plat_lights_mid(0, mid);
 }
@@ -2134,7 +2199,7 @@ static void draw_disk(void)
     cv_blit(0, 120);
 }
 
-#include "screens.c"                     /* KEY, FX, LIB */
+#include "screens.c"                     /* KEY, FX, LIB, TRIM */
 
 void app_ui_init(void)
 {
@@ -2157,6 +2222,13 @@ void app_frame(void)
         last_on = on;
         ui.redraw = 1;
     }
+    if (ui.screen == SCR_TRIM && ui.pad >= 0 && pl[ui.pad].on) {   /* the playhead, about 30 times a second */
+        static uint32_t ph_at;
+        if (now - ph_at >= 33u) {
+            ph_at = now;
+            ui.redraw = 1;
+        }
+    }
     if (ui.msg_until && now >= ui.msg_until) {
         ui.msg_until = 0;
         ui.redraw = 1;
@@ -2175,6 +2247,8 @@ void app_frame(void)
             draw_fx();
         else if (ui.screen == SCR_LIB)
             draw_lib();
+        else if (ui.screen == SCR_TRIM)
+            draw_trim();
         else
             draw_home();
     }
@@ -2303,7 +2377,11 @@ int app_expect(const char *what, int *got)
         *got = set.octave;
     else if (!strcmp(what, "rootkey"))
         *got = ui.root_lit;
-    else if (!strcmp(what, "mode"))
+    else if (!strncmp(what, "trim", 4) && ui.pad >= 0) {   /* trims, trime, trimtune, trimlevel, trimmode */
+        const pad_t *p = &pads[ui.pad];
+        *got = !strcmp(what, "trims") ? p->ts : !strcmp(what, "trime") ? (int)pad_end(p) : !strcmp(what, "trimtune")
+               ? p->tune : !strcmp(what, "trimlevel") ? 100 - p->cut : p->pmode;
+    } else if (!strcmp(what, "mode"))
         *got = set.mode;
     else if (!strcmp(what, "leadnow"))
         *got = ui.lead_now;

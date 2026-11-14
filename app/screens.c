@@ -182,3 +182,93 @@ static void draw_lib(void)
     }
     cv_blit(0, 120);
 }
+
+/* TRIM: the pad played last. A phrase as a piano roll, its window shaded between START (green) and END (red), the
+ * playhead white; a chord, its notes. K1 START, K2 END, K3 TUNE, K4 LEVEL; SELECT: ONE-SHOT, GATE or LOOP */
+static void draw_trim(void)
+{
+    static const char *const LBL[4] = {"START", "END", "TUNE", "LEVEL"};
+    const pad_t *p = &pads[ui.pad < 0 ? 0 : ui.pad];
+    char t[32], v[4][12];
+    uint32_t k, len = p->len ? p->len : 1u, ws = p->ts, we = pad_end(p);
+    int phrase = p->type == PAD_PHRASE;
+    {
+        char n[8] = "PAD ";
+        num_text(ui.pad + 1, n + 4, 0);
+        cv_begin(240, 120, C_BLACK);
+        top_bar("TRIM", n, C_GRAY);
+    }
+    if (phrase) {
+        int32_t lo = 127, hi = 0, x0 = 8, w = 224, y0 = 34, h = 80, xs, xe;
+        for (k = 0; k < p->pn && k < MAXPH; k++) {
+            if (ph[ui.pad][k].p < lo)
+                lo = ph[ui.pad][k].p;
+            if (ph[ui.pad][k].p > hi)
+                hi = ph[ui.pad][k].p;
+        }
+        if (hi - lo < 11) {              /* at least an octave tall */
+            lo -= (11 - (hi - lo)) / 2;
+            hi = lo + 11;
+        }
+        xs = x0 + (int32_t)(ws * (uint32_t)w / len);
+        xe = x0 + (int32_t)(we * (uint32_t)w / len);
+        cv_rect(x0, y0, w, h, RGB(14, 14, 18));
+        cv_rect(xs, y0, xe - xs, h, RGB(16, 36, 34));
+        for (k = 0; k < p->pn && k < MAXPH; k++) {
+            const pnote_t *x = &ph[ui.pad][k];
+            int32_t nx = x0 + (int32_t)(x->s * (uint32_t)w / len), nw = (int32_t)(x->d * (uint32_t)w / len);
+            int32_t ny = y0 + h - 4 - (x->p - lo) * (h - 6) / (hi - lo + 1);
+            int in = x->s >= ws && x->s < we;
+            if (nw < 2)
+                nw = 2;
+            if (nx + nw > x0 + w)
+                nw = x0 + w - nx;
+            cv_rect(nx, ny, nw, 3, in ? TEAL : TEAL_DIM);
+        }
+        cv_rect(xs, y0, 2, h, RGB(92, 207, 122));
+        cv_rect(xe - 2 > xs ? xe - 2 : xs, y0, 2, h, RGB(224, 98, 92));
+        if (pl[ui.pad].on) {
+            uint32_t pos = (uint32_t)pl[ui.pad].pos;
+            cv_rect(x0 + (int32_t)((pos < len ? pos : len) * (uint32_t)w / len), y0, 1, h, C_WHITE);
+        }
+    } else {
+        int32_t tw = 0, x;
+        for (k = 0; k < p->n; k++)       /* its notes, as on HOME */
+            tw += text_w(&FONT_B, p->nm[k]) + 16;
+        x = (240 - tw + 16) / 2;
+        for (k = 0; k < p->n; k++) {
+            int32_t nw = text_w(&FONT_B, p->nm[k]);
+            cv_rect(x - 5, 52, nw + 10, 26, C_LINE);
+            cv_text(x, 53, &FONT_B, p->nm[k], C_WHITE);
+            x += nw + 16;
+        }
+        cv_text((240 - text_w(&FONT_XS, "A CHORD: TUNE AND LEVEL")) / 2, 92, &FONT_XS, "A CHORD: TUNE AND LEVEL",
+                C_GRAY);
+    }
+    cv_blit(0, 0);
+
+    cv_begin(240, 120, C_BLACK);
+    pad_title(p, t);
+    cv_text(10, 4, &FONT_B, t, phrase ? TEAL : AMBER);
+    if (phrase) {
+        char l[12];
+        fmt_len(we - ws, l);
+        str_set(t, l, sizeof t);
+        text_cat(t, "  ");
+        text_cat(t, PM_NAME[p->pmode % 3u]);
+        cv_text(10, 32, &FONT_XS, t, C_WHITE);
+        cv_text(232 - text_w(&FONT_XS, "SELECT: MODE"), 32, &FONT_XS, "SELECT: MODE", C_DIM);
+        fmt_pos(ws, v[0]);
+        fmt_pos(we, v[1]);
+    } else {
+        str_set(t, "CHORD  ", sizeof t);
+        text_cat(t, p->roman);
+        cv_text(10, 32, &FONT_XS, t, C_WHITE);
+        str_set(v[0], "-", sizeof v[0]);
+        str_set(v[1], "-", sizeof v[1]);
+    }
+    num_text(p->tune, v[2], 1);
+    num_text(100 - p->cut, v[3], 0);
+    bottom_bar(68, LBL, v);
+    cv_blit(0, 120);
+}

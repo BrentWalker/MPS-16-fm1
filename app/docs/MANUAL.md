@@ -13,9 +13,10 @@ the chords of any key, slices of MIDI files you copy onto it, or progressions fr
 6. LIB: the chord library
 7. MIDI files: the USB drive and REC
 8. SLICE and FILES
-9. Kits and saving
-10. MIDI and sound
-11. Troubleshooting
+9. TRIM: a pad's start, end, tune, level and play mode
+10. Kits and saving
+11. MIDI and sound
+12. Troubleshooting
 
 ---
 
@@ -68,7 +69,7 @@ phrases) and the degree keys.
 | OCT- / OCT+ | The octave. Both together: the scale lock on or off |
 | HOME | The pads. Leaves any screen |
 | SEL (SLICE) | SLICE; again, FILES |
-| ENV | Coming later (TRIM) |
+| ENV (TRIM) | Trim the pad played last |
 | LFO (LIB) | The chord library |
 | EDIT (KEY) | The key screen |
 | FX | Chord FX; again, the second page |
@@ -135,18 +136,34 @@ K4 move its start and end by 16ths. A white key drops it on that pad: a **chord 
 
 SLICE again opens FILES: SELECT picks the file, K1 a track and K2 turns it on or off. Drum tracks start off.
 
-## 9. Kits and saving
+## 9. TRIM
+
+![TRIM: a phrase between START and END, looping](img/screen-trim.png)
+
+ENV (TRIM) opens the pad played last; a white key there picks another. Nothing is cut away: TRIM only sets what
+plays, so you can always widen it again.
+
+- **K1 START, K2 END**: the part of a phrase that plays, by 16ths. The piano roll shades it, START green, END red,
+  the playhead white.
+- **K3 TUNE**: up or down by semitones (12 at most), for chords and phrases.
+- **K4 LEVEL**: how loud, 0 to 100.
+- **SELECT** the play mode of a phrase: **ONE-SHOT** plays it to the end, **GATE** only while you hold the key,
+  **LOOP** over and over until you press the key again.
+
+SAVE keeps the trims with the kit.
+
+## 10. Kits and saving
 
 A kit is the 16 pads. The KIT knob (PRESETS) switches between eight; an empty one starts with the key's chords.
 **SAVE** keeps the settings and the kit, as a file on the drive (KIT01.CSK to KIT08.CSK). Turning KIT without SAVE
 leaves the old kit's changes unsaved.
 
-## 10. MIDI and sound
+## 11. MIDI and sound
 
 Every note goes out over USB MIDI on channel 1. MIDI in from USB or the TRS jack plays the built-in synth, a simple
 twelve-voice sound for now. MASTER is the volume.
 
-## 11. Troubleshooting
+## 12. Troubleshooting
 
 If the installer doesn't find the FM-1, use Chrome or Edge, allow MIDI, and close other programs that use its MIDI
 port. If the FM-1 doesn't start after an install, it starts in SAFE MODE after two failed starts; USB still works,
