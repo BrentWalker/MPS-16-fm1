@@ -30,7 +30,8 @@ typedef struct {
     uint8_t bass;                        /* a bass note under every chord */
     uint8_t bpm;                         /* 0: the file's tempo; else this */
     uint8_t mode;                        /* the black keys: MODE_ROOT or MODE_LEAD (SEQ switches) */
-    uint8_t rsv[2];
+    uint8_t fmove;                       /* the key change F1 .. F4 in use, 0: the home key */
+    uint8_t home;                        /* with one in use, the home key: root << 4 | scale */
 } settings_t;
 static settings_t set;
 static uint8_t set_dirty;
@@ -1030,6 +1031,8 @@ static struct {
     int32_t pad;                         /* the pad played last (-1 none yet) */
     int32_t root_lit;                    /* the black key lit as the root (-1 none) */
     int32_t lead_now, lead_next;         /* LEAD: the degrees of the top note sounding and the next (-1 none) */
+    uint8_t f_hold;                      /* F1 .. F4 held (1 .. 4), 0 none */
+    uint32_t f_at;                       /* when it went down */
     uint8_t oct_mod;                     /* OCT held and used as a modifier: its release steps nothing */
     uint8_t screen, disk_state, trk_cur, fx_page;
     int32_t file_cur;
@@ -1070,6 +1073,7 @@ static void key_text(char *t)            /* "A MIN" */
 static void rekey(void)
 {
     char t[24];
+    set.fmove = 0;                       /* a key picked by hand is the new home */
     kit_build();
     set_dirty = 1;
     tonic_name(t);
@@ -1418,12 +1422,57 @@ static void find_use(void)
         return;
     set.root = (uint8_t)(fd_list[fd_sel] >> 4);
     set.scale = (uint8_t)(fd_list[fd_sel] & 15u);
+    set.fmove = 0;
     kit_build();
     set_dirty = 1;
     lib_sel = 0;
     ui.screen = SCR_LIB;
     fd_name(fd_list[fd_sel], t);
     app_say("KEY", t);
+}
+
+/* F1-F4: the key changes, each from the home key */
+static const char *const FK_NAME[4] = {"F1 RELATIVE", "F2 PARALLEL", "F3 UP A 4TH", "F4 UP A STEP"};
+static uint32_t fk_target(uint32_t mv)   /* the key move mv (0: home) goes to, root << 4 | scale */
+{
+    uint32_t h = set.fmove ? set.home : (uint32_t)(set.root << 4 | set.scale), r = h >> 4, sc = h & 15u;
+    int minor = SCALES[sc][2] == 3u;
+    if (mv == 1u)                        /* relative: the same notes */
+        return minor ? ((r + 3u) % 12u) << 4 | 1u : ((r + 9u) % 12u) << 4 | 0u;
+    if (mv == 2u)                        /* parallel: the same tonic */
+        return r << 4 | (minor ? 1u : 0u);
+    if (mv == 3u)
+        return ((r + 5u) % 12u) << 4 | sc;
+    if (mv == 4u)
+        return ((r + 2u) % 12u) << 4 | sc;
+    return h;
+}
+static void fk_go(uint32_t mv)           /* a tap: there, or home again */
+{
+    uint32_t e;
+    if (set.fmove == mv)
+        mv = 0;
+    if (!set.fmove)
+        set.home = (uint8_t)(set.root << 4 | set.scale);
+    e = fk_target(mv);
+    set.root = (uint8_t)(e >> 4);
+    set.scale = (uint8_t)(e & 15u);
+    set.fmove = (uint8_t)mv;
+    kit_build();
+    set_dirty = 1;
+}
+static uint32_t fk_pivots(void)          /* held: the chord pads whose notes are all in the key it goes to */
+{
+    uint32_t e = fk_target(set.fmove == ui.f_hold ? 0u : ui.f_hold), i, k, out = 0;
+    uint16_t m = scale_mask(e >> 4, e & 15u);
+    for (i = 0; i < NPADS; i++) {
+        const pad_t *p = &pads[i];
+        uint32_t ok = p->type == PAD_CHORD && p->n;
+        for (k = 0; ok && k < p->n; k++)
+            ok = (m >> (p->note[k] % 12u)) & 1u;
+        out |= ok << i;
+    }
+    return out;
 }
 
 static void input(void)
@@ -1488,6 +1537,26 @@ static void input(void)
             ui.redraw = 1;
         } else if (!(keys & bit) && (ui.keys & bit)) {
             notes_off(k);
+        }
+    }
+    /* black keys F1-F4: key changes from the home key, for a bridge. A tap goes there (and lights the key), a tap on
+     * the lit one comes home; held, nothing changes yet: the screen names the key and the pads that fit it light */
+    for (i = 0; i < 4u; i++) {
+        uint32_t k = BK[7u + i], bit = 1u << k;
+        if ((keys & bit) && !(ui.keys & bit)) {
+            char t[24];
+            uint32_t mv = i + 1u, e = fk_target(set.fmove == mv ? 0u : mv);
+            ui.f_hold = (uint8_t)mv;
+            ui.f_at = plat_ms();
+            fd_name(e, t);
+            app_say(set.fmove == mv ? "HOME" : FK_NAME[i], t);
+            ui.redraw = 1;
+        } else if (!(keys & bit) && (ui.keys & bit)) {
+            if (ui.f_hold == i + 1u && plat_ms() - ui.f_at < 500u)
+                fk_go(i + 1u);
+            if (ui.f_hold == i + 1u)
+                ui.f_hold = 0;
+            ui.redraw = 1;
         }
     }
 buttons:
@@ -1740,6 +1809,8 @@ buttons:
             if (k4)
                 set.lock = (uint8_t)(k4 > 0);
             if (k1 || k2 || k3 || k4) {
+                if (k1 || k2)
+                    set.fmove = 0;
                 kit_build();
                 set_dirty = 1;
                 ui.redraw = 1;
@@ -1888,8 +1959,14 @@ static void lights(void)
         plat_lights_mid(0, 0);
         return;
     }
+    uint32_t piv = ui.f_hold ? fk_pivots() : 0;
     for (i = 0; i < 16u; i++) {
         uint32_t bit = 1u << WK[i];
+        if (ui.f_hold) {                 /* F held: the pivot chords */
+            if (piv >> i & 1u)
+                bright |= bit;
+            continue;
+        }
         if ((ui.keys & bit) || pl[i].on || cp[i].on)
             bright |= bit;
         else if (ui.screen == SCR_SLICE && nsl)
@@ -1905,6 +1982,13 @@ static void lights(void)
             bright |= bit;
         else if (lead && (int32_t)i == ui.lead_next && (plat_ms() / 300u & 1u))
             mid |= bit;                  /* the next lead note breathes: mid and dim in turn */
+        else
+            dim |= bit;
+    }
+    for (i = 0; i < 4u; i++) {           /* F1-F4: the one in use full */
+        uint32_t bit = 1u << BK[7u + i];
+        if (set.fmove == i + 1u || (ui.keys & bit))
+            bright |= bit;
         else
             dim |= bit;
     }
@@ -1992,6 +2076,12 @@ static void draw_home(void)
         }
         cv_rect(226 - w, 5, w + 10, 17, AMBER);
         cv_text(231 - w, 6, &FONT_XS, t, C_BLACK);
+        if (set.fmove) {                 /* a key change in use: which, beside the key */
+            char f[3] = {'F', (char)('0' + set.fmove), 0};
+            int32_t fw = text_w(&FONT_XS, f);
+            cv_rect(218 - w - fw, 5, fw + 6, 17, TEAL);
+            cv_text(221 - w - fw, 6, &FONT_XS, f, C_BLACK);
+        }
     }
     if (p && p->type == PAD_CHORD) {
         int32_t rw, qw, w;
@@ -2521,7 +2611,11 @@ int app_expect(const char *what, int *got)
         const pad_t *p = &pads[ui.pad];
         *got = !strcmp(what, "trims") ? p->ts : !strcmp(what, "trime") ? (int)pad_end(p) : !strcmp(what, "trimtune")
                ? p->tune : !strcmp(what, "trimlevel") ? 100 - p->cut : p->pmode;
-    } else if (!strcmp(what, "fdn"))
+    } else if (!strcmp(what, "fmove"))
+        *got = set.fmove;
+    else if (!strcmp(what, "pivots"))
+        *got = ui.f_hold ? (int)fk_pivots() : -1;
+    else if (!strcmp(what, "fdn"))
         *got = fd_n;
     else if (!strcmp(what, "fdcount"))
         *got = fd_cnt;

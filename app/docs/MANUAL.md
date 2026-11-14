@@ -48,7 +48,25 @@ The **first seven black keys are the scale's degrees**. SEQ (MODE) switches what
 
 ![LEAD: the phrase's note now full, the next outlined](img/screen-lead.png)
 
-HOME shows the mode beside the degree row. The last four black keys are kept for later.
+HOME shows the mode beside the degree row.
+
+### F1-F4: key changes for a bridge
+
+The **last four black keys** change key, always from your home key:
+
+| Key | Goes to | From C major | From A minor |
+|---|---|---|---|
+| F1 | The relative key: the same notes | A minor | C major |
+| F2 | The parallel key: the same tonic | C minor | A major |
+| F3 | Up a 4th, the usual bridge | F major | D minor |
+| F4 | Up a step, the last-chorus lift | D major | B minor |
+
+**Tap** one to go there: the key's chords on the pads follow, the F key stays lit and HOME shows it beside the key.
+Tap the lit one to come home. Tapping another goes there from home, so you're only ever one change away.
+
+**Hold** one for a look first: the screen names the key and the pads whose chords fit it light up, the pivot
+chords that lead you into it smoothly. Let go after a moment and nothing changes. Picking a key by hand (ROOT, KEY,
+FIND) makes it the new home.
 
 The lights: an empty pad is dark, a loaded pad glows, a playing pad is lit. In SLICE and LIB the pads breathe to show
 they take a drop.
@@ -62,6 +80,7 @@ phrases) and the degree keys.
 | --- | --- |
 | White keys | Play a pad. In SLICE or LIB, drop the selected slice or chord on that pad |
 | Black keys 1-7 | Play the scale's degrees: bass notes (ROOT) or lead notes (LEAD) |
+| Black keys F1-F4 | Key changes from home: tap to go, tap again to come back, hold to look |
 | ALGORITHM (ROOT) | The key's root. With OCT- or OCT+ held, the scale |
 | PRESETS (KIT) | The kit, 1 to 8 |
 | SELECT | Pick a slice, a file or a library row |

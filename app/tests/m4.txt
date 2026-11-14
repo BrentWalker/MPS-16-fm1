@@ -137,3 +137,45 @@ expect scale 1
 shot find_lib.png
 tap HOME
 wait 50
+# F1-F4: key changes from the home key (D major here)
+expect fmove 0
+key 22 down
+wait 40
+expect pivots 35370
+key 22 up
+wait 30
+expect fmove 3
+expect root 7
+expect scale 1
+shot fkey.png
+key 22 down
+wait 30
+key 22 up
+wait 30
+expect fmove 0
+expect root 2
+key 17 down
+wait 30
+key 17 up
+wait 30
+expect fmove 1
+expect root 11
+expect scale 0
+key 20 down
+wait 30
+key 20 up
+wait 30
+expect fmove 2
+expect root 2
+expect scale 0
+# held: a look only
+key 25 down
+wait 700
+key 25 up
+wait 30
+expect fmove 2
+# a key picked by hand is the new home
+turn ALGO 1
+wait 30
+expect fmove 0
+expect root 3
