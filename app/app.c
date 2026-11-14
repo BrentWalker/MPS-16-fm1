@@ -2081,6 +2081,50 @@ void app_frame(void)
     }
 }
 
+#ifdef PLAT_WEB
+/* the browser emulator: a .mid from the page (web/emu/app.js) onto the drive, then opened in SLICE */
+static uint8_t web_buf[MAXFBLK * 512u];
+static char web_name[12];
+__attribute__((used, visibility("default"))) uint8_t *cs_web_buf(void) { return web_buf; }
+__attribute__((used, visibility("default"))) uint32_t cs_web_buf_len(void) { return sizeof web_buf; }
+__attribute__((used, visibility("default"))) char *cs_web_name(void) { return web_name; }
+__attribute__((used, visibility("default"))) int cs_web_import(uint32_t n)
+{
+    char shown[13];
+    uint32_t i, k = 0;
+    int r;
+    web_name[11] = 0;
+    if (n > sizeof web_buf)
+        return -9;
+    fs_delete(web_name);
+    r = fs_write(web_name, web_buf, n);
+    if (r) {
+        app_say("DRIVE", r == -2 ? "FULL" : "NO ROOM");
+        return r;
+    }
+    for (i = 0; i < 8u && web_name[i] != ' '; i++)   /* "NAME.MID", as the drive lists it */
+        shown[k++] = web_name[i];
+    shown[k++] = '.';
+    for (i = 8; i < 11u; i++)
+        shown[k++] = web_name[i];
+    shown[k] = 0;
+    fs_scan();
+    for (i = 0; i < nfiles; i++)
+        if (!__builtin_memcmp(files[i].name, shown, k + 1u))
+            break;
+    if (i == nfiles || file_load((int32_t)i)) {
+        app_say("CAN'T READ", shown);
+        ui.screen = SCR_FILES;
+    } else {
+        ui.file_cur = (int32_t)i;
+        ui.screen = SCR_SLICE;
+        app_say("LOADED", shown);
+    }
+    ui.redraw = 1;
+    return 0;
+}
+#endif
+
 #ifdef PLAT_HOST
 /* the simulator's own commands: "import PATH NAME83" puts a file on the drive as a computer would; "dumpdisk PATH"
  * writes the drive's image out (checked with a FAT library) */

@@ -8,6 +8,7 @@ words = "words.tsv"
 ble = false
 ble_central = false
 msc = true                     # USB drive mode: MIDI files copied onto the FM-1
+emu = ["data", "midi"]         # the browser emulator: its drive kept in the browser, Web MIDI ports
 # the site (tools/make_site.py, tools/publish_site.sh)
 tagline = "chords and phrases on 16 pads"
 repo = "https://github.com/BrentWalker/chordsmith-fm"
