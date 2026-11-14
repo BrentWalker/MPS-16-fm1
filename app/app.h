@@ -22,6 +22,7 @@ void app_ui_init(void);
 void app_frame(void);
 void app_input_only(void);
 void app_say(const char *a, const char *b);
+#define APP_WEB                            /* the browser emulator's own exports (web.c) */
 #define APP_LOOP                           /* every pass of the main loop: the USB drive's requests */
 void app_loop(void);
 

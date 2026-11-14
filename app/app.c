@@ -2085,10 +2085,7 @@ void app_frame(void)
 /* the browser emulator: a .mid from the page (web/emu/app.js) onto the drive, then opened in SLICE */
 static uint8_t web_buf[MAXFBLK * 512u];
 static char web_name[12];
-__attribute__((used, visibility("default"))) uint8_t *cs_web_buf(void) { return web_buf; }
-__attribute__((used, visibility("default"))) uint32_t cs_web_buf_len(void) { return sizeof web_buf; }
-__attribute__((used, visibility("default"))) char *cs_web_name(void) { return web_name; }
-__attribute__((used, visibility("default"))) int cs_web_import(uint32_t n)
+static int web_import(uint32_t n)       /* (exported by web.c: the host blanks __attribute__ here) */
 {
     char shown[13];
     uint32_t i, k = 0;
