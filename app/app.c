@@ -29,7 +29,8 @@ typedef struct {
     int8_t inv;                          /* inversion, -3 .. 3 */
     uint8_t bass;                        /* a bass note under every chord */
     uint8_t bpm;                         /* 0: the file's tempo; else this */
-    uint8_t rsv[3];
+    uint8_t mode;                        /* the black keys: MODE_ROOT or MODE_LEAD (SEQ switches) */
+    uint8_t rsv[2];
 } settings_t;
 static settings_t set;
 static uint8_t set_dirty;
@@ -994,17 +995,19 @@ void app_init(void)
 
 /* ======================================================================= UI === */
 enum { SCR_HOME, SCR_SLICE, SCR_FILES, SCR_DISK, SCR_KEY, SCR_FX, SCR_LIB };
+enum { MODE_ROOT, MODE_LEAD };
 static struct {
     char msg[2][24];
     uint32_t msg_until;
     uint32_t keys, btn;
     int32_t pad;                         /* the pad played last (-1 none yet) */
     int32_t root_lit;                    /* the black key lit as the root (-1 none) */
+    int32_t lead_now, lead_next;         /* LEAD: the degrees of the top note sounding and the next (-1 none) */
     uint8_t oct_mod;                     /* OCT held and used as a modifier: its release steps nothing */
     uint8_t screen, disk_state, trk_cur, fx_page;
     int32_t file_cur;
     uint8_t redraw;
-} ui = {.pad = -1, .root_lit = -1};
+} ui = {.pad = -1, .root_lit = -1, .lead_now = -1, .lead_next = -1};
 
 static void text_cat(char *d, const char *s)
 {
@@ -1336,14 +1339,17 @@ static void input(void)
             ui.redraw = 1;
         }
     }
-    /* black keys 1-7: the scale degrees, a bass note an octave under the pads */
+    /* black keys 1-7: the scale degrees. ROOT: a bass note an octave under the pads; LEAD: a lead note an octave
+     * over them, to play along with the phrase the keys light up */
     for (i = 0; i < 7u; i++) {
         uint32_t k = BK[i], bit = 1u << k;
         if ((keys & bit) && !(ui.keys & bit)) {
-            uint8_t m = (uint8_t)(deg_pitch((int32_t)i) - 12);
+            int32_t lead = set.mode == MODE_LEAD;
+            uint8_t m = (uint8_t)clamp(deg_pitch((int32_t)i) + (lead ? 12 + 12 * set.octave : -12), 0, 127);
             uint32_t vel = touch_vel(k);
             notes_on(k, &m, 1, vel ? vel : 100u);
-            ui.root_lit = (int32_t)i;
+            if (!lead)
+                ui.root_lit = (int32_t)i;
             ui.redraw = 1;
         } else if (!(keys & bit) && (ui.keys & bit)) {
             notes_off(k);
@@ -1426,6 +1432,10 @@ static void input(void)
                 ui.screen = song_n ? SCR_SLICE : SCR_FILES;
             if (ui.file_cur < 0 || (uint32_t)ui.file_cur >= nfiles)
                 ui.file_cur = cur_file < 0 ? 0 : cur_file;
+        } else if (i == B_SEQ) {         /* MODE: the black keys as roots or as the lead */
+            set.mode = set.mode == MODE_LEAD ? MODE_ROOT : MODE_LEAD;
+            set_dirty = 1;
+            app_say("MODE", set.mode == MODE_LEAD ? "LEAD" : "ROOT");
         } else if (i == B_EDIT) {        /* KEY */
             ui.screen = SCR_KEY;
         } else if (i == B_FX) {          /* FX: again, the second page */
@@ -1594,6 +1604,84 @@ void app_input_only(void) { input(); }
 
 /* the lights: loaded pads dim, held or playing pads full, an empty pad dark; in SLICE the pads breathe as drop
  * targets (the mid level); the seven degree keys dim, the root full; REC lit while recording, SAVE while changed */
+/* the scale degree (0 .. 6) of a MIDI note in the key: its own, else the nearest (a tie goes down) */
+static int32_t deg_of(int32_t m)
+{
+    const uint8_t *sc = SCALES[set.scale];
+    int32_t rel = ((m - (int32_t)set.root) % 12 + 12) % 12, best = 0, bd = 99, j;
+    for (j = 0; j < 7; j++) {
+        int32_t d = rel - (int32_t)sc[j];
+        if (d < -6)
+            d += 12;
+        if (d > 6)
+            d -= 12;
+        if (d < 0)
+            d = -d * 2 + 1;              /* above the note: loses a tie */
+        else
+            d *= 2;
+        if (d < bd) {
+            bd = d;
+            best = j;
+        }
+    }
+    return best;
+}
+
+/* LEAD: what the black keys follow. A phrase playing (the pad played last first, then any, then SLICE's preview):
+ * the top note sounding now and the top note of the next onset; else a chord held: its top note */
+static void lead_update(void)
+{
+    int32_t now = -1, next = -1, src = -1;
+    uint32_t i, k;
+    if (ui.pad >= 0 && pl[ui.pad].on)
+        src = ui.pad;
+    for (i = 0; src < 0 && i <= NPADS; i++)
+        if (pl[i].on)
+            src = (int32_t)i;
+    if (src >= 0) {
+        const player_t *P = &pl[src];
+        float pos = P->pos;
+        int32_t top = -1, ntop = -1;
+        uint32_t nat = 0xFFFFFFFFu;
+        for (k = 0; k < pads[src].pn && k < MAXPH; k++) {
+            const pnote_t *x = &ph[src][k];
+            int32_t m = keyed((int32_t)x->p + 12 * P->oct);
+            if ((float)x->s <= pos && pos < (float)x->s + (float)x->d) {
+                if (m > top)
+                    top = m;
+            } else if ((float)x->s > pos) {
+                if (x->s < nat) {
+                    nat = x->s;
+                    ntop = m;
+                } else if (x->s == nat && m > ntop)
+                    ntop = m;
+            }
+        }
+        if (top >= 0)
+            now = deg_of(top);
+        if (ntop >= 0)
+            next = deg_of(ntop);
+    } else {
+        for (i = 0; i < NPADS; i++)
+            if (cp[i].on && cbuf_n[i]) {
+                int32_t top = 0;
+                for (k = 0; k < cbuf_n[i]; k++)
+                    if (cbuf[i][k] > top)
+                        top = cbuf[i][k];
+                now = deg_of(top);
+                break;
+            }
+    }
+    if (next == now)
+        next = -1;                       /* the same key: it stays full */
+    if (now != ui.lead_now || next != ui.lead_next) {
+        ui.lead_now = now;
+        ui.lead_next = next;
+        if (set.mode == MODE_LEAD)
+            ui.redraw = 1;
+    }
+}
+
 static void lights(void)
 {
     uint32_t i, bright = 0, dim = 0, btn = 0, mid = 0;
@@ -1606,10 +1694,14 @@ static void lights(void)
         else if (pads[i].type != PAD_EMPTY)
             dim |= bit;
     }
+    lead_update();
     for (i = 0; i < 7u; i++) {
         uint32_t bit = 1u << BK[i];
-        if ((int32_t)i == ui.root_lit || (ui.keys & bit))
+        int lead = set.mode == MODE_LEAD;
+        if ((ui.keys & bit) || (lead ? (int32_t)i == ui.lead_now : (int32_t)i == ui.root_lit))
             bright |= bit;
+        else if (lead && (int32_t)i == ui.lead_next && (plat_ms() / 300u & 1u))
+            mid |= bit;                  /* the next lead note breathes: mid and dim in turn */
         else
             dim |= bit;
     }
@@ -1791,13 +1883,20 @@ static void draw_home(void)
                      : pads[i].type == PAD_CHORD ? (on ? AMBER : AMBER_DIM) : C_LINE;
         cv_rect(6 + (int32_t)i * 14, 8, 12, 14, c);
     }
-    cv_text(6, 30, &FONT_XS, "ROOT", TEAL);
-    for (i = 0; i < 7u; i++) {
-        int lit = (int32_t)i == ui.root_lit;
-        int32_t cx = 46 + (int32_t)i * 27;
-        char d[2] = {(char)('1' + i), 0};
-        cv_rect(cx, 28, 24, 20, lit ? TEAL : C_LINE);
-        cv_text(cx + (24 - text_w(&FONT_XS, d)) / 2, 30, &FONT_XS, d, lit ? C_BLACK : C_GRAY);
+    {
+        int lead = set.mode == MODE_LEAD;
+        cv_text(6, 30, &FONT_XS, lead ? "LEAD" : "ROOT", lead ? AMBER : TEAL);
+        for (i = 0; i < 7u; i++) {
+            int lit = (int32_t)i == (lead ? ui.lead_now : ui.root_lit);
+            int nx = lead && (int32_t)i == ui.lead_next;
+            int32_t cx = 46 + (int32_t)i * 27;
+            char d[2] = {(char)('1' + i), 0};
+            uint16_t on = lead ? AMBER : TEAL;
+            cv_rect(cx, 28, 24, 20, lit ? on : nx ? on : C_LINE);
+            if (nx)
+                cv_rect(cx + 2, 30, 20, 16, C_BLACK);   /* next: an outline */
+            cv_text(cx + (24 - text_w(&FONT_XS, d)) / 2, 30, &FONT_XS, d, lit ? C_BLACK : nx ? on : C_GRAY);
+        }
     }
     {
         static const char *const LBL[4] = {"STRUM", "ARP", "HUMAN", "BPM"};
@@ -2204,6 +2303,12 @@ int app_expect(const char *what, int *got)
         *got = set.octave;
     else if (!strcmp(what, "rootkey"))
         *got = ui.root_lit;
+    else if (!strcmp(what, "mode"))
+        *got = set.mode;
+    else if (!strcmp(what, "leadnow"))
+        *got = ui.lead_now;
+    else if (!strcmp(what, "leadnext"))
+        *got = ui.lead_next;
     else if (!strcmp(what, "dirty"))
         *got = set_dirty;
     else if (!strncmp(what, "padnote", 7))

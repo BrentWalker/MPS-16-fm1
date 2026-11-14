@@ -37,8 +37,17 @@ start ChordSmith FM sets up its drive in the FM-1's spare flash.
 The **16 white keys are pads**, left to right. A new kit holds the key's chords: pads 1 to 7 the seventh chords on
 each degree, pad 8 the first an octave up, pads 9 to 15 the ninth chords, pad 16 a sus4 on V.
 
-The **first seven black keys are the scale's degrees**, a bass note an octave under the pads. When a pad plays, the
-black key of its chord's root lights up. The last four black keys are kept for later.
+The **first seven black keys are the scale's degrees**. SEQ (MODE) switches what they do:
+
+- **ROOT**: each plays a bass note an octave under the pads. When a pad plays, the black key of its chord's root
+  lights up, so you can add the bass under it.
+- **LEAD**: each plays a lead note an octave over the pads. While a phrase plays, the black keys follow its top
+  note: the key of the note sounding now is full, the key of the next one breathes. Play along on them. A chord pad
+  held lights its top note.
+
+![LEAD: the phrase's note now full, the next outlined](img/screen-lead.png)
+
+HOME shows the mode beside the degree row. The last four black keys are kept for later.
 
 The lights: an empty pad is dark, a loaded pad glows, a playing pad is lit. In SLICE and LIB the pads breathe to show
 they take a drop.
@@ -51,7 +60,7 @@ phrases) and the degree keys.
 | Control | Does |
 | --- | --- |
 | White keys | Play a pad. In SLICE or LIB, drop the selected slice or chord on that pad |
-| Black keys 1-7 | Play the scale's degrees |
+| Black keys 1-7 | Play the scale's degrees: bass notes (ROOT) or lead notes (LEAD) |
 | ALGORITHM (ROOT) | The key's root. With OCT- or OCT+ held, the scale |
 | PRESETS (KIT) | The kit, 1 to 8 |
 | SELECT | Pick a slice, a file or a library row |
@@ -67,6 +76,7 @@ phrases) and the degree keys.
 | SAVE | Save the settings and the kit |
 | PLAY | In SLICE and LIB, hear the selection; in KEY, detect the file's key; elsewhere, all notes off |
 | REC | Record MIDI coming in, again to stop and save it |
+| SEQ (MODE) | The black keys: ROOT or LEAD |
 
 On HOME, K1 is the strum, K2 the arp, K3 humanize and K4 the tempo.
 

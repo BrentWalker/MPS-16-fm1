@@ -1,0 +1,40 @@
+# Milestone 4: the black keys in ROOT and LEAD modes (SEQ switches). From base/:
+#   ../app/build/host/chordsmith_host ../app/tests/m4.txt ../app/build/host
+wait 600
+expect mode 0
+import ../app/tests/midi/canon.mid canon.mid
+load 0
+# the first slice on pad 1
+tap SEL
+wait 50
+key 0 down
+wait 30
+key 0 up
+tap HOME
+wait 50
+# LEAD: SEQ
+tap SEQ
+wait 50
+expect mode 1
+expect dirty 1
+key 0 down
+wait 60
+expect playing0 1
+expect leadnow 3
+expect leadnext 5
+leds
+shot home_lead.png
+key 0 up
+# the phrase played out: nothing to follow
+wait 8000
+expect playing0 0
+expect leadnow -1
+# a chord pad held: its top note
+key 2 down
+wait 30
+expect leadnext -1
+key 2 up
+# back to ROOT
+tap SEQ
+wait 50
+expect mode 0
