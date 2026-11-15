@@ -332,37 +332,52 @@ static void draw_find(void)
     cv_blit(0, 120);
 }
 
-/* ORCHID: the mode in its own colour; how the file is cut and where; the song with the 16 pads' stretch of it; the
- * 16 pads (a chord's name on each with CHORDS); K1-K4 */
-static const uint16_t ORCHID_C = RGB(0x6B, 0xB6, 0xD6), ORCHID_DIM = RGB(26, 56, 70);   /* SURFACE's Water */
+/* SURFACE (ORCHID in the code): the Earth Science look. Graph paper; the file as Water (the slices, the ruler of the
+ * song, the pads); the knobs in their elements: K1 Water, K2 Earth (bass), K3 Air (above), K4 Fire (playing) */
+static const uint16_t ORCHID_C = RGB(0x6B, 0xB6, 0xD6), ORCHID_DIM = RGB(26, 56, 70);   /* Water */
+static const uint16_t LAB_BG = RGB(18, 20, 22), LAB_GRID = RGB(30, 34, 38), LAB_LABEL = RGB(110, 118, 124);
+static void lab_paper(void)              /* graph paper, every 12 px, on the band begun */
+{
+    int32_t k;
+    for (k = 12; k < 240; k += 12)
+        cv_rect(k, 0, 1, 120, LAB_GRID);
+    for (k = 12; k < 120; k += 12)
+        cv_rect(0, k, 240, 1, LAB_GRID);
+}
 static void draw_orchid(void)
 {
     static const char *const LBL[4] = {"START", "BLACK 7", "BLACK 4", "PLAY"};
-    char t[32], v[4][12];
+    const uint16_t EL[4] = {WATER_C, EARTH_C, AIR_C, FIRE_C};
+    char t[40], v[4][12];
     uint32_t i, first = set.om_slice == OM_EQUAL ? 0u : om_first(), len = song_len ? song_len : 1u;
     int32_t x;
-    cv_begin(240, 120, C_BLACK);
-    if (plat_ms() < ui.msg_until)
+    cv_begin(240, 120, LAB_BG);
+    lab_paper();
+    if (plat_ms() < ui.msg_until) {
+        cv_rect(0, 0, 240, 27, LAB_BG);
         top_bar(0, 0, 0);
-    else {
-        top_bar(0, 0, 0);
-        cv_rect(4, 5, text_w(&FONT_XS, "SURFACE") + 10, 17, AIR_C);   /* SURFACE: Air */
+    } else {
+        cv_rect(4, 5, text_w(&FONT_XS, "SURFACE") + 10, 17, AIR_C);   /* the mode: Air */
         x = cv_text(9, 6, &FONT_XS, "SURFACE", C_BLACK);
         if (cur_file >= 0)
-            cv_text(x + 10, 6, &FONT_XS, files[cur_file].name, C_GRAY);
-        key_text(t);
-        cv_rect(226 - text_w(&FONT_XS, t), 5, text_w(&FONT_XS, t) + 10, 17, AMBER);
-        cv_text(231 - text_w(&FONT_XS, t), 6, &FONT_XS, t, C_BLACK);
+            cv_text(x + 12, 6, &FONT_XS, files[cur_file].name, LAB_LABEL);
+        key_text(t);                     /* the key: Earth, outlined */
+        {
+            int32_t w = text_w(&FONT_XS, t);
+            cv_rect(224 - w, 5, w + 12, 17, EARTH_C);
+            cv_rect(225 - w, 6, w + 10, 15, LAB_BG);
+            cv_text(230 - w, 6, &FONT_XS, t, EARTH_C);
+        }
     }
     if (!song_n) {
-        cv_text(10, 34, &FONT_B, "NO MIDI FILE", ORCHID_C);
-        cv_text(10, 64, &FONT_XS, "THE PADS PLAY THE KEY'S CHORDS.", C_WHITE);
-        cv_text(10, 80, &FONT_XS, "PUT .MID FILES ON THE DRIVE: TAP SYS.", C_GRAY);
+        cv_text(10, 36, &FONT_B, "NO MIDI FILE", WATER_C);
+        cv_text(10, 66, &FONT_XS, "THE PADS PLAY THE KEY'S CHORDS.", C_WHITE);
+        cv_text(10, 82, &FONT_XS, "PUT .MID FILES ON THE DRIVE: TAP SYS.", LAB_LABEL);
         cv_blit(0, 0);
     } else {
-        cv_text(10, 30, &FONT_XS, "PRESET", C_DIM);
-        cv_text(10, 42, &FONT_B, OM_NAME[set.om_slice], ORCHID_C);
-        if (nsl) {                       /* "5-20 OF 48" */
+        cv_text(10, 30, &FONT_XS, "SLICE", LAB_LABEL);
+        cv_text(10, 42, &FONT_B, OM_NAME[set.om_slice], WATER_C);
+        if (nsl) {                       /* "1-16 OF 33" */
             uint32_t last = first + 16u < nsl ? first + 16u : nsl;
             str_set(t, "", sizeof t);
             num_text((int32_t)first + 1, t, 0);
@@ -370,50 +385,66 @@ static void draw_orchid(void)
             num_text((int32_t)last, t + cs_len(t), 0);
             text_cat(t, " OF ");
             num_text((int32_t)nsl, t + cs_len(t), 0);
-            cv_text(230 - text_w(&FONT_XS, t), 30, &FONT_XS, "SLICES", C_DIM);
+            cv_text(230 - text_w(&FONT_XS, "PADS"), 30, &FONT_XS, "PADS", LAB_LABEL);
             cv_text(230 - text_w(&FONT_XS, t), 46, &FONT_XS, t, C_WHITE);
         }
-        /* the song, the pads' stretch of it */
-        cv_rect(10, 72, 220, 8, RGB(30, 30, 36));
-        if (nsl) {
-            uint32_t last = (first + 16u < nsl ? first + 16u : nsl) - 1u;
-            int32_t a = 10 + (int32_t)(sl_s[first] * 220u / len), b = 10 + (int32_t)(sl_e[last] * 220u / len);
-            cv_rect(a, 70, b - a > 2 ? b - a : 2, 12, ORCHID_C);
+        /* the song as a ruler: a tick a bar (longer every 4), the pads' stretch in Water */
+        {
+            uint32_t bar = PPQ * (song_bpb ? song_bpb : 4u), nb = (len + bar - 1u) / bar, b, every = 1;
+            while (nb / every > 56u)
+                every *= 2u;
+            cv_rect(10, 76, 220, 1, RGB(70, 78, 84));
+            for (b = 0; b <= nb; b += every) {
+                int32_t tx = 10 + (int32_t)(b * bar * 220u / len), big = b % (4u * every) == 0u;
+                if (tx > 230)
+                    tx = 230;
+                cv_rect(tx, big ? 71 : 73, 1, big ? 10 : 6, RGB(90, 98, 104));
+            }
+            if (nsl) {
+                uint32_t last = (first + 16u < nsl ? first + 16u : nsl) - 1u;
+                int32_t a = 10 + (int32_t)(sl_s[first] * 220u / len), z = 10 + (int32_t)(sl_e[last] * 220u / len);
+                cv_rect(a, 73, z - a > 2 ? z - a : 2, 6, WATER_C);
+                str_set(t, "BAR ", sizeof t);   /* where the stretch starts */
+                num_text((int32_t)(sl_s[first] / bar) + 1, t + 4, 0);
+                cv_text(a + 2 < 180 ? a + 2 : 180, 58, &FONT_XS, t, LAB_LABEL);
+            }
         }
-        /* the 16 pads */
+        /* the 16 pads, as before, in Water */
         for (i = 0; i < 16u; i++) {
             const pad_t *p = &pads[i];
             int32_t bx = 10 + (int32_t)(i % 8u) * 28, by = 88 + (int32_t)(i / 8u) * 16;
             int lit = (ui.keys >> WK[i] & 1u) || pl[i].on || cp[i].on;
-            uint16_t bg = p->type == PAD_EMPTY ? RGB(20, 20, 24) : lit ? ORCHID_C : ORCHID_DIM;
+            uint16_t bg = p->type == PAD_EMPTY ? RGB(26, 29, 32) : lit ? WATER_C : ORCHID_DIM;
             cv_rect(bx, by, 26, 14, bg);
             if (p->title[0] && set.om_slice == OM_CHORDS)
                 cv_text(bx + (26 - text_w(&FONT_XS, p->title)) / 2, by, &FONT_XS, p->title, lit ? C_BLACK : C_WHITE);
             else {
                 char n[4];
                 num_text((int32_t)i + 1, n, 0);
-                cv_text(bx + (26 - text_w(&FONT_XS, n)) / 2, by, &FONT_XS, n, lit ? C_BLACK : C_GRAY);
+                cv_text(bx + (26 - text_w(&FONT_XS, n)) / 2, by, &FONT_XS, n, lit ? C_BLACK : LAB_LABEL);
             }
         }
         cv_blit(0, 0);
     }
 
-    cv_begin(240, 120, C_BLACK);
+    cv_begin(240, 120, LAB_BG);
+    lab_paper();
+    cv_rect(0, 0, 240, 44, LAB_BG);      /* the readout lines on a clear strip */
     if (ui.pad >= 0 && pads[ui.pad].type == PAD_PHRASE && song_bpb) {   /* the pad played last */
         const pad_t *p = &pads[ui.pad];
         str_set(t, "PAD ", sizeof t);
         num_text(ui.pad + 1, t + 4, 0);
-        cv_text(10, 6, &FONT_XS, t, ORCHID_C);
+        cv_text(10, 4, &FONT_XS, t, WATER_C);
         fmt_len(pad_end(p) - p->ts, v[0]);
         str_set(t, v[0], sizeof t);
         text_cat(t, "  ");
         num_text((int32_t)p->pn, t + cs_len(t), 0);
         text_cat(t, p->pn == 1u ? " NOTE" : " NOTES");
-        cv_text(60, 6, &FONT_XS, t, C_WHITE);
+        cv_text(60, 4, &FONT_XS, t, C_WHITE);
         if (p->title[0])
-            cv_text(230 - text_w(&FONT_XS, p->title), 6, &FONT_XS, p->title, AMBER);
+            cv_text(230 - text_w(&FONT_XS, p->title), 4, &FONT_XS, p->title, AMBER);
     } else
-        cv_text(10, 6, &FONT_XS, "HOLD HOME: CORE", C_DIM);
+        cv_text(10, 4, &FONT_XS, "HOLD HOME: CORE", LAB_LABEL);
     {                                    /* ALGORITHM's three: the notes' length, the slices', the velocity curve */
         static const char *const SL[5] = {"1/4", "1/2", "AS CUT", "X2", "X4"};
         char c[6];
@@ -424,7 +455,7 @@ static void draw_orchid(void)
         text_cat(t, "  VEL ");
         num_text(set.om_vcurve, c, 1);
         text_cat(t, set.om_vcurve ? c : "0");
-        cv_text(10, 30, &FONT_XS, t, C_GRAY);
+        cv_text(10, 24, &FONT_XS, t, LAB_LABEL);
     }
     if (set.om_slice == OM_EQUAL || !nsl)
         str_set(v[0], "-", sizeof v[0]);
@@ -435,6 +466,13 @@ static void draw_orchid(void)
     str_set(v[1], MODE_NAME[set.mode % MODE_N], sizeof v[1]);
     str_set(v[2], FK_MODE[set.om_f4 % FK_N], sizeof v[2]);
     str_set(v[3], OP_NAME[set.om_play % OP_N], sizeof v[3]);
-    bottom_bar(68, LBL, v);
+    cv_rect(0, 46, 240, 74, LAB_BG);     /* the knobs: each value in its element, a bar of it under */
+    cv_rect(0, 48, 240, 1, RGB(42, 48, 53));
+    for (i = 0; i < 4u; i++) {
+        int32_t cx = (int32_t)i * 60;
+        cv_text(cx + (60 - text_w(&FONT_XS, LBL[i])) / 2, 56, &FONT_XS, LBL[i], LAB_LABEL);
+        cv_text(cx + (60 - text_w(&FONT_B, v[i])) / 2, 72, &FONT_B, v[i], EL[i]);
+        cv_rect(cx + 6, 104, 48, 3, EL[i]);
+    }
     cv_blit(0, 120);
 }

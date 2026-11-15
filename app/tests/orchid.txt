@@ -11,6 +11,14 @@ expect padtype0 2
 expect padtype15 2
 wait 30
 shot orchid_bars.png
+turn PRESET 3
+wait 30
+key 4 down
+wait 2600
+shot surface.png
+key 4 up
+turn PRESET -3
+wait 30
 # K1: Canon is 16 bars, so no further
 turn K1 1
 wait 30
