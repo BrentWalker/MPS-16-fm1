@@ -1,6 +1,6 @@
-# ChordSmith FM
+# MPS-16 ver FM1
 
-ChordSmith FM is a chord and phrase player for the M-VAVE FM-1 by BeatSmith. Its 16 pads hold chords and phrases:
+MPS-16 ver FM1 is a chord and phrase player for the M-VAVE FM-1 by BeatSmith. Its 16 pads hold chords and phrases:
 the chords of any key, slices of MIDI files you copy onto it, or progressions from its library.
 
 ## Contents
@@ -26,16 +26,16 @@ To try it first, open the emulator in a browser. It runs the same code, with sou
 
 To install it, use Chrome or Edge on a computer. Connect the FM-1 by USB, open the installer and press Install. Allow
 MIDI when the browser asks. Don't unplug the cable while it writes. From a terminal:
-`python3 tools/fm1_install.py chordsmith-VERSION.fwsc`.
+`python3 tools/fm1_install.py mps16-VERSION.fwsc`.
 
 To go back to the stock firmware, use the installer's last section with M-VAVE's own firmware file. On its first
-start ChordSmith FM sets up its drive in the FM-1's spare flash.
+start MPS-16 ver FM1 sets up its drive in the FM-1's spare flash.
 
 ## Getting started: GUIDE
 
 ![GUIDE](img/screen-guide.png)
 
-The first time ChordSmith starts, it opens **GUIDE**: twelve short pages, from playing chords to slicing a MIDI file.
+The first time MPS-16 starts, it opens **GUIDE**: twelve short pages, from playing chords to slicing a MIDI file.
 Turn **SELECT** for the next page. The keys and buttons a page talks about **blink**: press a blinking button to
 try it (that leaves the guide), and **hold SYS** to come back to the guide at any time. HOME on its own leaves it.
 
@@ -43,7 +43,7 @@ try it (that leaves the guide), and **hold SYS** to come back to the guide at an
 
 ![SURFACE: Canon in D cut by CHORDS](img/screen-orchid.png)
 
-ChordSmith starts in **SURFACE**. Load a MIDI file and it's already on the 16 pads: no slicing to do.
+MPS-16 starts in **SURFACE**. Load a MIDI file and it's already on the 16 pads: no slicing to do.
 
 | Control | Turn it to choose |
 |---|---|
@@ -203,7 +203,7 @@ progressions on 9 to 16.
 
 ![The USB drive](img/screen-drive.png)
 
-**The USB drive**: press SYS. The FM-1 shows the computer a drive called CHORDSMITH (about 270 KB). Copy `.mid` files
+**The USB drive**: press SYS. The FM-1 shows the computer a drive called MPS-16 (about 270 KB). Copy `.mid` files
 onto it, then eject it. There's no USB MIDI while the drive is on; HOME leaves drive mode. Press SYS briefly: held, it opens the guide.
 
 **REC**: press REC and play MIDI into the FM-1 (USB or the TRS jack). Press REC again: the recording is saved on the

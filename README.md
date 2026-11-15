@@ -1,8 +1,8 @@
-# ChordSmith FM
+# MPS-16 ver FM1
 
 Free firmware for the M-VAVE FM-1 by BeatSmith. It turns the FM-1 into a chord and phrase player: 16 pads on the white keys, scale degrees on the black keys, a chord library built from any key, MIDI FX (strum, arp, humanize, inversion) and MIDI file slicing.
 
-ChordSmith FM is the hardware version of ChordSmith Web, and groundwork for MPS-16. Working title.
+MPS-16 ver FM1 is the hardware version of MPS-16 ver WEB, and groundwork for MPS-16. Working title.
 
 **Status:** early test builds (0.3). Try it in the browser or install it: https://brentwalker.github.io/chordsmith-fm/
 (the site needs GitHub Pages on: Settings > Pages > gh-pages). Manual: app/docs/MANUAL.md.
@@ -16,7 +16,7 @@ ChordSmith FM is the hardware version of ChordSmith Web, and groundwork for MPS-
 
 | Path | What |
 | --- | --- |
-| `app/` | ChordSmith FM itself |
+| `app/` | MPS-16 ver FM1 itself |
 | `base/` | fm1-base, as a git submodule |
 
 ## Build
@@ -35,4 +35,4 @@ asks for a version). See fm1-base's README for the toolchain.
 
 ## Licence
 
-fm1-base and felucca-bsp files are MPL-2.0. The licence for ChordSmith FM's own code is still to be chosen.
+fm1-base and felucca-bsp files are MPL-2.0. The licence for MPS-16 ver FM1's own code is still to be chosen.

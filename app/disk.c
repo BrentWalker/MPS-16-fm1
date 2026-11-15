@@ -1,4 +1,4 @@
-/* ChordSmith FM: the drive. Copyright (C) 2026 BeatSmith Media (BeatSmith). Licence: to be chosen (see README).
+/* MPS-16 ver FM1: the drive. Copyright (C) 2026 BeatSmith Media (BeatSmith). Licence: to be chosen (see README).
  *
  * A small FAT12 volume in the flash's data area, 0x97000 .. 0xDBFFF (552 blocks of 512 bytes). In USB drive mode the
  * computer reads and writes it as a disk (plat_disk_t); the rest of the time the app lists the .mid files on it,
@@ -69,7 +69,7 @@ static int blk_write(uint32_t lba, const uint8_t *b)
     return 0;
 }
 
-static const plat_disk_t DISK = {DISK_BLOCKS, blk_read, blk_write, dc_flush, "BEATSMTH", "CHORDSMITH FM"};
+static const plat_disk_t DISK = {DISK_BLOCKS, blk_read, blk_write, dc_flush, "BEATSMTH", "MPS-16 FM1"};
 
 /* --------------------------------------------------------------- format --- */
 static int disk_valid(void)
@@ -110,7 +110,7 @@ static void disk_format(void)
         b[i] = 0;
     for (i = 0; i < 4u; i++)
         blk_write(ROOT_LBA + i, b);
-    __builtin_memcpy(b, "CHORDSMITH ", 11);   /* the volume label */
+    __builtin_memcpy(b, "MPS-16     ", 11);   /* the volume label */
     b[11] = 0x08;
     blk_write(ROOT_LBA, b);
     dc_flush();

@@ -1,4 +1,4 @@
-/* ChordSmith FM: the KEY, FX and LIB screens. Copyright (C) 2026 BeatSmith Media (BeatSmith). Licence: to be
+/* MPS-16 ver FM1: the KEY, FX and LIB screens. Copyright (C) 2026 BeatSmith Media (BeatSmith). Licence: to be
  * chosen. Part of app.c (after the other screens). */
 
 static void draw_key(void)

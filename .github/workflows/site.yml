@@ -1,4 +1,4 @@
-# ChordSmith FM's site on GitHub Pages: the installer (Chrome or Edge on a computer, over USB), the browser emulator
+# MPS-16 ver FM1's site on GitHub Pages: the installer (Chrome or Edge on a computer, over USB), the browser emulator
 # and the manual. Run by hand (Actions > Publish site > Run workflow). The firmware is built by the shared FM-1
 # builder exactly as release.yml builds it; this then builds the emulator and the site around that package
 # (base/tools/make_site.py, as base/tools/publish_site.sh does) and pushes it to the gh-pages branch.
@@ -15,7 +15,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: chordsmith-site
+  group: mps16-site
   cancel-in-progress: false
 
 jobs:
@@ -35,11 +35,11 @@ jobs:
         python3 -c "from PIL import features; assert features.check('raqm'), 'Pillow without raqm'"
         mkdir -p build/release-assets
         ./build.sh --release "${{ inputs.version }}"
-        cp "app/build/chordsmith-${{ inputs.version }}.fwsc" build/release-assets/
+        cp "app/build/mps16-${{ inputs.version }}.fwsc" build/release-assets/
         cp app/build/firmware.json build/release-assets/
       test: |
         set -euo pipefail
-        [ -f "app/build/chordsmith-${{ inputs.version }}.fwsc" ]
+        [ -f "app/build/mps16-${{ inputs.version }}.fwsc" ]
         sh tests/run_tests.sh
       packages: build/release-assets/*
 
@@ -71,7 +71,7 @@ jobs:
           "$RUNNER_TEMP/emsdk/emsdk" install 6.0.10
           "$RUNNER_TEMP/emsdk/emsdk" activate 6.0.10
           set +u; source "$RUNNER_TEMP/emsdk/emsdk_env.sh"; set -u
-          pkg=$(find build/attested -name 'chordsmith*.fwsc' | head -1)
+          pkg=$(find build/attested -name 'mps16*.fwsc' | head -1)
           test -n "$pkg"
           ./build.sh --web --release "$VERSION"
           python3 base/tools/make_site.py app "$pkg" "$VERSION" app/build/site
@@ -80,6 +80,6 @@ jobs:
           git config user.name "github-actions"
           git config user.email "github-actions@users.noreply.github.com"
           git add -A
-          git commit -q -m "Site for ChordSmith FM $VERSION (from ${GITHUB_SHA::7})"
+          git commit -q -m "Site for MPS-16 ver FM1 $VERSION (from ${GITHUB_SHA::7})"
           git push -q -f "https://x-access-token:${{ github.token }}@github.com/${GITHUB_REPOSITORY}.git" gh-pages
           echo "pushed the site to gh-pages"

@@ -1,5 +1,5 @@
 # The manual's screenshots (app/docs/img). From base/: python3 tools/build.py ../app --host, then
-#   ../app/build/host/chordsmith_host ../app/tests/screens.txt ../app/docs/img
+#   ../app/build/host/mps16_host ../app/tests/screens.txt ../app/docs/img
 wait 900
 shot screen-ready.png
 key 2 down

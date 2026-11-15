@@ -1,5 +1,5 @@
 # Milestone 4: the black keys in ROOT and LEAD modes (SEQ switches). From base/:
-#   ../app/build/host/chordsmith_host ../app/tests/m4.txt ../app/build/host
+#   ../app/build/host/mps16_host ../app/tests/m4.txt ../app/build/host
 wait 600
 # FM mode (HOME held): these tests are FM mode's
 press HOME

@@ -1,8 +1,8 @@
 """Make /tmp/disk_computer.img: the drive as a computer would leave it (a long file name, a text file, macOS extras).
-Needs: pip install pyfatfs. Run m2.txt first (it writes /tmp/chordsmith_disk.img), then this, then m2_disk.txt."""
+Needs: pip install pyfatfs. Run m2.txt first (it writes /tmp/mps16_disk.img), then this, then m2_disk.txt."""
 import shutil
 from pyfatfs.PyFatFS import PyFatFS
-shutil.copy('/tmp/chordsmith_disk.img', '/tmp/disk_computer.img')
+shutil.copy('/tmp/mps16_disk.img', '/tmp/disk_computer.img')
 f = PyFatFS('/tmp/disk_computer.img', read_only=False)
 f.writebytes('/My Neo Soul Keys.mid', open('midi/neosoul.mid', 'rb').read())
 f.writebytes('/notes.txt', b'not midi')

@@ -1,4 +1,4 @@
-/* ChordSmith FM: chords and phrases on 16 pads, for the M-VAVE FM-1. Built on fm1-base.
+/* MPS-16 ver FM1: chords and phrases on 16 pads, for the M-VAVE FM-1. Built on fm1-base.
  * Copyright (C) 2026 BeatSmith Media (BeatSmith). Licence of this file: to be chosen (see README).
  *
  * Milestone 1: the 16 white keys are pads holding the key's chords, the first seven black keys are its scale
@@ -3160,7 +3160,7 @@ static void draw_disk(void)
     cv_blit(0, 0);
     cv_begin(240, 120, C_BLACK);
     cv_text(12, 4, &FONT_XS, "1  Connect USB to a computer.", C_GRAY);
-    cv_text(12, 22, &FONT_XS, "2  Copy .mid files onto CHORDSMITH.", C_GRAY);
+    cv_text(12, 22, &FONT_XS, "2  Copy .mid files onto MPS-16.", C_GRAY);
     cv_text(12, 40, &FONT_XS, "3  Eject it. Files show in SLICE.", C_GRAY);
     cv_text(12, 76, &FONT_XS, "No USB MIDI while the drive is on.", C_DIM);
     cv_text(12, 94, &FONT_XS, "HOME: leave drive mode.", C_DIM);

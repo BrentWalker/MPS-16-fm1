@@ -1,20 +1,36 @@
 {
   "schema": 1,
-  "id": "chordsmith",
-  "name": "BeatSmith",
+  "id": "mps16",
+  "name": "MPS-16 ver FM1",
   "author": "Brent Walker (BeatSmith)",
-  "license": "LicenseRef-ChordSmith-TBD",
-  "tagline": "chords and phrases on 16 pads",
-  "description": "Chords and phrases on 16 pads. The white keys play the chords of any key and scale, the black keys play its scale degrees and light up with each chord's root. Early development.",
-  "tags": ["chords", "synth", "midi"],
+  "license": "LicenseRef-MPS16-TBD",
+  "tagline": "a MIDI phrase sampler on 16 pads",
+  "description": "A MIDI phrase sampler in the Earth Science family. Load a MIDI file and it is on the 16 pads at once, sliced by bars, hits or chord changes; play the slices as recorded or as chords, strummed, arpeggiated or in rhythm, mutate repeated chords, and play bass, lead and key changes on the black keys. Early development.",
+  "tags": [
+    "chords",
+    "synth",
+    "midi"
+  ],
   "install": "https://github.com/BrentWalker/chordsmith-fm",
   "site": "https://github.com/BrentWalker/chordsmith-fm",
   "source": "https://github.com/BrentWalker/chordsmith-fm",
   "screenshot": "docs/img/screen-playing.png",
   "hardware": {
-    "models": ["FM-1"],
-    "flash": ["856014", "B36014"],
-    "features": ["usb-audio-in", "usb-audio-out", "usb-disk", "velocity", "pressure", "screen-reader"]
+    "models": [
+      "FM-1"
+    ],
+    "flash": [
+      "856014",
+      "B36014"
+    ],
+    "features": [
+      "usb-audio-in",
+      "usb-audio-out",
+      "usb-disk",
+      "velocity",
+      "pressure",
+      "screen-reader"
+    ]
   },
   "credits": "Built on fm1-base by Charles Vestal and felucca-bsp by Leo Kuroshita."
 }

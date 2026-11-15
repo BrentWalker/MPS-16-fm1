@@ -1,4 +1,4 @@
-// ChordSmith FM's own part of the emulator's worklet. Copyright (C) 2026 BeatSmith Media (BeatSmith).
+// MPS-16 ver FM1's own part of the emulator's worklet. Copyright (C) 2026 BeatSmith Media (BeatSmith).
 // A .mid from the page (app.js) copied into the app's buffer and written to its drive (app.c cs_web_import).
 
 function name83(name) {                  // "my song.mid" -> "MYSONG  MID"

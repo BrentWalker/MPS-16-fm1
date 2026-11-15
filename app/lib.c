@@ -1,6 +1,6 @@
-/* ChordSmith FM: the chord library. Copyright (C) 2026 BeatSmith Media (BeatSmith). Licence: to be chosen.
+/* MPS-16 ver FM1: the chord library. Copyright (C) 2026 BeatSmith Media (BeatSmith). Licence: to be chosen.
  *
- * Built from the key, as ChordSmith Web's: the seven diatonic chords of a type (triads, 7ths, 9ths, sus2, sus4,
+ * Built from the key, as MPS-16 ver WEB's: the seven diatonic chords of a type (triads, 7ths, 9ths, sus2, sus4,
  * add9), and ten common four-bar progressions played in a rhythm (sustain, stabs, arp 8ths) with a bass line, the
  * chords voiced to move as little as they can. Part of app.c (after the slicing). */
 

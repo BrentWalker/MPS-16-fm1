@@ -1,4 +1,4 @@
-/* ChordSmith FM: GUIDE, the getting-started pages. Copyright (C) 2026 BeatSmith Media (BeatSmith). Licence: to be
+/* MPS-16 ver FM1: GUIDE, the getting-started pages. Copyright (C) 2026 BeatSmith Media (BeatSmith). Licence: to be
  * chosen. Part of app.c. Hold SYS to open it (and it opens by itself the first time). SELECT turns the pages; the
  * controls a page talks about blink, and pressing one of the buttons leaves the guide to do it. */
 
@@ -11,7 +11,7 @@ typedef struct {
     uint32_t btn, keys;                  /* what blinks */
 } gpage_t;
 static const gpage_t GUIDE[] = {
-    {"WELCOME", "CHORDSMITH MAKES THE FM-1 A CHORD AND PHRASE SAMPLER. TURN SELECT FOR THE NEXT PAGE. HOME LEAVES.", 0,
+    {"WELCOME", "MPS-16 MAKES THE FM-1 A CHORD AND PHRASE SAMPLER. TURN SELECT FOR THE NEXT PAGE. HOME LEAVES.", 0,
      0},
     {"SURFACE", "LOAD A MIDI FILE: IT'S ON THE 16 PADS AT ONCE. PRESET: HOW IT'S CUT. K1: WHERE IN THE SONG.",
      0, G_WHITE},

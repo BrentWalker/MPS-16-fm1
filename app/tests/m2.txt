@@ -1,5 +1,5 @@
 # Milestone 2: MIDI files on the drive, slicing, phrase pads, REC. From base/:
-#   ../app/build/host/chordsmith_host ../app/tests/m2.txt ../app/build/host
+#   ../app/build/host/mps16_host ../app/tests/m2.txt ../app/build/host
 wait 600
 # FM mode (HOME held): these tests are FM mode's
 press HOME
@@ -102,7 +102,7 @@ wait 50
 expect files 3
 expect notes 2
 expect screen 1
-dumpdisk /tmp/chordsmith_disk.img
+dumpdisk /tmp/mps16_disk.img
 # the files survive a power cycle
 reboot
 wait 600

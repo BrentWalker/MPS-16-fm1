@@ -1,4 +1,4 @@
-/* ChordSmith FM: reading standard MIDI files. Copyright (C) 2026 BeatSmith Media (BeatSmith). Licence: to be chosen.
+/* MPS-16 ver FM1: reading standard MIDI files. Copyright (C) 2026 BeatSmith Media (BeatSmith). Licence: to be chosen.
  *
  * The open file (disk.c fs_open) parsed into one list of notes, every track's, sorted by start: times in 96ths of a
  * beat whatever the file's resolution. Formats 0 and 1, running status, tempo, time signature, track names. Part of

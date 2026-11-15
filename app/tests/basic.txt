@@ -1,5 +1,5 @@
-# ChordSmith FM in the host simulator: from base/, python3 tools/build.py ../app --host, then
-#   ../app/build/host/chordsmith_host ../app/tests/basic.txt ../app/build/host
+# MPS-16 ver FM1 in the host simulator: from base/, python3 tools/build.py ../app --host, then
+#   ../app/build/host/mps16_host ../app/tests/basic.txt ../app/build/host
 wait 600
 # FM mode (HOME held): these tests are FM mode's
 press HOME
