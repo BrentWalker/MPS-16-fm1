@@ -12,13 +12,13 @@ msc = true                     # USB drive mode: MIDI files copied onto the FM-1
 emu = ["data", "midi"]         # the browser emulator: its drive kept in the browser, Web MIDI ports
 # the site (tools/make_site.py, tools/publish_site.sh)
 tagline = "ver FM1, a MIDI phrase sampler for the M-VAVE FM-1"
-repo = "https://github.com/BrentWalker/mps-16-fm1"
+repo = "https://github.com/BrentWalker/MPS-16-fm1"
 licence = "LicenseRef-MPS16-TBD"   # the app code's licence: to be chosen (fm1-base stays MPL-2.0)
 credits = "Built on fm1-base by Charles Vestal and felucca-bsp by Leo Kuroshita."
 # firmware.json, for firmware hubs (docs/FIRMWARE-JSON.md): the build writes it from these and the keys above
 author = "Brent Walker (BeatSmith)"
 description = "A MIDI phrase sampler in the Earth Science family. Load a MIDI file and it is on the 16 pads at once, sliced by bars, hits or chord changes; play the slices as recorded or as chords, strummed, arpeggiated or in rhythm, mutate repeated chords, and play bass, lead and key changes on the black keys. Early development."
 tags = ["chords", "sampler", "midi"]
-install = "https://brentwalker.github.io/mps-16-fm1/install/"
-site = "https://brentwalker.github.io/mps-16-fm1/"
+install = "https://brentwalker.github.io/MPS-16-fm1/install/"
+site = "https://brentwalker.github.io/MPS-16-fm1/"
 screenshot = "docs/img/screen-playing.png"
