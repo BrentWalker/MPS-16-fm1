@@ -49,9 +49,13 @@ ChordSmith starts in **ORCHID**. Load a MIDI file and it's already on the 16 pad
 |---|---|
 | PRESET | How the file is cut: EQUAL (16 equal parts), BARS, 2 BARS, HITS (each new hit), CHORDS (each chord change, its name on the pad) |
 | K1 | Where in the song the 16 pads start: one slice a click |
-| K2 | The black keys 1-7: ROOT or LEAD (3RD and 5TH to come) |
-| K3 | The 4 extra black keys (to come: BRIDGE, SUGGESTED, OUTSIDE, RELATIVE) |
-| K4 | How the pads play (to come: CHORD, STRUM, ARP, SLOPPY, PERFORM) |
+| K2 | The black keys 1-7: ROOT (bass), LEAD, 3RD or 5TH (each note with its 3rd or 5th in the key) |
+| K3 | The 4 extra black keys: BRIDGE (key changes), SUGGEST (4 chords that tend to follow the pad you played), OUTSIDE (4 notes off the scale, the bluest first), BORROW (4 chords from the parallel key) |
+| K4 | How the pads play: AS IS (the slice as recorded), CHORD (the slice as one held chord), STRUM, ARP, SLOPPY (as recorded, humanized), or PERFORM rhythms: STABS, OFFBT, 3-3-2, SYNC |
+
+**Hold OCT- and turn K4**: more of the way they play: a wider strum, 1 to 3 arp octaves, more humanize for SLOPPY
+and PERFORM. **Hold OCT+ and turn K4**: the voicing: ROOT POS, INV 1-3, WIDE (every other note up an octave),
+RANDOM (new each press). Neither moves the octave.
 
 The bar under the mode shows the whole song and the stretch of it on the pads.
 

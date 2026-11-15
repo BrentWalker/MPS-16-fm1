@@ -420,9 +420,9 @@ static void draw_orchid(void)
         str_set(v[0], "", sizeof v[0]);
         num_text((int32_t)first + 1, v[0], 0);
     }
-    str_set(v[1], set.mode == MODE_LEAD ? "LEAD" : "ROOT", sizeof v[1]);
-    str_set(v[2], "BRIDGE", sizeof v[2]);
-    str_set(v[3], "CHORD", sizeof v[3]);
+    str_set(v[1], MODE_NAME[set.mode % MODE_N], sizeof v[1]);
+    str_set(v[2], FK_MODE[set.om_f4 % FK_N], sizeof v[2]);
+    str_set(v[3], OP_NAME[set.om_play % OP_N], sizeof v[3]);
     bottom_bar(68, LBL, v);
     cv_blit(0, 120);
 }

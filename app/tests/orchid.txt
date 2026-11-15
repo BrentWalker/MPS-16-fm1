@@ -69,3 +69,94 @@ tap EDIT
 wait 30
 expect orchid 0
 expect screen 4
+# ---- Step 2 (in FM mode now; back to ORCHID)
+tap HOME
+wait 50
+expect orchid 1
+# K2: 3RD and 5TH
+turn K2 2
+wait 30
+expect mode 2
+key 1 down
+wait 30
+key 1 up
+turn K2 -2
+wait 30
+# K3: the 4 extra black keys
+turn K3 1
+wait 30
+expect omf4 1
+key 17 down
+wait 30
+key 17 up
+turn K3 1
+wait 30
+expect omf4 2
+turn K3 1
+wait 30
+expect omf4 3
+key 25 down
+wait 30
+key 25 up
+turn K3 -3
+wait 30
+expect omf4 0
+# K4: CHORD: a slice as its chord
+turn K4 1
+wait 30
+expect omplay 1
+key 0 down
+wait 40
+expect cbufn0 2
+key 0 up
+key 7 down
+wait 40
+expect cbufn4 5
+key 7 up
+# STRUM, and OCT- held wider
+turn K4 1
+wait 30
+expect omplay 2
+expect strum 41
+press OCT-
+wait 20
+turn K4 2
+wait 20
+release OCT-
+wait 30
+expect omamt 6
+expect strum 59
+expect octave 0
+# ARP: 2 octaves (amount 6)
+turn K4 1
+wait 30
+key 7 down
+wait 40
+expect cbufn4 8
+key 7 up
+# OCT+ held: WIDE
+press OCT+
+wait 20
+turn K4 4
+wait 20
+release OCT+
+wait 30
+expect omshape 4
+expect octave 0
+# SLOPPY: humanize, slices as they are
+turn K4 1
+wait 30
+expect omplay 4
+expect human 30
+# PERFORM: STABS
+turn K4 1
+wait 30
+expect omplay 5
+key 7 down
+wait 1000
+expect cbufn4 5
+shot orchid_perform.png
+key 7 up
+turn K4 -5
+wait 30
+expect omplay 0
