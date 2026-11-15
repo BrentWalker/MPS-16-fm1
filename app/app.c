@@ -2767,8 +2767,25 @@ static void lights(void)
 /* the Earth Science elements: Earth #B5956B, Air #87CEEB, Fire #CD7F7F, Water #6BB6D6 */
 static const uint16_t EARTH_C = RGB(0xB5, 0x95, 0x6B), AIR_C = RGB(0x87, 0xCE, 0xEB), FIRE_C = RGB(0xCD, 0x7F, 0x7F),
                       WATER_C = RGB(0x6B, 0xB6, 0xD6);
-static const uint16_t AMBER = RGB(242, 181, 82), AMBER_DIM = RGB(122, 90, 46), TEAL = RGB(79, 179, 166),
-                      TEAL_DIM = RGB(31, 74, 69), REDC = RGB(224, 68, 60);
+/* CORE in the Earth Science palette too: what was amber (chords, the key, accents) is Earth, what was teal (phrases,
+ * slices) is Water, red (REC) is Fire */
+static const uint16_t AMBER = RGB(0xB5, 0x95, 0x6B), AMBER_DIM = RGB(78, 64, 46), TEAL = RGB(0x6B, 0xB6, 0xD6),
+                      TEAL_DIM = RGB(26, 56, 70), REDC = RGB(0xCD, 0x7F, 0x7F);
+/* the lab: graph paper on a dark lab grey, every screen */
+static const uint16_t LAB_BG = RGB(18, 20, 22), LAB_GRID = RGB(30, 34, 38), LAB_LABEL = RGB(110, 118, 124);
+static void lab_paper(void)              /* graph paper, every 12 px, on the band begun */
+{
+    int32_t k;
+    for (k = 12; k < 240; k += 12)
+        cv_rect(k, 0, 1, 120, LAB_GRID);
+    for (k = 12; k < 120; k += 12)
+        cv_rect(0, k, 240, 1, LAB_GRID);
+}
+static void lab_begin(void)              /* a band of the screen: lab grey, graph paper */
+{
+    cv_begin(240, 120, LAB_BG);
+    lab_paper();
+}
 
 static void deg_sign(int32_t x, int32_t y, uint16_t c)   /* a small degree sign: a 4 px ring */
 {
@@ -2822,7 +2839,7 @@ static void draw_home(void)
     const pad_t *p = ui.pad >= 0 ? &pads[ui.pad] : 0;
     int playing = p && ((ui.keys >> WK[ui.pad] & 1u) || pl[ui.pad].on);
 
-    cv_begin(240, 120, C_BLACK);
+    lab_begin();
     key_text(t);
     if (plat_ms() < ui.msg_until)
         top_bar(0, 0, 0);
@@ -2936,7 +2953,7 @@ static void draw_home(void)
     }
     cv_blit(0, 0);
 
-    cv_begin(240, 120, C_BLACK);
+    lab_begin();
     for (i = 0; i < 16u; i++) {
         int on = (int)(ui.keys >> WK[i] & 1u) || pl[i].on;
         uint16_t c = pads[i].type == PAD_PHRASE ? (on ? TEAL : TEAL_DIM)
@@ -2954,7 +2971,7 @@ static void draw_home(void)
             uint16_t on = lead ? AMBER : TEAL;
             cv_rect(cx, 28, 24, 20, lit ? on : nx ? on : C_LINE);
             if (nx)
-                cv_rect(cx + 2, 30, 20, 16, C_BLACK);   /* next: an outline */
+                cv_rect(cx + 2, 30, 20, 16, LAB_BG);   /* next: an outline */
             cv_text(cx + (24 - text_w(&FONT_XS, d)) / 2, 30, &FONT_XS, d, lit ? C_BLACK : nx ? on : C_GRAY);
         }
     }
@@ -3004,14 +3021,14 @@ static void draw_slice(void)
     char t[32];
     uint32_t i;
     int32_t x;
-    cv_begin(240, 120, C_BLACK);
+    lab_begin();
     top_bar("SLICE", cur_file >= 0 ? files[cur_file].name : "NO FILE", C_GRAY);
     if (!nsl) {
         cv_text(10, 50, &FONT_B, "NO SLICES", C_GRAY);
         cv_text(10, 72, &FONT_XS, "SLICE again: pick a file", C_DIM);
         cv_text(10, 88, &FONT_XS, "SYS: copy files over USB", C_DIM);
         cv_blit(0, 0);
-        cv_begin(240, 120, C_BLACK);
+        lab_begin();
         cv_blit(0, 120);
         return;
     }
@@ -3051,7 +3068,7 @@ static void draw_slice(void)
     }
     cv_blit(0, 0);
 
-    cv_begin(240, 120, C_BLACK);
+    lab_begin();
     for (x = 0; x < 240; x++) {          /* the waveform's lower half (rows 120 .. 127 of it) */
         uint32_t tt = wv_lo + (uint32_t)((uint32_t)wv_len * (uint32_t)x / 240u);
         int in = tt >= sl_s[sel] && tt < sl_e[sel];
@@ -3110,7 +3127,7 @@ static void draw_files(void)
 {
     char t[32];
     uint32_t i;
-    cv_begin(240, 120, C_BLACK);
+    lab_begin();
     {
         char kb[12];
         uint32_t f = fs_free_kb(), n = 0;
@@ -3140,7 +3157,7 @@ static void draw_files(void)
     }
     cv_blit(0, 0);
 
-    cv_begin(240, 120, C_BLACK);
+    lab_begin();
     cv_rect(0, 0, 240, 1, C_LINE);
     for (i = 0; i < ntrk && i < 4u; i++) {
         int32_t y = 4 + (int32_t)i * 15;
@@ -3180,12 +3197,12 @@ static void draw_files(void)
 static void draw_disk(void)
 {
     const char *st = ui.disk_state == PLAT_DISK_MOUNTED ? "CONNECTED" : "WAITING FOR A COMPUTER";
-    cv_begin(240, 120, C_BLACK);
+    lab_begin();
     top_bar("USB DRIVE", 0, 0);
     cv_text((240 - text_w(&FONT_M, "USB DRIVE")) / 2, 44, &FONT_M, "USB DRIVE", C_WHITE);
     cv_text((240 - text_w(&FONT_XS, st)) / 2, 82, &FONT_XS, st, ui.disk_state == PLAT_DISK_MOUNTED ? TEAL : AMBER);
     cv_blit(0, 0);
-    cv_begin(240, 120, C_BLACK);
+    lab_begin();
     cv_text(12, 4, &FONT_XS, "1  Connect USB to a computer.", C_GRAY);
     cv_text(12, 22, &FONT_XS, "2  Copy .mid files onto MPS-16.", C_GRAY);
     cv_text(12, 40, &FONT_XS, "3  Eject it. Files show in SLICE.", C_GRAY);

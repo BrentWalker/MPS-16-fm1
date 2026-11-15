@@ -7,7 +7,7 @@ static void draw_key(void)
     uint32_t i;
     int32_t x;
     const uint8_t *sc = SCALES[set.scale];
-    cv_begin(240, 120, C_BLACK);
+    lab_begin();
     top_bar("KEY", set.lock ? "LOCK ON" : "LOCK OFF", set.lock ? AMBER : C_GRAY);
     tonic_name(t);
     {
@@ -31,7 +31,7 @@ static void draw_key(void)
         (void)rn;
     }
     cv_blit(0, 0);
-    cv_begin(240, 120, C_BLACK);
+    lab_begin();
     for (i = 0; i < 7u; i++) {
         char rn[6];
         uint8_t dim;
@@ -75,7 +75,7 @@ static void fx_tile(int32_t x, int32_t y, const char *k, const char *name, const
 static void draw_fx(void)
 {
     char a[12], b[12], c[12], d[12];
-    cv_begin(240, 120, C_BLACK);
+    lab_begin();
     top_bar("FX", ui.fx_page ? "PAGE 2/2  FX: BACK" : "PAGE 1/2  FX: MORE", C_GRAY);
     if (!ui.fx_page) {
         num_text(set.strum * 2, a, 0);
@@ -90,7 +90,7 @@ static void draw_fx(void)
         fx_tile(122, 34, "K2", "BASS NOTE", set.bass ? "ON" : "OFF", set.bass ? 100 : 0);
     }
     cv_blit(0, 0);
-    cv_begin(240, 120, C_BLACK);
+    lab_begin();
     if (!ui.fx_page) {
         fx_tile(6, 0, "K3", "HUMANIZE", c, set.human * 2);
         fx_tile(122, 0, "K4", "INVERT", d, (set.inv + 3) * 100 / 6);
@@ -123,7 +123,7 @@ static void draw_lib(void)
     char t[24];
     uint32_t i, cnt = lib_count();
     int32_t first = lib_sel > 3u ? (int32_t)lib_sel - 3 : 0;
-    cv_begin(240, 120, C_BLACK);
+    lab_begin();
     key_text(t);
     text_cat(t, " ");
     text_cat(t, lib_grp ? RHY_NAME[lib_rhy] : CTYPE_NAME[lib_type]);
@@ -168,7 +168,7 @@ static void draw_lib(void)
         }
     }
     cv_blit(0, 0);
-    cv_begin(240, 120, C_BLACK);
+    lab_begin();
     cv_text(10, 4, &FONT_T, "SELECT: PICK AND HEAR    WHITE KEY: DROP ON PAD", C_DIM);
     cv_text(10, 20, &FONT_T, "K4: BUILD A WHOLE KIT (8 CHORDS, 8 PROGRESSIONS)", C_DIM);
     {
@@ -195,7 +195,7 @@ static void draw_trim(void)
     {
         char n[8] = "PAD ";
         num_text(ui.pad + 1, n + 4, 0);
-        cv_begin(240, 120, C_BLACK);
+        lab_begin();
         top_bar("TRIM", n, C_GRAY);
     }
     if (phrase) {
@@ -247,7 +247,7 @@ static void draw_trim(void)
     }
     cv_blit(0, 0);
 
-    cv_begin(240, 120, C_BLACK);
+    lab_begin();
     pad_title(p, t);
     cv_text(10, 4, &FONT_B, t, phrase ? TEAL : AMBER);
     if (phrase) {
@@ -280,7 +280,7 @@ static void draw_find(void)
     char t[24], v[4][12] = {"", "", "", "LIB"};
     uint32_t i;
     int32_t first = fd_sel > 2u ? (int32_t)fd_sel - 2 : 0, x = 10;
-    cv_begin(240, 120, C_BLACK);
+    lab_begin();
     str_set(t, "", sizeof t);
     num_text(fd_cnt, t, 0);
     text_cat(t, fd_cnt == 1u ? " KEY" : " KEYS");
@@ -290,7 +290,7 @@ static void draw_find(void)
         cv_text((240 - text_w(&FONT_XS, "ANY KEYS, WHITE OR BLACK")) / 2, 80, &FONT_XS, "ANY KEYS, WHITE OR BLACK",
                 C_GRAY);
         cv_blit(0, 0);
-        cv_begin(240, 120, C_BLACK);
+        lab_begin();
         bottom_bar(68, LBL, v);
         cv_blit(0, 120);
         return;
@@ -313,7 +313,7 @@ static void draw_find(void)
     }
     cv_blit(0, 0);
 
-    cv_begin(240, 120, C_BLACK);
+    lab_begin();
     if (fd_cnt) {                        /* the picked key's notes, the ones tapped lit */
         uint32_t e = fd_list[fd_sel], root = e >> 4, sc = e & 15u, l = letter_of(root, sc);
         for (i = 0; i < 7u; i++) {
@@ -335,15 +335,6 @@ static void draw_find(void)
 /* SURFACE (ORCHID in the code): the Earth Science look. Graph paper; the file as Water (the slices, the ruler of the
  * song, the pads); the knobs in their elements: K1 Water, K2 Earth (bass), K3 Air (above), K4 Fire (playing) */
 static const uint16_t ORCHID_C = RGB(0x6B, 0xB6, 0xD6), ORCHID_DIM = RGB(26, 56, 70);   /* Water */
-static const uint16_t LAB_BG = RGB(18, 20, 22), LAB_GRID = RGB(30, 34, 38), LAB_LABEL = RGB(110, 118, 124);
-static void lab_paper(void)              /* graph paper, every 12 px, on the band begun */
-{
-    int32_t k;
-    for (k = 12; k < 240; k += 12)
-        cv_rect(k, 0, 1, 120, LAB_GRID);
-    for (k = 12; k < 120; k += 12)
-        cv_rect(0, k, 240, 1, LAB_GRID);
-}
 static void draw_orchid(void)
 {
     static const char *const LBL[4] = {"START", "BLACK 7", "BLACK 4", "PLAY"};

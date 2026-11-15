@@ -102,13 +102,13 @@ static void draw_guide(void)
     num_text((int32_t)ui.guide_pg + 1, pg, 0);
     text_cat(pg, "/");
     num_text((int32_t)NGUIDE, pg + cs_len(pg), 0);
-    cv_begin(240, 120, C_BLACK);
+    lab_begin();
     top_bar("GUIDE", pg, C_GRAY);
     cv_text(10, 32, &FONT_B, g->title, AMBER);
     for (i = 0; i < n && i < 3u; i++)
         cv_text(10, 66 + (int32_t)i * 16, &FONT_XS, ln[i], C_WHITE);
     cv_blit(0, 0);
-    cv_begin(240, 120, C_BLACK);
+    lab_begin();
     for (i = 3; i < n; i++)
         cv_text(10, 2 + (int32_t)(i - 3u) * 16, &FONT_XS, ln[i], C_WHITE);
     for (i = 0; i < NGUIDE; i++)         /* where you are */
