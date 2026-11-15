@@ -14,7 +14,7 @@ put M-VAVE's own firmware back.
 - [Install](install/) it from Chrome or Edge on a computer, with the FM-1 connected by USB.
 - The [Manual](manual/) explains the pads, slicing, the library, the key and the FX.
 - [Download {{PKG}}](firmware/{{PKG}}) for the command-line installer: `python3 tools/fm1_install.py {{PKG}}`.
-- The [Source](https://github.com/BrentWalker/chordsmith-fm). It's built on fm1-base by Charles Vestal and
+- The [Source](https://github.com/BrentWalker/mps-16-fm1). It's built on fm1-base by Charles Vestal and
   felucca-bsp, which come from Felucca by Leo Kuroshita, Hügelton Instruments.
 
 M-VAVE and FM-1 are trademarks of their owners. MPS-16 ver FM1 is not affiliated with M-VAVE.

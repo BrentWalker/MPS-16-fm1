@@ -4,7 +4,7 @@ Free firmware for the M-VAVE FM-1 by BeatSmith. It turns the FM-1 into a chord a
 
 MPS-16 ver FM1 is the hardware version of MPS-16 ver WEB, and groundwork for MPS-16.
 
-**Status:** early test builds (0.3). Try it in the browser or install it: https://brentwalker.github.io/chordsmith-fm/
+**Status:** early test builds (0.3). Try it in the browser or install it: https://brentwalker.github.io/mps-16-fm1/
 (the site needs GitHub Pages on: Settings > Pages > gh-pages). Manual: app/docs/MANUAL.md.
 
 ## Built on
@@ -23,7 +23,7 @@ MPS-16 ver FM1 is the hardware version of MPS-16 ver WEB, and groundwork for MPS
 
 Clone with submodules:
 
-    git clone --recursive https://github.com/BrentWalker/chordsmith-fm
+    git clone --recursive https://github.com/BrentWalker/mps-16-fm1
 
 Host simulator (any Linux or macOS machine with a C compiler and Python 3):
 

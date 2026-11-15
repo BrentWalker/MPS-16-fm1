@@ -7,9 +7,9 @@
   "tagline": "ver FM1, a MIDI phrase sampler for the M-VAVE FM-1",
   "description": "A MIDI phrase sampler in the Earth Science family. Load a MIDI file and it is on the 16 pads at once, sliced by bars, hits or chord changes; play the slices as recorded or as chords, strummed, arpeggiated or in rhythm, mutate repeated chords, and play bass, lead and key changes on the black keys. Early development.",
   "tags": ["chords", "sampler", "midi"],
-  "install": "https://github.com/BrentWalker/chordsmith-fm",
-  "site": "https://github.com/BrentWalker/chordsmith-fm",
-  "source": "https://github.com/BrentWalker/chordsmith-fm",
+  "install": "https://brentwalker.github.io/mps-16-fm1/install/",
+  "site": "https://brentwalker.github.io/mps-16-fm1/",
+  "source": "https://github.com/BrentWalker/mps-16-fm1",
   "screenshot": "docs/img/screen-playing.png",
   "hardware": {
     "models": ["FM-1"],
