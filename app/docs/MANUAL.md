@@ -57,6 +57,12 @@ ChordSmith starts in **ORCHID**. Load a MIDI file and it's already on the 16 pad
 and PERFORM. **Hold OCT+ and turn K4**: the voicing: ROOT POS, INV 1-3, WIDE (every other note up an octave),
 RANDOM (new each press). Neither moves the octave.
 
+**ALGORITHM** in ORCHID is the **note length**: left shorter (down to 10%, tight stabs), the middle as played, right
+longer (up to 450%, then LEGATO: each note on to the next). It shapes the slices and PERFORM's hits. **Hold OCT- and
+turn ALGORITHM**: the **slice length**, each slice from its start x1/4, x1/2, as cut, x2 or x4. **Hold OCT+ and turn
+ALGORITHM**: the **velocity curve**: the middle as played, left softer, right harder. The three show under the pad
+played. (In FM mode ALGORITHM is still the key's root.)
+
 The bar under the mode shows the whole song and the stretch of it on the pads.
 
 **Hold HOME** for **FM mode**: every other screen (SLICE, TRIM, LIB, KEY, FX, kits). HOME there shows a teal **FM**.

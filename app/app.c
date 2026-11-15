@@ -35,7 +35,11 @@ typedef struct {
     uint8_t om_slice;                    /* ORCHID: how the file is cut (OM_*) */
     uint8_t om_f4, om_play, om_shape;    /* ORCHID: the 4 black keys (FK_*), how pads play (OP_*), the voicing */
     uint16_t om_start;                   /* ORCHID: the slice on pad 1 */
-    uint8_t om_amt, om_rsv;              /* ORCHID: how much of the way they play, 0 .. 10 */
+    uint8_t om_amt;                      /* ORCHID: how much of the way they play, 0 .. 10 */
+    int8_t om_len;                       /* ORCHID: ALGORITHM, the notes' length, -5 .. 5 (0: as played) */
+    int8_t om_slen;                      /* ORCHID: OCT- and ALGORITHM, the slices' length, -2 .. 2 (0: as cut) */
+    int8_t om_vcurve;                    /* ORCHID: OCT+ and ALGORITHM, the velocity curve, -5 .. 5 */
+    uint8_t om_rsv;
 } settings_t;
 static settings_t set;
 static uint8_t set_dirty;
@@ -405,6 +409,7 @@ typedef struct {
     int8_t oct;
     float pos;
     uint8_t snd[MAXPH];                  /* the note sounding for phrase note k, + 1; 0 none */
+    uint16_t endt[MAXPH];                /* and when it stops (ORCHID's note length) */
 } player_t;
 static player_t pl[NPADS + 1];
 
@@ -430,6 +435,20 @@ static void pl_release(uint32_t i)
 }
 
 static uint32_t human_vel(uint32_t v);
+static uint8_t orchid;                   /* ORCHID (1) or FM mode (0): set below */
+/* ORCHID's note length (ALGORITHM): % of each note's own length, the last LEGATO (on to the next note) */
+static const uint16_t LEN_PCT[11] = {10, 25, 40, 55, 75, 100, 140, 200, 300, 450, 0};
+static const char *const LEN_NAME[11] = {"10%", "25%", "40%", "55%", "75%", "AS PLAYED", "140%", "200%", "300%",
+                                         "450%", "LEGATO"};
+/* ORCHID's velocity curve (OCT+ and ALGORITHM): left softer (down to v squared), right harder */
+static uint32_t vcurve(uint32_t v)
+{
+    int32_t c = orchid ? set.om_vcurve : 0, x = (int32_t)v;
+    if (!c)
+        return v;
+    x += c * x * (127 - x) / 635;        /* 635 = 127 * 5 */
+    return (uint32_t)clamp(x, 1, 127);
+}
 static void phrase_tick(uint32_t n)
 {
     float dt = (float)n * (float)tempo * 96.0f / (60.0f * SR);
@@ -448,7 +467,7 @@ static void phrase_tick(uint32_t n)
         b = a + dt;
         for (k = 0; k < pd->pn && k < MAXPH; k++) {
             const pnote_t *x = &ph[i][k];
-            float s = (float)x->s, e = fm_minf((float)x->s + (float)x->d, we);
+            float s = (float)x->s, e = fm_minf(P->snd[k] ? (float)P->endt[k] : s + (float)x->d, we);
             int starts = s >= a && s < b && s >= ws && s < we;
             if (starts) {
                 uint32_t m = (uint32_t)clamp(keyed((int32_t)x->p + 12 * P->oct + pd->tune), 0, 127);
@@ -457,8 +476,26 @@ static void phrase_tick(uint32_t n)
                     v = human_vel(v ? v : 1u);   /* humanize (ORCHID's SLOPPY): phrases too */
                 if (P->snd[k])
                     out_off(P->snd[k] - 1u);
-                out_on(m, v ? v : 1u);
+                out_on(m, vcurve(v ? v : 1u));
                 P->snd[k] = (uint8_t)(m + 1u);
+                {                        /* when it stops: its length, or ORCHID's */
+                    uint32_t d = x->d, li = (uint32_t)(set.om_len + 5);
+                    if (orchid && set.om_len && li < 11u) {
+                        if (LEN_PCT[li])
+                            d = d * LEN_PCT[li] / 100u;
+                        else {           /* LEGATO: on to the next note's start */
+                            uint32_t j, nx = (uint32_t)we;
+                            for (j = 0; j < pd->pn && j < MAXPH; j++)
+                                if (ph[i][j].s > x->s && ph[i][j].s < nx)
+                                    nx = ph[i][j].s;
+                            d = nx - x->s;
+                        }
+                        if (d < 2u)
+                            d = 2u;
+                    }
+                    P->endt[k] = (uint16_t)(x->s + d > 65535u ? 65535u : x->s + d);
+                    e = fm_minf((float)P->endt[k], we);
+                }
             }
             if (P->snd[k] && e < b && !(starts && e >= b)) {
                 out_off(P->snd[k] - 1u);
@@ -566,10 +603,15 @@ static void chord_tick(uint32_t n)
                     for (k = 0; k < c->n; k++) {
                         if (c->sounded[k])
                             out_off(c->note[k]);
-                        out_on(c->note[k], human_vel(c->vel[0]));
+                        out_on(c->note[k], vcurve(human_vel(c->vel[0])));
                         c->sounded[k] = 1;
                     }
-                    cp_off[i] = c->next + step * 3u / 5u;   /* short: a stab */
+                    {                    /* short: a stab, as long as ORCHID's note length says */
+                        uint32_t li = (uint32_t)(set.om_len + 5), g = step * 3u / 5u;
+                        if (li < 11u)
+                            g = LEN_PCT[li] ? g * LEN_PCT[li] / 100u : step - 1u;
+                        cp_off[i] = c->next + (g ? g : 1u);
+                    }
                 }
                 c->idx++;
                 c->next += step;
@@ -588,7 +630,7 @@ static void chord_tick(uint32_t n)
                     pick = cs_rnd() % len;
                 if (c->cur)
                     out_off(c->cur - 1u);
-                out_on(c->note[pick], human_vel(c->vel[0]));
+                out_on(c->note[pick], vcurve(human_vel(c->vel[0])));
                 c->cur = (uint8_t)(c->note[pick] + 1u);
                 c->idx++;
                 step = (uint32_t)(60.0f * SR / (float)tempo * ARP_RATE[set.arprate % 6u]);
@@ -597,7 +639,7 @@ static void chord_tick(uint32_t n)
         } else {
             for (k = 0; k < c->n; k++)
                 if (!c->sounded[k] && c->at[k] < c->t + n) {
-                    out_on(c->note[k], c->vel[k]);
+                    out_on(c->note[k], vcurve(c->vel[k]));
                     c->sounded[k] = 1;
                 }
         }
@@ -1029,7 +1071,7 @@ static int kit_load(uint32_t n)
     return 0;
 }
 
-static uint8_t orchid = 1;               /* ORCHID (1) or FM mode (0) */
+static uint8_t orchid = 1;               /* ORCHID (1) or FM mode (0); declared above */
 static void orchid_fill(void);
 static int32_t deg_of(int32_t m);
 enum { MODE_ROOT, MODE_LEAD, MODE_3RD, MODE_5TH, MODE_N };
@@ -1177,6 +1219,15 @@ static void orchid_fill(void)
         sl_grid = set.om_slice == OM_2BARS ? 5u : 4u;
         slice_auto();
     }
+    if (set.om_slen) {                   /* ORCHID's slice length: each slice x1/4 .. x4 from its start */
+        for (i = 0; i < nsl; i++) {
+            uint32_t L = sl_e[i] - sl_s[i];
+            L = set.om_slen > 0 ? L << set.om_slen : L >> -set.om_slen;
+            if (L < 24u)
+                L = 24u;
+            sl_e[i] = sl_s[i] + L < song_len ? sl_s[i] + L : song_len;
+        }
+    }
     first = set.om_slice == OM_EQUAL ? 0u : om_first();
     for (i = 0; i < 16u; i++) {
         pad_t *p = &pads[i];
@@ -1213,6 +1264,9 @@ void app_init(void)
     kit_load(set.kit);
     if (set.bpm)
         tempo = set.bpm;
+    if (set.om_len < -5 || set.om_len > 5 || set.om_slen < -2 || set.om_slen > 2 || set.om_vcurve < -5 ||
+        set.om_vcurve > 5)
+        settings_defaults();
     if (set.mode >= MODE_N || set.om_f4 >= FK_N || set.om_play >= OP_N || set.om_shape > 5u || set.om_amt > 10u)
         settings_defaults();
     om_apply();                          /* ORCHID first */
@@ -1995,7 +2049,27 @@ buttons:
         ui.redraw = 1;
     }
     /* ALGORITHM (ROOT): the key's root; with OCT held, the scale */
-    if ((e = plat_enc(EN_ALGO)) != 0) {
+    if ((e = plat_enc(EN_ALGO)) != 0 && orchid && ui.screen == SCR_HOME) {
+        /* ORCHID: the notes' length; OCT- held: the slices' length; OCT+ held: the velocity curve */
+        char t[8];
+        if (btn & 1u << B_OCTDN) {
+            static const char *const SL[5] = {"1/4", "1/2", "AS CUT", "X2", "X4"};
+            ui.oct_mod = 1;
+            set.om_slen = (int8_t)clamp(set.om_slen + e, -2, 2);
+            orchid_fill();
+            app_say("SLICE LENGTH", SL[set.om_slen + 2]);
+        } else if (btn & 1u << B_OCTUP) {
+            ui.oct_mod = 1;
+            set.om_vcurve = (int8_t)clamp(set.om_vcurve + e, -5, 5);
+            num_text(set.om_vcurve, t, 1);
+            app_say("VELOCITY CURVE", set.om_vcurve ? t : "AS PLAYED");
+        } else {
+            set.om_len = (int8_t)clamp(set.om_len + e, -5, 5);
+            app_say("NOTE LENGTH", LEN_NAME[set.om_len + 5]);
+        }
+        set_dirty = 1;
+        ui.redraw = 1;
+    } else if (e) {
         if (btn & (1u << B_OCTDN | 1u << B_OCTUP)) {
             ui.oct_mod = 1;
             set.scale = (uint8_t)(((int32_t)set.scale + e % (int32_t)NSCALES + (int32_t)NSCALES) % (int32_t)NSCALES);
@@ -3030,7 +3104,17 @@ int app_expect(const char *what, int *got)
         const pad_t *p = &pads[ui.pad];
         *got = !strcmp(what, "trims") ? p->ts : !strcmp(what, "trime") ? (int)pad_end(p) : !strcmp(what, "trimtune")
                ? p->tune : !strcmp(what, "trimlevel") ? 100 - p->cut : p->pmode;
-    } else if (!strcmp(what, "omf4"))
+    } else if (!strcmp(what, "omlen"))
+        *got = set.om_len;
+    else if (!strcmp(what, "omslen"))
+        *got = set.om_slen;
+    else if (!strcmp(what, "omvcurve"))
+        *got = set.om_vcurve;
+    else if (!strncmp(what, "slicelen", 8))   /* slicelenN: slice N's length, 96ths */
+        *got = (int)(sl_e[atoi(what + 8) % MAXSL] - sl_s[atoi(what + 8) % MAXSL]);
+    else if (!strncmp(what, "vc", 2))   /* vcN: velocity N through the curve */
+        *got = (int)vcurve((uint32_t)atoi(what + 2));
+    else if (!strcmp(what, "omf4"))
         *got = set.om_f4;
     else if (!strcmp(what, "omplay"))
         *got = set.om_play;

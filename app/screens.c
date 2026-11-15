@@ -414,6 +414,18 @@ static void draw_orchid(void)
             cv_text(230 - text_w(&FONT_XS, p->title), 6, &FONT_XS, p->title, AMBER);
     } else
         cv_text(10, 6, &FONT_XS, "HOLD HOME: FM MODE", C_DIM);
+    {                                    /* ALGORITHM's three: the notes' length, the slices', the velocity curve */
+        static const char *const SL[5] = {"1/4", "1/2", "AS CUT", "X2", "X4"};
+        char c[6];
+        str_set(t, "LEN ", sizeof t);
+        text_cat(t, LEN_NAME[(set.om_len + 5) % 11]);
+        text_cat(t, "  SLICE ");
+        text_cat(t, SL[(set.om_slen + 2) % 5]);
+        text_cat(t, "  VEL ");
+        num_text(set.om_vcurve, c, 1);
+        text_cat(t, set.om_vcurve ? c : "0");
+        cv_text(10, 30, &FONT_XS, t, C_GRAY);
+    }
     if (set.om_slice == OM_EQUAL || !nsl)
         str_set(v[0], "-", sizeof v[0]);
     else {
