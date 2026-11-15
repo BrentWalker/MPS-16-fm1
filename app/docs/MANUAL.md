@@ -57,6 +57,22 @@ ChordSmith starts in **SURFACE**. Load a MIDI file and it's already on the 16 pa
 and PERFORM. **Hold OCT+ and turn K4**: the voicing: ROOT POS, INV 1-3, WIDE (every other note up an octave),
 RANDOM (new each press). Neither moves the octave.
 
+**MUTATE (SELECT)**: a song repeats its chords, so its 16 pads do too. MUTATE changes each repeat, one step further
+each time; the first time a chord comes it stays as the song has it. The pads show the new names.
+
+| MUTATE | The 2nd, 3rd, 4th time a chord comes |
+|---|---|
+| OFF | As the song has it |
+| EXTEND | Richer: 7, 9, 11, 13, in the key (DM7, A7, Bm7) |
+| COLOR | sus4, sus2, add9, 6 (shown sus, s2, a9, 6) |
+| FLIP | Major and minor swap, then dim (o), then aug (+): out of the key on purpose, scale lock or not |
+| SUB | One note moves: the relative chord (D to Bm), the mediant (D to F#m), then its 7th |
+| MIX | Any of them, any step; hold OCT+ and turn SELECT for a new roll |
+
+**Hold OCT- and turn SELECT**: which chords mutate: EACH REPEAT, EVERY OTHER repeat, or ALL CHORDS (the first time
+too). It works however the file is cut and however the pads play: added notes join the chord, or hold over a slice
+played AS IS. Loading a file in SURFACE also sets the key from it, so the chords and their mutations fit.
+
 **ALGORITHM** in SURFACE is the **note length**: left shorter (down to 10%, tight stabs), the middle as played, right
 longer (up to 450%, then LEGATO: each note on to the next). It shapes the slices and PERFORM's hits. **Hold OCT- and
 turn ALGORITHM**: the **slice length**, each slice from its start x1/4, x1/2, as cut, x2 or x4. **Hold OCT+ and turn

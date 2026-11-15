@@ -416,7 +416,7 @@ static void draw_orchid(void)
             int lit = (ui.keys >> WK[i] & 1u) || pl[i].on || cp[i].on;
             uint16_t bg = p->type == PAD_EMPTY ? RGB(26, 29, 32) : lit ? WATER_C : ORCHID_DIM;
             cv_rect(bx, by, 26, 14, bg);
-            if (p->title[0] && set.om_slice == OM_CHORDS)
+            if (p->title[0])           /* a chord's name: CHORDS, or MUTATE's */
                 cv_text(bx + (26 - text_w(&FONT_XS, p->title)) / 2, by, &FONT_XS, p->title, lit ? C_BLACK : C_WHITE);
             else {
                 char n[4];

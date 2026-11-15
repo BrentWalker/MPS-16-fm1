@@ -173,11 +173,11 @@ turn PRESET -5
 turn PRESET 1
 wait 30
 expect omslice 1
-expect root 9
+expect root 2
 turn ALGO -2
 wait 30
 expect omlen -2
-expect root 9
+expect root 2
 key 7 down
 wait 300
 key 7 up
@@ -229,3 +229,54 @@ expect octave 1
 tap OCT-
 wait 30
 expect octave 0
+# MUTATE (SELECT): Canon by CHORDS, its repeats mutate
+turn PRESET 3
+wait 30
+expect omslice 4
+turn SELECT 1
+wait 30
+expect ommut 1
+expect mext0 0
+expect mext5 1
+expect mext8 2
+key 9 down
+wait 40
+shot mutate_extend.png
+key 9 up
+turn SELECT 2
+wait 30
+expect ommut 3
+expect mshift5 1
+expect mext5 0
+wait 2600
+shot mutate_flip.png
+turn SELECT 1
+wait 30
+expect ommut 4
+expect mshift5 1
+# OCT- held: ALL CHORDS, the first too
+press OCT-
+wait 20
+turn SELECT 2
+wait 20
+release OCT-
+wait 30
+expect octave 0
+expect mshift0 1
+turn SELECT 1
+wait 30
+expect ommut 5
+press OCT+
+wait 20
+turn SELECT 1
+wait 20
+release OCT+
+wait 30
+key 7 down
+wait 40
+key 7 up
+shot mutate_mix.png
+turn SELECT -5
+wait 30
+expect ommut 0
+expect mext5 0

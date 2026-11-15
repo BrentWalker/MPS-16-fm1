@@ -39,6 +39,9 @@ typedef struct {
     int8_t om_len;                       /* ORCHID: ALGORITHM, the notes' length, -5 .. 5 (0: as played) */
     int8_t om_slen;                      /* ORCHID: OCT- and ALGORITHM, the slices' length, -2 .. 2 (0: as cut) */
     int8_t om_vcurve;                    /* ORCHID: OCT+ and ALGORITHM, the velocity curve, -5 .. 5 */
+    uint8_t om_mut;                      /* ORCHID: SELECT, MUTATE (MU_*): what repeated chords become */
+    uint8_t om_mlvl;                     /* OCT- and SELECT: which repeats: 0 each, 1 every other, 2 all (the first too) */
+    uint8_t om_seed;                     /* OCT+ and SELECT: MIX's roll */
     uint8_t om_rsv;
 } settings_t;
 static settings_t set;
@@ -410,7 +413,12 @@ typedef struct {
     float pos;
     uint8_t snd[MAXPH];                  /* the note sounding for phrase note k, + 1; 0 none */
     uint16_t endt[MAXPH];                /* and when it stops (ORCHID's note length) */
+    uint8_t ext, esnd[4];                /* MUTATE's added notes: started this pass, and sounding (+ 1) */
 } player_t;
+/* MUTATE (ORCHID): per pad, each pitch class moved (FLIP, SUB: the third, the fifth, the root) and notes added
+ * (EXTEND, COLOR: a 7th, a 9th ...), worked out when the pads fill */
+static int8_t mshift[NPADS + 1][12];
+static uint8_t mext_n[NPADS + 1], mext_m[NPADS + 1][4];
 static player_t pl[NPADS + 1];
 
 static void out_on(uint32_t m, uint32_t v)
@@ -432,6 +440,12 @@ static void pl_release(uint32_t i)
             out_off(pl[i].snd[k] - 1u);
             pl[i].snd[k] = 0;
         }
+    for (k = 0; k < 4u; k++)
+        if (pl[i].esnd[k]) {
+            out_off(pl[i].esnd[k] - 1u);
+            pl[i].esnd[k] = 0;
+        }
+    pl[i].ext = 0;
 }
 
 static uint32_t human_vel(uint32_t v);
@@ -465,12 +479,22 @@ static void phrase_tick(uint32_t n)
             P->pos = ws;                 /* (the start moved past it) */
         a = P->pos;
         b = a + dt;
+        if (orchid && !P->ext && i < NPADS) {   /* MUTATE's added notes, held through the pass */
+            P->ext = 1;
+            for (k = 0; k < mext_n[i] && k < 4u; k++) {
+                uint32_t m = (uint32_t)clamp((int32_t)mext_m[i][k] + 12 * P->oct + pd->tune, 0, 127);
+                out_on(m, vcurve(72u * (100u - (pd->cut > 100u ? 100u : pd->cut)) / 100u));
+                P->esnd[k] = (uint8_t)(m + 1u);
+            }
+        }
         for (k = 0; k < pd->pn && k < MAXPH; k++) {
             const pnote_t *x = &ph[i][k];
             float s = (float)x->s, e = fm_minf(P->snd[k] ? (float)P->endt[k] : s + (float)x->d, we);
             int starts = s >= a && s < b && s >= ws && s < we;
             if (starts) {
-                uint32_t m = (uint32_t)clamp(keyed((int32_t)x->p + 12 * P->oct + pd->tune), 0, 127);
+                int32_t sh = orchid && i < NPADS ? mshift[i][x->p % 12u] : 0;
+                uint32_t m = (uint32_t)clamp(sh ? (int32_t)x->p + sh + 12 * P->oct + pd->tune   /* FLIP wins */
+                                                : keyed((int32_t)x->p + 12 * P->oct + pd->tune), 0, 127);
                 uint32_t v = (uint32_t)x->v * lv / 100u;
                 if (set.human)
                     v = human_vel(v ? v : 1u);   /* humanize (ORCHID's SLOPPY): phrases too */
@@ -1072,6 +1096,7 @@ static int kit_load(uint32_t n)
 }
 
 static uint8_t orchid = 1;               /* ORCHID (1) or FM mode (0); declared above */
+static void key_detect(void);
 static void orchid_fill(void);
 static int32_t deg_of(int32_t m);
 enum { MODE_ROOT, MODE_LEAD, MODE_3RD, MODE_5TH, MODE_N };
@@ -1081,6 +1106,9 @@ static const char *const FK_MODE[FK_N] = {"BRIDGE", "SUGGEST", "OUTSIDE", "BORRO
 enum { OP_ASIS, OP_CHORD, OP_STRUM, OP_ARP, OP_SLOPPY, OP_STABS, OP_OFFBEAT, OP_332, OP_SYNC, OP_N };
 static const char *const OP_NAME[OP_N] = {"AS IS", "CHORD", "STRUM", "ARP", "SLOPPY", "STABS", "OFFBT", "3-3-2", "SYNC"};
 static const uint16_t OP_PAT[4] = {0x1111u, 0x4444u, 0x4949u, 0x1489u};   /* STABS, OFFBEAT, 3-3-2, SYNC */
+enum { MU_OFF, MU_EXTEND, MU_COLOR, MU_FLIP, MU_SUB, MU_MIX, MU_N };
+static const char *const MU_NAME[MU_N] = {"OFF", "EXTEND", "COLOR", "FLIP", "SUB", "MIX"};
+static const char *const MU_LVL[3] = {"EACH REPEAT", "EVERY OTHER", "ALL CHORDS"};
 static const char *const SHAPE_NAME[6] = {"ROOT POS", "INV 1", "INV 2", "INV 3", "WIDE", "RANDOM"};
 /* ORCHID's K4 sets the chord FX: STRUM, ARP, SLOPPY and PERFORM, with OCT- held "how much", OCT+ the voicing */
 static void om_apply(void)
@@ -1091,6 +1119,31 @@ static void om_apply(void)
     set.arprate = 3;
     set.human = set.om_play == OP_SLOPPY || set.om_play >= OP_STABS ? (uint8_t)(5u * a) : 0u;
     set.inv = (int8_t)(set.om_shape >= 1u && set.om_shape <= 3u ? set.om_shape : 0);
+}
+/* MUTATE on a chord's notes v (low to high): each moved, MUTATE's added notes on top; returns the new count */
+static uint32_t mut_apply(uint32_t i, int32_t *v, uint32_t n, uint32_t max)
+{
+    uint32_t k, j;
+    if (!orchid || i >= NPADS)
+        return n;
+    for (k = 0; k < n; k++)
+        v[k] += mshift[i][((v[k] % 12) + 12) % 12];
+    for (k = 0; k < mext_n[i] && n < max; k++) {
+        int32_t m = mext_m[i][k];
+        while (n && m <= v[0])           /* over the chord's lowest note */
+            m += 12;
+        for (j = 0; j < n && (v[j] - m) % 12; j++)
+            ;
+        if (j == n)
+            v[n++] = m;
+    }
+    for (k = 1; k < n; k++)
+        for (j = k; j > 0 && v[j - 1] > v[j]; j--) {
+            int32_t t = v[j];
+            v[j] = v[j - 1];
+            v[j - 1] = t;
+        }
+    return n;
 }
 static int om_collapse(void)             /* ORCHID: a phrase pad played as its chord */
 {
@@ -1133,7 +1186,9 @@ static int file_load(int32_t i)
     tempo = set.bpm ? set.bpm : song_bpm;
     sel = 0;
     slice_auto();
-    if (orchid) {                        /* ORCHID: on the 16 pads at once, from the start */
+    if (orchid) {                        /* ORCHID: on the 16 pads at once, from the start, in the file's key */
+        key_detect();
+        set.fmove = 0;
         set.om_start = 0;
         orchid_fill();
     }
@@ -1145,9 +1200,11 @@ static int file_load(int32_t i)
 /* ORCHID, the default: the file loaded is already on the 16 pads. PRESET picks how it's cut, K1 where in it the 16
  * start. Hold HOME for FM mode (everything else), tap HOME to come back, as ORCHID was. */
 static void text_cat(char *t, const char *add);
+static int in_key(uint32_t pc);
 enum { OM_EQUAL, OM_BARS, OM_2BARS, OM_HITS, OM_CHORDS, OM_N };
 static const char *const OM_NAME[OM_N] = {"EQUAL", "BARS", "2 BARS", "HITS", "CHORDS"};
 static uint8_t om_root[MAXSL], om_qual[MAXSL];   /* CHORDS: each slice's chord (root, 0 major 1 minor) */
+static uint8_t om_pid[16];               /* CHORDS: each pad's chord as found (root << 1 | minor), 0xFF: not known */
 
 /* CHORDS: a cut wherever the harmony changes, beat by beat: the major or minor triad that best fits the notes
  * sounding in each beat (by how long they sound), runs of the same one a slice */
@@ -1170,8 +1227,9 @@ static void chord_slices(void)
         if (!any)
             continue;                    /* a rest: the chord before carries on */
         for (r = 0; r < 12u; r++)
-            for (q = 0; q < 2u; q++) {
-                uint32_t sc = 2u * w[r] + w[(r + (q ? 3u : 4u)) % 12u] + w[(r + 7u) % 12u];
+            for (q = 0; q < 2u; q++) {   /* x4, so the key's own third breaks a tie (a bass note alone) */
+                uint32_t sc = 4u * (2u * w[r] + w[(r + (q ? 3u : 4u)) % 12u] + w[(r + 7u) % 12u]) +
+                              in_key(r + (q ? 3u : 4u)) * 2u + in_key(r + 7u);
                 if (sc > bs) {
                     bs = sc;
                     best = r << 1 | q;
@@ -1197,12 +1255,183 @@ static uint32_t om_first(void)            /* the slice on pad 1 */
     return set.om_start < mx ? set.om_start : mx;
 }
 
+
+/* MUTATE: the chord each pad holds (root and major/minor), from its notes weighted by how long they sound */
+static int pad_chord(uint32_t i, uint32_t *root, uint32_t *minor)
+{
+    const pad_t *p = &pads[i];
+    uint32_t w[12] = {0}, k, r, q, bs = 0, any = 0;
+    if (p->type == PAD_CHORD) {
+        for (k = 0; k < p->n; k++)
+            w[p->note[k] % 12u] += 96u + 96u * (p->note[k] % 12u == p->root_pc);
+        any = p->n;
+    } else if (p->type == PAD_PHRASE)
+        for (k = 0; k < p->pn && k < MAXPH; k++) {
+            w[ph[i][k].p % 12u] += ph[i][k].d;
+            any = 1;
+        }
+    if (!any)
+        return 0;
+    for (r = 0; r < 12u; r++)
+        for (q = 0; q < 2u; q++) {
+            uint32_t sc = 4u * (2u * w[r] + w[(r + (q ? 3u : 4u)) % 12u] + w[(r + 7u) % 12u]) +
+                          in_key(r + (q ? 3u : 4u)) * 2u + in_key(r + 7u);
+            if (sc > bs) {
+                bs = sc;
+                *root = r;
+                *minor = q;
+            }
+        }
+    return bs > 0;
+}
+static int in_key(uint32_t pc)
+{
+    uint32_t j;
+    for (j = 0; j < 7u; j++)
+        if ((set.root + SCALES[set.scale][j]) % 12u == pc % 12u)
+            return 1;
+    return 0;
+}
+/* each pad's mutation: the first time a chord comes on the pads it stays (unless ALL CHORDS), each repeat mutates
+ * one step further in the mode picked (MIX: any mode, any step, by the roll) */
+static void mut_plan(void)
+{
+    uint8_t ids[16];
+    uint32_t i, j;
+    __builtin_memset(mshift, 0, sizeof mshift);
+    __builtin_memset(mext_n, 0, sizeof mext_n);
+    for (i = 0; i < 16u; i++) {
+        pad_t *p = &pads[i];
+        uint32_t root = 0, minor = 0, n = 0, step, mode = set.om_mut, t3, f5, low = 127, k, sev, nine, nr, nm;
+        int32_t ext[3];
+        uint32_t ne = 0;
+        const char *suf = 0;
+        char t[14];
+        ids[i] = 0xFFu;
+        if (om_pid[i] != 0xFFu) {        /* CHORDS named it */
+            root = om_pid[i] >> 1;
+            minor = om_pid[i] & 1u;
+        } else if (!pad_chord(i, &root, &minor))
+            continue;
+        ids[i] = (uint8_t)(root << 1 | minor);
+        for (j = 0; j < i; j++)
+            n += ids[j] == ids[i];
+        if (!mode)
+            continue;
+        step = set.om_mlvl == 0u ? n : set.om_mlvl == 1u ? (n & 1u ? (n + 1u) / 2u : 0u) : n + 1u;
+        if (!step)
+            continue;
+        if (mode == MU_MIX) {            /* the roll: any mode, any step */
+            uint32_t h = (i * 2654435761u) ^ (set.om_seed * 40503u) ^ (n * 97u);
+            h ^= h >> 13;
+            h *= 0x5bd1e995u;
+            h ^= h >> 15;
+            mode = MU_EXTEND + h % 4u;
+            step = 1u + (h >> 8) % 4u;
+        }
+        t3 = (root + (minor ? 3u : 4u)) % 12u;
+        f5 = (root + 7u) % 12u;
+        sev = in_key(root + 10u) ? 10u : in_key(root + 11u) ? 11u : 10u;
+        nine = in_key(root + 2u) ? 14u : 13u;
+        nr = root;
+        nm = minor;
+        if (mode == MU_EXTEND) {         /* 7, 9, 11, 13 */
+            ext[ne++] = (int32_t)sev;
+            if (step >= 2u)
+                ext[ne++] = (int32_t)nine;
+            if (step == 3u)
+                ext[ne++] = in_key(root + 5u) ? 17 : 18;
+            else if (step >= 4u)
+                ext[ne++] = in_key(root + 9u) ? 21 : 20;
+            suf = step == 1u ? (sev == 11u && !minor ? "M7" : "7") : step == 2u ? (sev == 11u && !minor ? "M9" : "9")
+                  : step == 3u ? "11" : "13";
+        } else if (mode == MU_COLOR) {   /* sus4, sus2, add9, 6 */
+            uint32_t c = (step - 1u) % 4u;
+            if (c == 0u) {
+                mshift[i][t3] = (int8_t)(minor ? 2 : 1);
+                suf = "sus";
+            } else if (c == 1u) {
+                mshift[i][t3] = (int8_t)(minor ? -1 : -2);
+                suf = "s2";
+            } else if (c == 2u) {
+                ext[ne++] = (int32_t)nine;
+                suf = "a9";
+            } else {
+                ext[ne++] = 9;
+                suf = "6";
+            }
+        } else if (mode == MU_FLIP) {    /* major and minor swap, then dim, then aug: out of the key on purpose */
+            uint32_t c = (step - 1u) % 3u;
+            if (c == 0u) {
+                mshift[i][t3] = (int8_t)(minor ? 1 : -1);
+                nm = !minor;
+            } else if (c == 1u) {
+                mshift[i][t3] = (int8_t)(minor ? 0 : -1);
+                mshift[i][f5] = -1;
+                suf = "o";
+            } else {
+                mshift[i][t3] = (int8_t)(minor ? 1 : 0);
+                mshift[i][f5] = 1;
+                suf = "+";
+            }
+        } else {                         /* SUB: one note moves: the relative chord, the mediant, then its 7th */
+            uint32_t c = (step - 1u) % 3u;
+            if (c == 0u) {
+                if (minor)
+                    mshift[i][root] = -2;   /* Am -> C */
+                else
+                    mshift[i][f5] = 2;      /* C -> Am */
+                nr = minor ? (root + 3u) % 12u : (root + 9u) % 12u;
+                nm = !minor;
+            } else if (c == 1u) {
+                if (minor)
+                    mshift[i][f5] = 1;      /* Am -> F */
+                else
+                    mshift[i][root] = -1;   /* C -> Em */
+                nr = minor ? (root + 8u) % 12u : (root + 4u) % 12u;
+                nm = !minor;
+            } else {
+                ext[ne++] = 10;
+                suf = "7";
+            }
+        }
+        /* the added notes: from the pad's lowest root (else its lowest note), up into the middle of the keys */
+        if (p->type == PAD_CHORD)
+            for (k = 0; k < p->n; k++) {
+                if (p->note[k] % 12u == root && p->note[k] < low)
+                    low = p->note[k];
+            }
+        else
+            for (k = 0; k < p->pn && k < MAXPH; k++)
+                if (ph[i][k].p % 12u == root && ph[i][k].p < low)
+                    low = ph[i][k].p;
+        if (low == 127u)
+            low = 48u + root;
+        for (k = 0; k < ne; k++) {
+            int32_t m = (int32_t)low + ext[k];
+            while (m < 55)
+                m += 12;
+            mext_m[i][k] = (uint8_t)clamp(m, 0, 127);
+        }
+        mext_n[i] = (uint8_t)ne;
+        pc_name(nr, t);                  /* the pad's new name */
+        if (nm && !(suf && (suf[0] == 'o' || suf[0] == '+' || suf[0] == 's')))
+            text_cat(t, "m");
+        if (suf)
+            text_cat(t, suf);
+        str_set(p->title, t, sizeof p->title);
+    }
+}
+
 /* the 16 pads from the file, as PRESET and K1 say (no file: the key's chords, as always) */
 static void orchid_fill(void)
 {
     uint32_t i, first;
-    if (!song_n)
+    if (!song_n) {
+        __builtin_memset(om_pid, 0xFF, sizeof om_pid);
+        mut_plan();                      /* no file: the key's chords mutate */
         return;
+    }
     players_stop();
     if (set.om_slice == OM_EQUAL) {
         nsl = 0;
@@ -1234,6 +1463,7 @@ static void orchid_fill(void)
         if (first + i < nsl) {
             slice_to(first + i, i);
             p->title[0] = 0;
+            om_pid[i] = set.om_slice == OM_CHORDS ? (uint8_t)(om_root[first + i] << 1 | om_qual[first + i]) : 0xFFu;
             if (set.om_slice == OM_CHORDS) {   /* its chord's name on the pad */
                 char t[8];
                 pc_name(om_root[first + i], t);
@@ -1242,6 +1472,7 @@ static void orchid_fill(void)
                 str_set(p->title, t, sizeof p->title);
             }
         } else {
+            om_pid[i] = 0xFFu;
             p->type = PAD_EMPTY;
             p->pn = 0;
             p->n = 0;
@@ -1249,6 +1480,7 @@ static void orchid_fill(void)
         }
     }
     sel = first;
+    mut_plan();
 }
 
 static uint8_t first_boot;               /* no settings yet: GUIDE opens by itself */
@@ -1264,6 +1496,8 @@ void app_init(void)
     kit_load(set.kit);
     if (set.bpm)
         tempo = set.bpm;
+    if (set.om_mut >= MU_N || set.om_mlvl > 2u)
+        settings_defaults();
     if (set.om_len < -5 || set.om_len > 5 || set.om_slen < -2 || set.om_slen > 2 || set.om_vcurve < -5 ||
         set.om_vcurve > 5)
         settings_defaults();
@@ -1396,6 +1630,7 @@ static void chord_build(uint32_t i)
                 v[j - 1] = t;
             }
     }
+    n = mut_apply(i, v, n, MAXC);
     n = om_voice(v, n, MAXC);
     if (set.bass && n) {                 /* the root, an octave under the lowest note */
         int32_t r = v[0] - (((v[0] - p->root_pc) % 12 + 12) % 12);   /* the root at or under the lowest note */
@@ -1453,6 +1688,7 @@ static void pad_play(uint32_t i, uint32_t k, uint32_t vel)
                 v[j] = v[j + 1];
             v[n - 1] = lo;
         }
+        n = mut_apply(i, v, n, MAXC);
         n = om_voice(v, n, MAXC);
         cbuf_n[i] = 0;
         for (k = 0; k < n && cbuf_n[i] < MAXC; k++)
@@ -2131,9 +2367,23 @@ buttons:
                 om_apply();
                 set_dirty = 1;
             }
-            if (ek || k1 || k2 || k3 || k4)
+            if (es) {                    /* SELECT: MUTATE; OCT- held: which repeats; OCT+ held: MIX's roll */
+                if (btn & 1u << B_OCTDN) {
+                    set.om_mlvl = (uint8_t)clamp(set.om_mlvl + es, 0, 2);
+                    app_say("MUTATE", MU_LVL[set.om_mlvl]);
+                } else if (btn & 1u << B_OCTUP) {
+                    set.om_seed = (uint8_t)(set.om_seed + 1u);
+                    app_say("MUTATE", "NEW ROLL");
+                } else {
+                    set.om_mut = (uint8_t)clamp(set.om_mut + es, 0, MU_N - 1);
+                    app_say("MUTATE", MU_NAME[set.om_mut]);
+                }
+                set_dirty = 1;
+                orchid_fill();
+            }
+            if (ek || k1 || k2 || k3 || k4 || es)
                 ui.redraw = 1;
-            ek = k1 = k2 = k3 = k4 = 0;
+            ek = k1 = k2 = k3 = k4 = es = 0;
         }
         if (ek) {                        /* KIT: the next kit, loaded at once (SAVE keeps changes first) */
             uint32_t nk = (uint32_t)clamp((int32_t)set.kit + ek, 1, (int32_t)NKITS);
@@ -3110,6 +3360,18 @@ int app_expect(const char *what, int *got)
         const pad_t *p = &pads[ui.pad];
         *got = !strcmp(what, "trims") ? p->ts : !strcmp(what, "trime") ? (int)pad_end(p) : !strcmp(what, "trimtune")
                ? p->tune : !strcmp(what, "trimlevel") ? 100 - p->cut : p->pmode;
+    } else if (!strncmp(what, "pid", 3))   /* pidN: pad N's chord as CHORDS found it */
+        *got = om_pid[atoi(what + 3) % 16];
+    else if (!strcmp(what, "ommut"))
+        *got = set.om_mut;
+    else if (!strncmp(what, "mext", 4))   /* mextN: MUTATE's notes added to pad N */
+        *got = mext_n[atoi(what + 4) % NPADS];
+    else if (!strncmp(what, "mshift", 6))   /* mshiftN: pitch classes MUTATE moves on pad N */
+    {
+        int c = 0, k, pi = atoi(what + 6) % NPADS;
+        for (k = 0; k < 12; k++)
+            c += mshift[pi][k] != 0;
+        *got = c;
     } else if (!strcmp(what, "omlen"))
         *got = set.om_len;
     else if (!strcmp(what, "omslen"))
