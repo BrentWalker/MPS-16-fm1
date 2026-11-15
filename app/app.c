@@ -2083,6 +2083,8 @@ buttons:
         int32_t es = plat_enc(EN_SELECT), k1 = plat_enc(EN_K1), k2 = plat_enc(EN_K2), k3 = plat_enc(EN_K3),
                 k4 = plat_enc(EN_K4);
         int32_t ek = plat_enc(EN_PRESET);
+        if ((es || k1 || k2 || k3 || k4 || ek) && (btn & (1u << B_OCTDN | 1u << B_OCTUP)))
+            ui.oct_mod = 1;              /* OCT held as a shift: its release moves no octave */
         if (orchid && ui.screen == SCR_HOME) {   /* ORCHID's knobs */
             if (ek) {                    /* PRESET: how the file is cut */
                 set.om_slice = (uint8_t)clamp(set.om_slice + ek, 0, OM_N - 1);

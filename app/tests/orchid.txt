@@ -207,3 +207,17 @@ wait 30
 expect omvcurve -5
 expect vc64 33
 shot orchid_algo.png
+# OCT as a shift: any knob turned while it's held, no octave on release; a plain press and release, an octave
+press OCT-
+wait 20
+turn K1 1
+wait 20
+release OCT-
+wait 30
+expect octave 0
+tap OCT+
+wait 30
+expect octave 1
+tap OCT-
+wait 30
+expect octave 0
