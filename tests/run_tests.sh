@@ -5,7 +5,7 @@ set -eu
 cd "$(dirname "$0")/.."
 ./build.sh --host
 cd base
-for t in basic m2 m3 m4 guide; do
+for t in basic m2 m3 m4 guide orchid; do
     out=$(../app/build/host/chordsmith_host "../app/tests/$t.txt" ../app/build/host 2>&1)
     echo "$out" | grep -E "FAIL|host:" || true
     if echo "$out" | grep -q "FAIL\|EXPECTATIONS FAILED"; then

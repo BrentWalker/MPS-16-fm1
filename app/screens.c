@@ -331,3 +331,98 @@ static void draw_find(void)
     bottom_bar(68, LBL, v);
     cv_blit(0, 120);
 }
+
+/* ORCHID: the mode in its own colour; how the file is cut and where; the song with the 16 pads' stretch of it; the
+ * 16 pads (a chord's name on each with CHORDS); K1-K4 */
+static const uint16_t ORCHID_C = RGB(206, 120, 222), ORCHID_DIM = RGB(70, 40, 78);
+static void draw_orchid(void)
+{
+    static const char *const LBL[4] = {"START", "BLACK 7", "BLACK 4", "PLAY"};
+    char t[32], v[4][12];
+    uint32_t i, first = set.om_slice == OM_EQUAL ? 0u : om_first(), len = song_len ? song_len : 1u;
+    int32_t x;
+    cv_begin(240, 120, C_BLACK);
+    if (plat_ms() < ui.msg_until)
+        top_bar(0, 0, 0);
+    else {
+        top_bar(0, 0, 0);
+        cv_rect(4, 5, text_w(&FONT_XS, "ORCHID") + 10, 17, ORCHID_C);
+        x = cv_text(9, 6, &FONT_XS, "ORCHID", C_BLACK);
+        if (cur_file >= 0)
+            cv_text(x + 10, 6, &FONT_XS, files[cur_file].name, C_GRAY);
+        key_text(t);
+        cv_rect(226 - text_w(&FONT_XS, t), 5, text_w(&FONT_XS, t) + 10, 17, AMBER);
+        cv_text(231 - text_w(&FONT_XS, t), 6, &FONT_XS, t, C_BLACK);
+    }
+    if (!song_n) {
+        cv_text(10, 34, &FONT_B, "NO MIDI FILE", ORCHID_C);
+        cv_text(10, 64, &FONT_XS, "THE PADS PLAY THE KEY'S CHORDS.", C_WHITE);
+        cv_text(10, 80, &FONT_XS, "PUT .MID FILES ON THE DRIVE: TAP SYS.", C_GRAY);
+        cv_blit(0, 0);
+    } else {
+        cv_text(10, 30, &FONT_XS, "PRESET", C_DIM);
+        cv_text(10, 42, &FONT_B, OM_NAME[set.om_slice], ORCHID_C);
+        if (nsl) {                       /* "5-20 OF 48" */
+            uint32_t last = first + 16u < nsl ? first + 16u : nsl;
+            str_set(t, "", sizeof t);
+            num_text((int32_t)first + 1, t, 0);
+            text_cat(t, "-");
+            num_text((int32_t)last, t + cs_len(t), 0);
+            text_cat(t, " OF ");
+            num_text((int32_t)nsl, t + cs_len(t), 0);
+            cv_text(230 - text_w(&FONT_XS, t), 30, &FONT_XS, "SLICES", C_DIM);
+            cv_text(230 - text_w(&FONT_XS, t), 46, &FONT_XS, t, C_WHITE);
+        }
+        /* the song, the pads' stretch of it */
+        cv_rect(10, 72, 220, 8, RGB(30, 30, 36));
+        if (nsl) {
+            uint32_t last = (first + 16u < nsl ? first + 16u : nsl) - 1u;
+            int32_t a = 10 + (int32_t)(sl_s[first] * 220u / len), b = 10 + (int32_t)(sl_e[last] * 220u / len);
+            cv_rect(a, 70, b - a > 2 ? b - a : 2, 12, ORCHID_C);
+        }
+        /* the 16 pads */
+        for (i = 0; i < 16u; i++) {
+            const pad_t *p = &pads[i];
+            int32_t bx = 10 + (int32_t)(i % 8u) * 28, by = 88 + (int32_t)(i / 8u) * 16;
+            int lit = (ui.keys >> WK[i] & 1u) || pl[i].on || cp[i].on;
+            uint16_t bg = p->type == PAD_EMPTY ? RGB(20, 20, 24) : lit ? ORCHID_C : ORCHID_DIM;
+            cv_rect(bx, by, 26, 14, bg);
+            if (p->title[0] && set.om_slice == OM_CHORDS)
+                cv_text(bx + (26 - text_w(&FONT_XS, p->title)) / 2, by, &FONT_XS, p->title, lit ? C_BLACK : C_WHITE);
+            else {
+                char n[4];
+                num_text((int32_t)i + 1, n, 0);
+                cv_text(bx + (26 - text_w(&FONT_XS, n)) / 2, by, &FONT_XS, n, lit ? C_BLACK : C_GRAY);
+            }
+        }
+        cv_blit(0, 0);
+    }
+
+    cv_begin(240, 120, C_BLACK);
+    if (ui.pad >= 0 && pads[ui.pad].type == PAD_PHRASE && song_bpb) {   /* the pad played last */
+        const pad_t *p = &pads[ui.pad];
+        str_set(t, "PAD ", sizeof t);
+        num_text(ui.pad + 1, t + 4, 0);
+        cv_text(10, 6, &FONT_XS, t, ORCHID_C);
+        fmt_len(pad_end(p) - p->ts, v[0]);
+        str_set(t, v[0], sizeof t);
+        text_cat(t, "  ");
+        num_text((int32_t)p->pn, t + cs_len(t), 0);
+        text_cat(t, p->pn == 1u ? " NOTE" : " NOTES");
+        cv_text(60, 6, &FONT_XS, t, C_WHITE);
+        if (p->title[0])
+            cv_text(230 - text_w(&FONT_XS, p->title), 6, &FONT_XS, p->title, AMBER);
+    } else
+        cv_text(10, 6, &FONT_XS, "HOLD HOME: FM MODE", C_DIM);
+    if (set.om_slice == OM_EQUAL || !nsl)
+        str_set(v[0], "-", sizeof v[0]);
+    else {
+        str_set(v[0], "", sizeof v[0]);
+        num_text((int32_t)first + 1, v[0], 0);
+    }
+    str_set(v[1], set.mode == MODE_LEAD ? "LEAD" : "ROOT", sizeof v[1]);
+    str_set(v[2], "BRIDGE", sizeof v[2]);
+    str_set(v[3], "CHORD", sizeof v[3]);
+    bottom_bar(68, LBL, v);
+    cv_blit(0, 120);
+}

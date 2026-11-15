@@ -1,6 +1,11 @@
 # ChordSmith FM in the host simulator: from base/, python3 tools/build.py ../app --host, then
 #   ../app/build/host/chordsmith_host ../app/tests/basic.txt ../app/build/host
 wait 600
+# FM mode (HOME held): these tests are FM mode's
+press HOME
+wait 900
+release HOME
+wait 30
 expect root 9
 expect scale 0
 shot boot.png

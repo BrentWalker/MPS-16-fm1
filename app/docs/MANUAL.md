@@ -37,7 +37,27 @@ start ChordSmith FM sets up its drive in the FM-1's spare flash.
 
 The first time ChordSmith starts, it opens **GUIDE**: twelve short pages, from playing chords to slicing a MIDI file.
 Turn **SELECT** for the next page. The keys and buttons a page talks about **blink**: press a blinking button to
-try it (that leaves the guide), and **hold HOME** to come back to the guide at any time. HOME on its own leaves it.
+try it (that leaves the guide), and **hold SYS** to come back to the guide at any time. HOME on its own leaves it.
+
+## ORCHID: play a MIDI file at once
+
+![ORCHID: Canon in D cut by CHORDS](img/screen-orchid.png)
+
+ChordSmith starts in **ORCHID**. Load a MIDI file and it's already on the 16 pads: no slicing to do.
+
+| Control | Turn it to choose |
+|---|---|
+| PRESET | How the file is cut: EQUAL (16 equal parts), BARS, 2 BARS, HITS (each new hit), CHORDS (each chord change, its name on the pad) |
+| K1 | Where in the song the 16 pads start: one slice a click |
+| K2 | The black keys 1-7: ROOT or LEAD (3RD and 5TH to come) |
+| K3 | The 4 extra black keys (to come: BRIDGE, SUGGESTED, OUTSIDE, RELATIVE) |
+| K4 | How the pads play (to come: CHORD, STRUM, ARP, SLOPPY, PERFORM) |
+
+The bar under the mode shows the whole song and the stretch of it on the pads.
+
+**Hold HOME** for **FM mode**: every other screen (SLICE, TRIM, LIB, KEY, FX, kits). HOME there shows a teal **FM**.
+The pads stay as ORCHID left them, to fine-tune. **Tap HOME** to come back to ORCHID, just as you left it: its
+own slices on the pads again. Pressing one of FM mode's screen buttons in ORCHID takes you to FM mode too.
 
 ## 2. Playing
 
@@ -94,8 +114,9 @@ phrases) and the degree keys.
 | SELECT | Pick a slice, a file or a library row |
 | K1 to K4 | What the screen's bottom bar says |
 | OCT- / OCT+ | The octave. Both together: the scale lock on or off |
-| HOME (hold) | GUIDE: the getting-started pages |
-| HOME | The pads. Leaves any screen |
+| HOME | ORCHID. Leaves any screen |
+| HOME (hold) | FM mode's HOME |
+| SYS (hold) | GUIDE: the getting-started pages |
 | SEL (SLICE) | SLICE; again, FILES |
 | ENV (TRIM) | Trim the pad played last |
 | LFO (LIB) | The chord library |
@@ -108,7 +129,7 @@ phrases) and the degree keys.
 | REC + PLAY | FIND: tap a few notes, pick a key that has them |
 | SEQ (MODE) | The black keys: ROOT or LEAD |
 
-On HOME, K1 is the strum, K2 the arp, K3 humanize and K4 the tempo.
+On FM mode's HOME, K1 is the strum, K2 the arp, K3 humanize and K4 the tempo, and PRESET the kit.
 
 ## 4. KEY
 
@@ -157,7 +178,7 @@ progressions on 9 to 16.
 ![The USB drive](img/screen-drive.png)
 
 **The USB drive**: press SYS. The FM-1 shows the computer a drive called CHORDSMITH (about 270 KB). Copy `.mid` files
-onto it, then eject it. There's no USB MIDI while the drive is on; HOME leaves drive mode.
+onto it, then eject it. There's no USB MIDI while the drive is on; HOME leaves drive mode. Press SYS briefly: held, it opens the guide.
 
 **REC**: press REC and play MIDI into the FM-1 (USB or the TRS jack). Press REC again: the recording is saved on the
 drive as RECnn.MID and opens in SLICE.

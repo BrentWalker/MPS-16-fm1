@@ -32,6 +32,10 @@ typedef struct {
     uint8_t mode;                        /* the black keys: MODE_ROOT or MODE_LEAD (SEQ switches) */
     uint8_t fmove;                       /* the key change F1 .. F4 in use, 0: the home key */
     uint8_t home;                        /* with one in use, the home key: root << 4 | scale */
+    uint8_t om_slice;                    /* ORCHID: how the file is cut (OM_*) */
+    uint8_t om_f4, om_play, om_rsv;      /* ORCHID: the 4 black keys, how pads play (to come) */
+    uint16_t om_start;                   /* ORCHID: the slice on pad 1 */
+    uint16_t om_rsv2;
 } settings_t;
 static settings_t set;
 static uint8_t set_dirty;
@@ -712,7 +716,7 @@ static void notes_off(uint32_t k)
 
 /* ================================================================= slicing === */
 /* the loaded file cut into slices, by its hits (where notes land together, the louder the likelier) or on a grid */
-#define MAXSL 64u
+#define MAXSL 128u
 static uint32_t sl_s[MAXSL], sl_e[MAXSL], nsl, sel;
 static uint8_t sl_mode;                  /* 0 hits, 1 grid */
 static uint8_t sl_sens = 55, sl_grid = 4;
@@ -951,6 +955,7 @@ static void settings_defaults(void)
     set.root = 9;                        /* A minor */
     set.kit = 1;
     set.arprate = 3;                     /* 1/16 */
+    set.om_slice = 1;                    /* ORCHID: BARS */
 }
 
 /* kits: KIT01.CSK .. KIT08.CSK on the drive, each the whole pad block (K) */
@@ -992,6 +997,9 @@ static int kit_load(uint32_t n)
     return 0;
 }
 
+static uint8_t orchid = 1;               /* ORCHID (1) or FM mode (0) */
+static void orchid_fill(void);
+
 static int file_load(int32_t i)
 {
     if (i < 0 || (uint32_t)i >= nfiles || fs_open(&files[i]) || smf_load()) {
@@ -1003,7 +1011,112 @@ static int file_load(int32_t i)
     tempo = set.bpm ? set.bpm : song_bpm;
     sel = 0;
     slice_auto();
+    if (orchid) {                        /* ORCHID: on the 16 pads at once, from the start */
+        set.om_start = 0;
+        orchid_fill();
+    }
     return 0;
+}
+
+
+/* ======================================================================= ORCHID === */
+/* ORCHID, the default: the file loaded is already on the 16 pads. PRESET picks how it's cut, K1 where in it the 16
+ * start. Hold HOME for FM mode (everything else), tap HOME to come back, as ORCHID was. */
+static void text_cat(char *t, const char *add);
+enum { OM_EQUAL, OM_BARS, OM_2BARS, OM_HITS, OM_CHORDS, OM_N };
+static const char *const OM_NAME[OM_N] = {"EQUAL", "BARS", "2 BARS", "HITS", "CHORDS"};
+static uint8_t om_root[MAXSL], om_qual[MAXSL];   /* CHORDS: each slice's chord (root, 0 major 1 minor) */
+
+/* CHORDS: a cut wherever the harmony changes, beat by beat: the major or minor triad that best fits the notes
+ * sounding in each beat (by how long they sound), runs of the same one a slice */
+static void chord_slices(void)
+{
+    uint32_t b, k, nb = (song_len + PPQ - 1u) / PPQ, cur = 0xFFu;
+    nsl = 0;
+    for (b = 0; b < nb && nsl < MAXSL; b++) {
+        uint32_t w[12] = {0}, t0 = b * PPQ, t1 = t0 + PPQ, best = 0xFFu, bs = 0, r, q, any = 0;
+        for (k = 0; k < song_n; k++) {
+            const note_t *n = &song[k];
+            uint32_t s = N_START(n), e = s + n->d;
+            if (s >= t1)
+                break;
+            if (e <= t0 || !note_used(n) || trk[N_TRK(n) % MAXTRK].drums)
+                continue;
+            w[n->p % 12u] += (e < t1 ? e : t1) - (s > t0 ? s : t0);
+            any = 1;
+        }
+        if (!any)
+            continue;                    /* a rest: the chord before carries on */
+        for (r = 0; r < 12u; r++)
+            for (q = 0; q < 2u; q++) {
+                uint32_t sc = 2u * w[r] + w[(r + (q ? 3u : 4u)) % 12u] + w[(r + 7u) % 12u];
+                if (sc > bs) {
+                    bs = sc;
+                    best = r << 1 | q;
+                }
+            }
+        if (best != cur) {
+            if (nsl)
+                sl_e[nsl - 1u] = t0;
+            sl_s[nsl] = t0;
+            om_root[nsl] = (uint8_t)(best >> 1);
+            om_qual[nsl] = (uint8_t)(best & 1u);
+            nsl++;
+            cur = best;
+        }
+    }
+    if (nsl)
+        sl_e[nsl - 1u] = song_len > sl_s[nsl - 1u] ? song_len : sl_s[nsl - 1u] + PPQ;
+}
+
+static uint32_t om_first(void)            /* the slice on pad 1 */
+{
+    uint32_t mx = nsl > 16u ? nsl - 16u : 0u;
+    return set.om_start < mx ? set.om_start : mx;
+}
+
+/* the 16 pads from the file, as PRESET and K1 say (no file: the key's chords, as always) */
+static void orchid_fill(void)
+{
+    uint32_t i, first;
+    if (!song_n)
+        return;
+    players_stop();
+    if (set.om_slice == OM_EQUAL) {
+        nsl = 0;
+        for (i = 0; i < 16u; i++) {
+            sl_s[nsl] = song_len * i / 16u;
+            sl_e[nsl] = song_len * (i + 1u) / 16u;
+            if (sl_e[nsl] > sl_s[nsl])
+                nsl++;
+        }
+    } else if (set.om_slice == OM_CHORDS)
+        chord_slices();
+    else {
+        sl_mode = set.om_slice != OM_HITS;
+        sl_grid = set.om_slice == OM_2BARS ? 5u : 4u;
+        slice_auto();
+    }
+    first = set.om_slice == OM_EQUAL ? 0u : om_first();
+    for (i = 0; i < 16u; i++) {
+        pad_t *p = &pads[i];
+        if (first + i < nsl) {
+            slice_to(first + i, i);
+            if (set.om_slice == OM_CHORDS) {   /* its chord's name on the pad */
+                char t[8];
+                pc_name(om_root[first + i], t);
+                if (om_qual[first + i])
+                    text_cat(t, "m");
+                str_set(p->title, t, sizeof p->title);
+            }
+        } else {
+            p->type = PAD_EMPTY;
+            p->pn = 0;
+            p->n = 0;
+            p->title[0] = 0;
+        }
+    }
+    sel = first;
 }
 
 static uint8_t first_boot;               /* no settings yet: GUIDE opens by itself */
@@ -1013,7 +1126,7 @@ void app_init(void)
     if (plat_store_load(OBJ_SETTINGS, &set, sizeof set) != (int)sizeof set || set.magic != SET_MAGIC
         || set.root > 11u || set.scale >= NSCALES || set.octave < -2 || set.octave > 2 || set.kit < 1u ||
         set.kit > NKITS || set.steps < -7 || set.steps > 7 || set.arp > 4u || set.arprate > 5u || set.human > 50u ||
-        set.inv < -3 || set.inv > 3 || set.strum > 100u)
+        set.inv < -3 || set.inv > 3 || set.strum > 100u || set.om_slice >= OM_N)
         settings_defaults();
     disk_init();
     kit_load(set.kit);
@@ -1036,7 +1149,7 @@ static struct {
     uint8_t f_hold;                      /* F1 .. F4 held (1 .. 4), 0 none */
     uint32_t f_at;                       /* when it went down */
     uint8_t guide_pg;                    /* GUIDE: the page */
-    uint32_t home_at;                    /* HOME went down then (0: up); held 0.8 s, GUIDE */
+    uint32_t home_at, sys_at;            /* HOME, SYS went down then (0: up; all ones: held) */
     uint8_t oct_mod;                     /* OCT held and used as a modifier: its release steps nothing */
     uint8_t screen, disk_state, trk_cur, fx_page;
     int32_t file_cur;
@@ -1600,6 +1713,8 @@ buttons:
             continue;                    /* the drive is the computer's until it ejects (or HOME) */
         if (ui.screen == SCR_GUIDE)
             ui.screen = SCR_HOME;        /* a button leaves the guide and does what it does */
+        if (orchid && (i == B_SEL || i == B_ENV || i == B_LFO || i == B_EDIT || i == B_FX))
+            orchid = 0;                  /* FM mode's own screens: FM mode */
         if ((i == B_PLAY && (btn & 1u << B_REC)) || (i == B_REC && (btn & 1u << B_PLAY))) {
             find_enter();                /* REC and PLAY together: FIND */
             ui.redraw = 1;
@@ -1671,8 +1786,7 @@ buttons:
             ui.screen = SCR_LIB;
             if (lib_sel >= lib_count())
                 lib_sel = 0;
-        } else if (i == B_GLO) {         /* SYS: the USB drive, for now */
-            disk_enter();
+        } else if (i == B_GLO) {         /* SYS: let go, the USB drive; held, GUIDE (below) */
         } else if (i == B_REC) {
             if (!rec_on) {
                 rec_n = 0;
@@ -1704,6 +1818,31 @@ buttons:
         int32_t es = plat_enc(EN_SELECT), k1 = plat_enc(EN_K1), k2 = plat_enc(EN_K2), k3 = plat_enc(EN_K3),
                 k4 = plat_enc(EN_K4);
         int32_t ek = plat_enc(EN_PRESET);
+        if (orchid && ui.screen == SCR_HOME) {   /* ORCHID's knobs */
+            if (ek) {                    /* PRESET: how the file is cut */
+                set.om_slice = (uint8_t)clamp(set.om_slice + ek, 0, OM_N - 1);
+                set.om_start = 0;
+                set_dirty = 1;
+                orchid_fill();
+                app_say("SLICE", OM_NAME[set.om_slice]);
+            }
+            if (k1 && set.om_slice != OM_EQUAL) {   /* K1: where in the file the 16 start */
+                int32_t mx = nsl > 16u ? (int32_t)nsl - 16 : 0;
+                int32_t st = clamp((int32_t)om_first() + k1, 0, mx);
+                if (st != (int32_t)set.om_start) {
+                    set.om_start = (uint16_t)st;
+                    set_dirty = 1;
+                    orchid_fill();
+                }
+            }
+            if (k2) {                    /* K2: the 7 black keys */
+                set.mode = (uint8_t)clamp(set.mode + k2, MODE_ROOT, MODE_LEAD);
+                set_dirty = 1;
+            }
+            if (ek || k1 || k2)
+                ui.redraw = 1;
+            ek = k1 = k2 = k3 = k4 = 0;
+        }
         if (ek) {                        /* KIT: the next kit, loaded at once (SAVE keeps changes first) */
             uint32_t nk = (uint32_t)clamp((int32_t)set.kit + ek, 1, (int32_t)NKITS);
             if (nk != set.kit) {
@@ -1868,16 +2007,39 @@ buttons:
                 ui.redraw = 1;
         }
     }
-    if (btn & 1u << B_HOME) {            /* HOME held: GUIDE */
-        uint32_t now = plat_ms();
-        if (!ui.home_at)
-            ui.home_at = now ? now : 1u;
-        else if (ui.home_at != 0xFFFFFFFFu && now - ui.home_at >= 800u) {
-            ui.home_at = 0xFFFFFFFFu;    /* once a hold */
-            guide_open();
+    {                                    /* HOME and SYS: a tap, or held 0.8 s */
+        uint32_t now = plat_ms(), j;
+        for (j = 0; j < 2u; j++) {
+            uint32_t b = j ? B_GLO : B_HOME, *at = j ? &ui.sys_at : &ui.home_at;
+            if (btn & 1u << b) {
+                if (!*at)
+                    *at = now ? now : 1u;
+                else if (*at != 0xFFFFFFFFu && now - *at >= 800u) {
+                    *at = 0xFFFFFFFFu;   /* once a hold */
+                    if (j)
+                        guide_open();    /* SYS held: GUIDE */
+                    else {               /* HOME held: FM mode's HOME (from ORCHID: as ORCHID left it) */
+                        if (orchid)
+                            app_say("FM MODE", "TAP HOME: ORCHID");
+                        orchid = 0;
+                        ui.screen = SCR_HOME;
+                    }
+                }
+            } else {
+                if (*at && *at != 0xFFFFFFFFu && ui.screen != SCR_GUIDE) {   /* a tap */
+                    if (j)
+                        disk_enter();
+                    else if (!orchid) {  /* HOME tapped in FM mode: ORCHID, as it was */
+                        orchid = 1;
+                        ui.screen = SCR_HOME;
+                        orchid_fill();
+                        app_say("ORCHID", OM_NAME[set.om_slice]);
+                    }
+                }
+                *at = 0;
+            }
         }
-    } else
-        ui.home_at = 0;
+    }
     if (keys != ui.keys || btn != ui.btn)
         ui.redraw = 1;
     ui.keys = keys;
@@ -2099,7 +2261,9 @@ static void draw_home(void)
             int32_t kx;
             kt[5] = (char)('0' + set.kit);
             kt[6] = 0;
-            kx = cv_text(10, 6, &FONT_XS, kt, C_WHITE);
+            cv_rect(4, 5, 24, 17, TEAL);   /* FM mode */
+            cv_text(8, 6, &FONT_XS, "FM", C_BLACK);
+            kx = cv_text(34, 6, &FONT_XS, kt, C_WHITE);
             if (cur_file >= 0)
                 cv_text(kx + 10, 6, &FONT_XS, files[cur_file].name, C_GRAY);
         }
@@ -2515,6 +2679,8 @@ void app_frame(void)
             draw_find();
         else if (ui.screen == SCR_GUIDE)
             draw_guide();
+        else if (orchid)
+            draw_orchid();
         else
             draw_home();
     }
@@ -2553,7 +2719,7 @@ static int web_import(uint32_t n)       /* (exported by web.c: the host blanks _
         ui.screen = SCR_FILES;
     } else {
         ui.file_cur = (int32_t)i;
-        ui.screen = SCR_SLICE;
+        ui.screen = orchid ? SCR_HOME : SCR_SLICE;   /* ORCHID: already on the pads */
         app_say("LOADED", shown);
     }
     ui.redraw = 1;
@@ -2647,7 +2813,15 @@ int app_expect(const char *what, int *got)
         const pad_t *p = &pads[ui.pad];
         *got = !strcmp(what, "trims") ? p->ts : !strcmp(what, "trime") ? (int)pad_end(p) : !strcmp(what, "trimtune")
                ? p->tune : !strcmp(what, "trimlevel") ? 100 - p->cut : p->pmode;
-    } else if (!strcmp(what, "guidepg"))
+    } else if (!strcmp(what, "orchid"))
+        *got = orchid;
+    else if (!strcmp(what, "omslice"))
+        *got = set.om_slice;
+    else if (!strcmp(what, "omstart"))
+        *got = (int)om_first();
+    else if (!strcmp(what, "nsl"))
+        *got = (int)nsl;
+    else if (!strcmp(what, "guidepg"))
         *got = ui.guide_pg;
     else if (!strcmp(what, "fmove"))
         *got = set.fmove;

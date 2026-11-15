@@ -1,0 +1,71 @@
+# ORCHID: the file loaded on the 16 pads at once; PRESET the slice mode, K1 the start; HOLD HOME: FM mode, tap: back
+wait 600
+# the guide opens the first time: HOME leaves it
+tap HOME
+wait 30
+expect orchid 1
+import ../app/tests/midi/canon.mid canon.mid
+load 0
+expect omslice 1
+expect padtype0 2
+expect padtype15 2
+wait 30
+shot orchid_bars.png
+# K1: Canon is 16 bars, so no further
+turn K1 1
+wait 30
+expect omstart 0
+# PRESET: HITS, back to the start
+turn PRESET 2
+wait 30
+expect omslice 3
+expect omstart 0
+expect padtype15 2
+# K1: one slice on
+turn K1 1
+wait 30
+expect omstart 1
+# CHORDS
+turn PRESET 1
+wait 30
+expect omslice 4
+key 0 down
+wait 40
+shot orchid_chords.png
+key 0 up
+# EQUAL: K1 does nothing
+turn PRESET -4
+wait 30
+expect omslice 0
+expect nsl 16
+turn K1 3
+wait 30
+expect omstart 0
+# K2: the black keys
+turn K2 1
+wait 30
+expect mode 1
+turn K2 -1
+wait 30
+# HOLD HOME: FM mode, as ORCHID left it; the pads stay till HOME is tapped
+turn PRESET 1
+wait 30
+press HOME
+wait 900
+release HOME
+wait 30
+expect orchid 0
+expect screen 0
+tap LFO
+wait 30
+expect screen 6
+tap HOME
+wait 50
+expect orchid 1
+expect omslice 1
+expect padtype0 2
+# FM's own screens take you to FM mode
+tap EDIT
+wait 30
+expect orchid 0
+expect screen 4

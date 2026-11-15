@@ -1,6 +1,11 @@
 # Milestone 2: MIDI files on the drive, slicing, phrase pads, REC. From base/:
 #   ../app/build/host/chordsmith_host ../app/tests/m2.txt ../app/build/host
 wait 600
+# FM mode (HOME held): these tests are FM mode's
+press HOME
+wait 900
+release HOME
+wait 30
 expect files 0
 # a computer copies two files on (as the USB drive would)
 import ../app/tests/midi/neosoul.mid neosoul.mid
@@ -54,7 +59,9 @@ key 7 up
 expect padtype4 1
 expect padtag4 3
 # HOME: a chord pad and a phrase pad
-tap HOME
+press HOME
+wait 900
+release HOME
 wait 30
 key 7 down
 wait 40

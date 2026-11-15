@@ -1,6 +1,11 @@
 # Milestone 4: the black keys in ROOT and LEAD modes (SEQ switches). From base/:
 #   ../app/build/host/chordsmith_host ../app/tests/m4.txt ../app/build/host
 wait 600
+# FM mode (HOME held): these tests are FM mode's
+press HOME
+wait 900
+release HOME
+wait 30
 expect mode 0
 import ../app/tests/midi/canon.mid canon.mid
 load 0
@@ -10,7 +15,9 @@ wait 50
 key 0 down
 wait 30
 key 0 up
-tap HOME
+press HOME
+wait 900
+release HOME
 wait 50
 # LEAD: SEQ
 tap SEQ
@@ -90,7 +97,9 @@ key 2 up
 wait 30
 expect trimmode 0
 shot trim_chord.png
-tap HOME
+press HOME
+wait 900
+release HOME
 wait 50
 # FIND: REC and PLAY together, tap D F# A B, the best key D major, into LIB
 press REC
@@ -135,7 +144,9 @@ expect screen 6
 expect root 2
 expect scale 1
 shot find_lib.png
-tap HOME
+press HOME
+wait 900
+release HOME
 wait 50
 # F1-F4: key changes from the home key (D major here)
 expect fmove 0

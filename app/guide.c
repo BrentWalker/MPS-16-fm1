@@ -1,5 +1,5 @@
 /* ChordSmith FM: GUIDE, the getting-started pages. Copyright (C) 2026 BeatSmith Media (BeatSmith). Licence: to be
- * chosen. Part of app.c. Hold HOME to open it (and it opens by itself the first time). SELECT turns the pages; the
+ * chosen. Part of app.c. Hold SYS to open it (and it opens by itself the first time). SELECT turns the pages; the
  * controls a page talks about blink, and pressing one of the buttons leaves the guide to do it. */
 
 #define GB(b) (1u << (b))
@@ -12,6 +12,10 @@ typedef struct {
 } gpage_t;
 static const gpage_t GUIDE[] = {
     {"WELCOME", "CHORDSMITH MAKES THE FM-1 A CHORD AND PHRASE SAMPLER. TURN SELECT FOR THE NEXT PAGE. HOME LEAVES.", 0,
+     0},
+    {"ORCHID", "LOAD A MIDI FILE: IT'S ON THE 16 PADS AT ONCE. PRESET: HOW IT'S CUT. K1: WHERE IN THE SONG. K2: THE BLACK KEYS.",
+     0, G_WHITE},
+    {"FM MODE", "HOLD HOME FOR FM MODE: EVERYTHING ELSE ON THE NEXT PAGES. TAP HOME TO COME BACK TO ORCHID.", GB(B_HOME),
      0},
     {"PLAY CHORDS", "THE WHITE KEYS ARE 16 PADS. EACH PLAYS A CHORD IN YOUR KEY. PLAY THEM NOW.", 0, G_WHITE},
     {"BASS AND LEAD", "BLACK KEYS 1-7 PLAY THE KEY'S NOTES. THE LIT BUTTON (MODE) SWITCHES THEM: BASS (ROOT) OR LEAD.",
@@ -28,7 +32,7 @@ static const gpage_t GUIDE[] = {
      GB(B_SEL), G_WHITE},
     {"TRIM A PAD", "PLAY A PAD, THEN THE LIT BUTTON (TRIM): ITS START, END, TUNE, LEVEL AND LOOP.", GB(B_ENV), 0},
     {"A BRIDGE", "THE LAST 4 BLACK KEYS CHANGE KEY. TAP ONE TO GO, TAP IT AGAIN TO COME HOME.", 0, G_FKEYS},
-    {"SAVE", "THE LIT BUTTON (SAVE) KEEPS YOUR PADS AND SETTINGS. HOLD HOME TO SEE THIS GUIDE AGAIN.", GB(B_SAVE),
+    {"SAVE", "THE LIT BUTTON (SAVE) KEEPS YOUR PADS AND SETTINGS. HOLD SYS TO SEE THIS GUIDE AGAIN.", GB(B_SAVE),
      0},
 };
 #define NGUIDE (sizeof GUIDE / sizeof GUIDE[0])
