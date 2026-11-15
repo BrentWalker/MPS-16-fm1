@@ -31,6 +31,15 @@ MIDI when the browser asks. Don't unplug the cable while it writes. From a termi
 To go back to the stock firmware, use the installer's last section with M-VAVE's own firmware file. On its first
 start MPS-16 ver FM1 sets up its drive in the FM-1's spare flash.
 
+## PROBE: what does this do?
+
+![PROBE on SURFACE's K4](img/screen-probe.png)
+
+**Hold ARP** and every control freezes and explains itself instead: turn a knob, press a button or touch a key and
+the screen shows its name, what it does, and what it does with OCT- or OCT+ held, for where you are (SURFACE, or the
+CORE screen you came from). Nothing changes while PROBE is on. The control you touched lights up. **Tap ARP or HOME**
+to leave.
+
 ## Getting started: GUIDE
 
 ![GUIDE](img/screen-guide.png)
@@ -143,6 +152,7 @@ phrases) and the degree keys.
 | HOME | SURFACE. Leaves any screen |
 | HOME (hold) | CORE's HOME |
 | SYS (hold) | GUIDE: the getting-started pages |
+| ARP (hold) | PROBE: every control says what it does |
 | SEL (SLICE) | SLICE; again, FILES |
 | ENV (TRIM) | Trim the pad played last |
 | LFO (LIB) | The chord library |

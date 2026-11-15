@@ -1520,7 +1520,9 @@ static struct {
     uint8_t f_hold;                      /* F1 .. F4 held (1 .. 4), 0 none */
     uint32_t f_at;                       /* when it went down */
     uint8_t guide_pg;                    /* GUIDE: the page */
-    uint32_t home_at, sys_at;            /* HOME, SYS went down then (0: up; all ones: held) */
+    uint32_t home_at, sys_at, arp_at;    /* HOME, SYS, ARP went down then (0: up; all ones: held) */
+    uint8_t probe, probe_from, probe_skip;   /* PROBE: on; the screen it came from; the hold's release to come */
+    int32_t probe_item;                  /* what was touched last (probe.c), -1 nothing */
     uint8_t oct_mod;                     /* OCT held and used as a modifier: its release steps nothing */
     uint8_t screen, disk_state, trk_cur, fx_page;
     int32_t file_cur;
@@ -2056,6 +2058,9 @@ static uint32_t fk_pivots(void)          /* held: the chord pads whose notes are
 }
 
 static void guide_open(void);           /* (guide.c) */
+static void probe_open(void);           /* (probe.c) */
+static void probe_input(uint32_t keys, uint32_t btn);
+static void probe_lights(void);
 static void guide_lights(void);
 static uint32_t guide_count(void);
 
@@ -2065,6 +2070,12 @@ static void input(void)
     int32_t e;
     touch_poll();
     keys = touch_keys();
+    if (ui.probe) {                      /* PROBE: everything frozen, saying what it does */
+        probe_input(keys, btn);
+        ui.keys = keys;
+        ui.btn = btn;
+        return;
+    }
     if (ui.screen == SCR_FIND) {
         find_keys(keys);
         goto buttons;
@@ -2280,7 +2291,10 @@ buttons:
         } else {
             static const char *const LABEL[NB] = {"FX", "SLICE", "TRIM", "LIB", "KEY", "SYS", "HOME", "SAVE",
                                                   "ARP", "MODE", "PLAY", "REC", "OCT-", "OCT+"};
-            app_say(LABEL[i], "COMING SOON");
+            if (i == B_ARP)
+                app_say("ARP", "HOLD IT: PROBE");
+            else
+                app_say(LABEL[i], "COMING SOON");
         }
         ui.redraw = 1;
     }
@@ -2551,6 +2565,15 @@ buttons:
     }
     {                                    /* HOME and SYS: a tap, or held 0.8 s */
         uint32_t now = plat_ms(), j;
+        if (btn & 1u << B_ARP) {         /* ARP held: PROBE */
+            if (!ui.arp_at)
+                ui.arp_at = now ? now : 1u;
+            else if (ui.arp_at != 0xFFFFFFFFu && now - ui.arp_at >= 800u) {
+                ui.arp_at = 0xFFFFFFFFu;
+                probe_open();
+            }
+        } else
+            ui.arp_at = 0;
         for (j = 0; j < 2u; j++) {
             uint32_t b = j ? B_GLO : B_HOME, *at = j ? &ui.sys_at : &ui.home_at;
             if (btn & 1u << b) {
@@ -2676,6 +2699,10 @@ static void lead_update(void)
 static void lights(void)
 {
     uint32_t i, bright = 0, dim = 0, btn = 0, mid = 0;
+    if (ui.probe) {
+        probe_lights();
+        return;
+    }
     if (ui.screen == SCR_GUIDE) {
         guide_lights();
         return;
@@ -3169,6 +3196,7 @@ static void draw_disk(void)
 
 #include "screens.c"                     /* KEY, FX, LIB, TRIM */
 #include "guide.c"                       /* GUIDE */
+#include "probe.c"                       /* PROBE */
 
 void app_ui_init(void)
 {
@@ -3208,7 +3236,9 @@ void app_frame(void)
     }
     if (ui.redraw) {
         ui.redraw = 0;
-        if (ui.screen == SCR_SLICE)
+        if (ui.probe)
+            draw_probe();
+        else if (ui.screen == SCR_SLICE)
             draw_slice();
         else if (ui.screen == SCR_FILES)
             draw_files();
@@ -3360,7 +3390,11 @@ int app_expect(const char *what, int *got)
         const pad_t *p = &pads[ui.pad];
         *got = !strcmp(what, "trims") ? p->ts : !strcmp(what, "trime") ? (int)pad_end(p) : !strcmp(what, "trimtune")
                ? p->tune : !strcmp(what, "trimlevel") ? 100 - p->cut : p->pmode;
-    } else if (!strncmp(what, "pid", 3))   /* pidN: pad N's chord as CHORDS found it */
+    } else if (!strcmp(what, "probe"))
+        *got = ui.probe;
+    else if (!strcmp(what, "probeitem"))
+        *got = ui.probe_item;
+    else if (!strncmp(what, "pid", 3))   /* pidN: pad N's chord as CHORDS found it */
         *got = om_pid[atoi(what + 3) % 16];
     else if (!strcmp(what, "ommut"))
         *got = set.om_mut;

@@ -1,0 +1,62 @@
+# PROBE: hold ARP; everything frozen, saying what it does; ARP tapped or HOME: out
+wait 600
+tap HOME
+wait 30
+import ../app/tests/midi/canon.mid canon.mid
+load 0
+wait 30
+press ARP
+wait 900
+release ARP
+wait 30
+expect probe 1
+shot probe_empty.png
+turn K4 2
+wait 30
+expect probeitem 26
+expect omplay 0
+shot probe_k4.png
+tap SAVE
+wait 30
+expect probeitem 7
+key 0 down
+wait 30
+key 0 up
+wait 30
+expect probeitem 32
+expect playing0 0
+key 25 down
+wait 30
+key 25 up
+wait 30
+shot probe_fkey.png
+turn ALGO 1
+wait 30
+expect omlen 0
+shot probe_algo.png
+tap ARP
+wait 30
+expect probe 0
+expect screen 0
+# from CORE's TRIM: the knobs say TRIM's
+press HOME
+wait 900
+release HOME
+wait 30
+key 0 down
+wait 30
+key 0 up
+tap ENV
+wait 30
+expect screen 7
+press ARP
+wait 900
+release ARP
+wait 30
+turn K3 1
+wait 30
+shot probe_trim.png
+tap HOME
+wait 30
+expect probe 0
+expect screen 7
