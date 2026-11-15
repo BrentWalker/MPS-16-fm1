@@ -2312,7 +2312,7 @@ buttons:
                         guide_open();    /* SYS held: GUIDE */
                     else {               /* HOME held: FM mode's HOME (from ORCHID: as ORCHID left it) */
                         if (orchid)
-                            app_say("FM MODE", "TAP HOME: ORCHID");
+                            app_say("CORE", "TAP HOME: SURFACE");
                         orchid = 0;
                         ui.screen = SCR_HOME;
                     }
@@ -2326,7 +2326,7 @@ buttons:
                         ui.screen = SCR_HOME;
                         om_apply();
                         orchid_fill();
-                        app_say("ORCHID", OM_NAME[set.om_slice]);
+                        app_say("SURFACE", OM_NAME[set.om_slice]);
                     }
                 }
                 *at = 0;
@@ -2487,6 +2487,9 @@ static void lights(void)
 }
 
 /* ------------------------------------------------------------------ drawing --- */
+/* the Earth Science elements: Earth #B5956B, Air #87CEEB, Fire #CD7F7F, Water #6BB6D6 */
+static const uint16_t EARTH_C = RGB(0xB5, 0x95, 0x6B), AIR_C = RGB(0x87, 0xCE, 0xEB), FIRE_C = RGB(0xCD, 0x7F, 0x7F),
+                      WATER_C = RGB(0x6B, 0xB6, 0xD6);
 static const uint16_t AMBER = RGB(242, 181, 82), AMBER_DIM = RGB(122, 90, 46), TEAL = RGB(79, 179, 166),
                       TEAL_DIM = RGB(31, 74, 69), REDC = RGB(224, 68, 60);
 
@@ -2554,9 +2557,10 @@ static void draw_home(void)
             int32_t kx;
             kt[5] = (char)('0' + set.kit);
             kt[6] = 0;
-            cv_rect(4, 5, 24, 17, TEAL);   /* FM mode */
-            cv_text(8, 6, &FONT_XS, "FM", C_BLACK);
-            kx = cv_text(34, 6, &FONT_XS, kt, C_WHITE);
+            int32_t cw = text_w(&FONT_XS, "CORE");
+            cv_rect(4, 5, cw + 10, 17, EARTH_C);   /* CORE (FM mode): Earth */
+            cv_text(9, 6, &FONT_XS, "CORE", C_BLACK);
+            kx = cv_text(cw + 20, 6, &FONT_XS, kt, C_WHITE);
             if (cur_file >= 0)
                 cv_text(kx + 10, 6, &FONT_XS, files[cur_file].name, C_GRAY);
         }

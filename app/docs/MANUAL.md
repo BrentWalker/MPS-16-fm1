@@ -39,11 +39,11 @@ The first time ChordSmith starts, it opens **GUIDE**: twelve short pages, from p
 Turn **SELECT** for the next page. The keys and buttons a page talks about **blink**: press a blinking button to
 try it (that leaves the guide), and **hold SYS** to come back to the guide at any time. HOME on its own leaves it.
 
-## ORCHID: play a MIDI file at once
+## SURFACE: play a MIDI file at once
 
-![ORCHID: Canon in D cut by CHORDS](img/screen-orchid.png)
+![SURFACE: Canon in D cut by CHORDS](img/screen-orchid.png)
 
-ChordSmith starts in **ORCHID**. Load a MIDI file and it's already on the 16 pads: no slicing to do.
+ChordSmith starts in **SURFACE**. Load a MIDI file and it's already on the 16 pads: no slicing to do.
 
 | Control | Turn it to choose |
 |---|---|
@@ -57,17 +57,17 @@ ChordSmith starts in **ORCHID**. Load a MIDI file and it's already on the 16 pad
 and PERFORM. **Hold OCT+ and turn K4**: the voicing: ROOT POS, INV 1-3, WIDE (every other note up an octave),
 RANDOM (new each press). Neither moves the octave.
 
-**ALGORITHM** in ORCHID is the **note length**: left shorter (down to 10%, tight stabs), the middle as played, right
+**ALGORITHM** in SURFACE is the **note length**: left shorter (down to 10%, tight stabs), the middle as played, right
 longer (up to 450%, then LEGATO: each note on to the next). It shapes the slices and PERFORM's hits. **Hold OCT- and
 turn ALGORITHM**: the **slice length**, each slice from its start x1/4, x1/2, as cut, x2 or x4. **Hold OCT+ and turn
 ALGORITHM**: the **velocity curve**: the middle as played, left softer, right harder. The three show under the pad
-played. (In FM mode ALGORITHM is still the key's root.)
+played. (In CORE, ALGORITHM is still the key's root.)
 
 The bar under the mode shows the whole song and the stretch of it on the pads.
 
-**Hold HOME** for **FM mode**: every other screen (SLICE, TRIM, LIB, KEY, FX, kits). HOME there shows a teal **FM**.
-The pads stay as ORCHID left them, to fine-tune. **Tap HOME** to come back to ORCHID, just as you left it: its
-own slices on the pads again. Pressing one of FM mode's screen buttons in ORCHID takes you to FM mode too.
+**Hold HOME** for **CORE**: every other screen (SLICE, TRIM, LIB, KEY, FX, kits). HOME there shows an Earth-brown **CORE** badge (SURFACE's is sky blue).
+The pads stay as SURFACE left them, to fine-tune. **Tap HOME** to come back to SURFACE, just as you left it: its
+own slices on the pads again. Pressing one of CORE's screen buttons in SURFACE takes you to CORE too.
 
 ## 2. Playing
 
@@ -124,8 +124,8 @@ phrases) and the degree keys.
 | SELECT | Pick a slice, a file or a library row |
 | K1 to K4 | What the screen's bottom bar says |
 | OCT- / OCT+ | The octave. Both together: the scale lock on or off |
-| HOME | ORCHID. Leaves any screen |
-| HOME (hold) | FM mode's HOME |
+| HOME | SURFACE. Leaves any screen |
+| HOME (hold) | CORE's HOME |
 | SYS (hold) | GUIDE: the getting-started pages |
 | SEL (SLICE) | SLICE; again, FILES |
 | ENV (TRIM) | Trim the pad played last |
@@ -139,7 +139,7 @@ phrases) and the degree keys.
 | REC + PLAY | FIND: tap a few notes, pick a key that has them |
 | SEQ (MODE) | The black keys: ROOT or LEAD |
 
-On FM mode's HOME, K1 is the strum, K2 the arp, K3 humanize and K4 the tempo, and PRESET the kit.
+On CORE's HOME, K1 is the strum, K2 the arp, K3 humanize and K4 the tempo, and PRESET the kit.
 
 ## 4. KEY
 

@@ -334,7 +334,7 @@ static void draw_find(void)
 
 /* ORCHID: the mode in its own colour; how the file is cut and where; the song with the 16 pads' stretch of it; the
  * 16 pads (a chord's name on each with CHORDS); K1-K4 */
-static const uint16_t ORCHID_C = RGB(206, 120, 222), ORCHID_DIM = RGB(70, 40, 78);
+static const uint16_t ORCHID_C = RGB(0x6B, 0xB6, 0xD6), ORCHID_DIM = RGB(26, 56, 70);   /* SURFACE's Water */
 static void draw_orchid(void)
 {
     static const char *const LBL[4] = {"START", "BLACK 7", "BLACK 4", "PLAY"};
@@ -346,8 +346,8 @@ static void draw_orchid(void)
         top_bar(0, 0, 0);
     else {
         top_bar(0, 0, 0);
-        cv_rect(4, 5, text_w(&FONT_XS, "ORCHID") + 10, 17, ORCHID_C);
-        x = cv_text(9, 6, &FONT_XS, "ORCHID", C_BLACK);
+        cv_rect(4, 5, text_w(&FONT_XS, "SURFACE") + 10, 17, AIR_C);   /* SURFACE: Air */
+        x = cv_text(9, 6, &FONT_XS, "SURFACE", C_BLACK);
         if (cur_file >= 0)
             cv_text(x + 10, 6, &FONT_XS, files[cur_file].name, C_GRAY);
         key_text(t);
@@ -413,7 +413,7 @@ static void draw_orchid(void)
         if (p->title[0])
             cv_text(230 - text_w(&FONT_XS, p->title), 6, &FONT_XS, p->title, AMBER);
     } else
-        cv_text(10, 6, &FONT_XS, "HOLD HOME: FM MODE", C_DIM);
+        cv_text(10, 6, &FONT_XS, "HOLD HOME: CORE", C_DIM);
     {                                    /* ALGORITHM's three: the notes' length, the slices', the velocity curve */
         static const char *const SL[5] = {"1/4", "1/2", "AS CUT", "X2", "X4"};
         char c[6];
