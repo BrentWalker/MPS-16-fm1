@@ -35,11 +35,11 @@ jobs:
         python3 -c "from PIL import features; assert features.check('raqm'), 'Pillow without raqm'"
         mkdir -p build/release-assets
         ./build.sh --release "${{ inputs.version }}"
-        cp "app/build/mps16-${{ inputs.version }}.fwsc" build/release-assets/
+        cp "app/build/mps-16-${{ inputs.version }}.fwsc" build/release-assets/
         cp app/build/firmware.json build/release-assets/
       test: |
         set -euo pipefail
-        [ -f "app/build/mps16-${{ inputs.version }}.fwsc" ]
+        [ -f "app/build/mps-16-${{ inputs.version }}.fwsc" ]
         sh tests/run_tests.sh
       packages: build/release-assets/*
 
@@ -71,7 +71,7 @@ jobs:
           "$RUNNER_TEMP/emsdk/emsdk" install 6.0.10
           "$RUNNER_TEMP/emsdk/emsdk" activate 6.0.10
           set +u; source "$RUNNER_TEMP/emsdk/emsdk_env.sh"; set -u
-          pkg=$(find build/attested -name 'mps16*.fwsc' | head -1)
+          pkg=$(find build/attested -name 'mps-16*.fwsc' | head -1)
           test -n "$pkg"
           ./build.sh --web --release "$VERSION"
           python3 base/tools/make_site.py app "$pkg" "$VERSION" app/build/site

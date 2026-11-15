@@ -1,5 +1,5 @@
 # Milestone 3: kits on the drive, the KEY screen and scale lock, chord FX, the library. From base/:
-#   ../app/build/host/mps16_host ../app/tests/m3.txt ../app/build/host
+#   ../app/build/host/mps-16_host ../app/tests/m3.txt ../app/build/host
 wait 600
 # FM mode (HOME held): these tests are FM mode's
 press HOME

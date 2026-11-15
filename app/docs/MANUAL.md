@@ -26,7 +26,7 @@ To try it first, open the emulator in a browser. It runs the same code, with sou
 
 To install it, use Chrome or Edge on a computer. Connect the FM-1 by USB, open the installer and press Install. Allow
 MIDI when the browser asks. Don't unplug the cable while it writes. From a terminal:
-`python3 tools/fm1_install.py mps16-VERSION.fwsc`.
+`python3 tools/fm1_install.py mps-16-VERSION.fwsc`.
 
 To go back to the stock firmware, use the installer's last section with M-VAVE's own firmware file. On its first
 start MPS-16 ver FM1 sets up its drive in the FM-1's spare flash.

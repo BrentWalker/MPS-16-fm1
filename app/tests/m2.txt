@@ -1,5 +1,5 @@
 # Milestone 2: MIDI files on the drive, slicing, phrase pads, REC. From base/:
-#   ../app/build/host/mps16_host ../app/tests/m2.txt ../app/build/host
+#   ../app/build/host/mps-16_host ../app/tests/m2.txt ../app/build/host
 wait 600
 # FM mode (HOME held): these tests are FM mode's
 press HOME

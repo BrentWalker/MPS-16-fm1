@@ -1,5 +1,5 @@
 # MPS-16 ver FM1 in the host simulator: from base/, python3 tools/build.py ../app --host, then
-#   ../app/build/host/mps16_host ../app/tests/basic.txt ../app/build/host
+#   ../app/build/host/mps-16_host ../app/tests/basic.txt ../app/build/host
 wait 600
 # FM mode (HOME held): these tests are FM mode's
 press HOME

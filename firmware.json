@@ -1,36 +1,20 @@
 {
   "schema": 1,
-  "id": "mps16",
+  "id": "mps-16",
   "name": "MPS-16 ver FM1",
   "author": "Brent Walker (BeatSmith)",
   "license": "LicenseRef-MPS16-TBD",
-  "tagline": "a MIDI phrase sampler on 16 pads",
+  "tagline": "ver FM1, a MIDI phrase sampler for the M-VAVE FM-1",
   "description": "A MIDI phrase sampler in the Earth Science family. Load a MIDI file and it is on the 16 pads at once, sliced by bars, hits or chord changes; play the slices as recorded or as chords, strummed, arpeggiated or in rhythm, mutate repeated chords, and play bass, lead and key changes on the black keys. Early development.",
-  "tags": [
-    "chords",
-    "synth",
-    "midi"
-  ],
+  "tags": ["chords", "sampler", "midi"],
   "install": "https://github.com/BrentWalker/chordsmith-fm",
   "site": "https://github.com/BrentWalker/chordsmith-fm",
   "source": "https://github.com/BrentWalker/chordsmith-fm",
   "screenshot": "docs/img/screen-playing.png",
   "hardware": {
-    "models": [
-      "FM-1"
-    ],
-    "flash": [
-      "856014",
-      "B36014"
-    ],
-    "features": [
-      "usb-audio-in",
-      "usb-audio-out",
-      "usb-disk",
-      "velocity",
-      "pressure",
-      "screen-reader"
-    ]
+    "models": ["FM-1"],
+    "flash": ["856014", "B36014"],
+    "features": ["usb-audio-in", "usb-audio-out", "usb-disk", "velocity", "pressure", "screen-reader"]
   },
   "credits": "Built on fm1-base by Charles Vestal and felucca-bsp by Leo Kuroshita."
 }
