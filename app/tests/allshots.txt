@@ -98,6 +98,9 @@ tap HOME
 wait 30
 tap GLO
 wait 60
+shot s16a_midi.png
+turn K4 1
+wait 60
 shot s16_drive.png
 tap HOME
 wait 2000

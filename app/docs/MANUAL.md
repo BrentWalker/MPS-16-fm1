@@ -166,7 +166,7 @@ phrases) and the degree keys.
 | LFO (LIB) | The chord library |
 | EDIT (KEY) | The key screen |
 | FX | Chord FX; again, the second page |
-| GLO (SYS) | The USB drive |
+| GLO (SYS) | The MIDI page: each pad group's channel, and the USB drive on K4 |
 | SAVE | Save the settings and the kit |
 | PLAY | In SLICE and LIB, hear the selection; in KEY, detect the file's key; elsewhere, all notes off |
 | REC | Record MIDI coming in, again to stop and save it |
@@ -221,8 +221,8 @@ progressions on 9 to 16.
 
 ![The USB drive](img/screen-drive.png)
 
-**The USB drive**: press SYS. The FM-1 shows the computer a drive called MPS-16 (about 270 KB). Copy `.mid` files
-onto it, then eject it. There's no USB MIDI while the drive is on; HOME leaves drive mode. Press SYS briefly: held, it opens the guide.
+**The USB drive**: tap SYS for the MIDI page, then turn K4 right. The FM-1 shows the computer a drive called MPS-16 (about 270 KB). Copy `.mid` files
+onto it, then eject it. There's no USB MIDI while the drive is on; HOME leaves drive mode. Tap SYS: held, it opens the guide.
 
 **REC**: press REC and play MIDI into the FM-1 (USB or the TRS jack). Press REC again: the recording is saved on the
 drive as RECnn.MID and opens in SLICE.
@@ -264,7 +264,10 @@ leaves the old kit's changes unsaved.
 
 ## 11. MIDI and sound
 
-Every note goes out over USB MIDI on channel 1. MIDI in from USB or the TRS jack plays the built-in synth, a simple
+**Each pad group has its own MIDI channel**, out over USB: the **A pads on channel 1**, the **B pads on 2**, the
+**C pads on 3**. Tap **SYS** for the MIDI page: **K1, K2 and K3** change the A, B and C channels (1 to 16). Your
+gear or DAW can then give each group its own sound: the A pads your keys or sample, the B pads your bass. (The FM-1's
+TRS jack is MIDI in only, so MIDI goes out over USB.) MIDI in from USB or the TRS jack plays the built-in synth, a simple
 twelve-voice sound for now. MASTER is the volume.
 
 ## 12. Troubleshooting

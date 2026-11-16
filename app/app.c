@@ -43,7 +43,10 @@ typedef struct {
     uint8_t om_mlvl;                     /* OCT- and SELECT: which repeats: 0 each, 1 every other, 2 all (the first too) */
     uint8_t om_seed;                     /* OCT+ and SELECT: MIX's roll */
     uint8_t om_rsv;
+    uint8_t ch[3];                       /* MIDI out channels, 0 .. 15: the A pads, the B pads, the C pads */
+    uint8_t ch_rsv;
 } settings_t;
+#define SET_OLD_SIZE (sizeof(settings_t) - 4u)   /* before the channels: still loaded, the channels then 1, 2, 3 */
 static settings_t set;
 static uint8_t set_dirty;
 
@@ -465,15 +468,19 @@ static int8_t mshift[NPADS + 1][12];
 static uint8_t mext_n[NPADS + 1], mext_m[NPADS + 1][4];
 static player_t pl[NPADS + 1];
 
+/* MIDI out: each pad group on its own channel (set.ch: A, B, C); the A pads' players use out_on, out_off */
+static uint8_t ch_a_on;                  /* the channel the A pads' sounding notes went out on */
+static uint8_t ch_last;                  /* the channel the last note-on went out on (tests) */
 static void out_on(uint32_t m, uint32_t v)
 {
     voice_on(m, v);
-    plat_midi_send(0x09u | 0x90u << 8 | m << 16 | v << 24, TO_USB);
+    ch_a_on = ch_last = set.ch[0] & 15u;
+    plat_midi_send(0x09u | (0x90u | ch_a_on) << 8 | m << 16 | v << 24, TO_USB);
 }
 static void out_off(uint32_t m)
 {
     voice_off(m);
-    plat_midi_send(0x08u | 0x80u << 8 | m << 16, TO_USB);
+    plat_midi_send(0x08u | (0x80u | ch_a_on) << 8 | m << 16, TO_USB);
 }
 
 static void pl_release(uint32_t i)
@@ -827,21 +834,30 @@ void app_panic(void)
 /* ============================================================== note out === */
 /* what each held key sounds, so its release ends exactly those notes (the key or octave may change meanwhile) */
 typedef struct {
-    uint8_t n;
+    uint8_t n, ch;                       /* ch: the MIDI channel they went out on */
     uint8_t note[MAXN];
 } held_t;
 static held_t held[NKEYS];
 
+static uint32_t key_group(uint32_t k)    /* a key's pad group: 0 A (white), 1 B (black 1-7), 2 C (the last 4) */
+{
+    uint32_t j;
+    for (j = 0; j < 11u; j++)
+        if (BK[j] == k)
+            return j < 7u ? 1u : 2u;
+    return 0;
+}
 static void notes_on(uint32_t k, const uint8_t *notes, uint32_t n, uint32_t vel)
 {
     uint32_t i;
     held_t *h = &held[k];
     h->n = 0;
+    h->ch = ch_last = (uint8_t)(set.ch[key_group(k)] & 15u);
     for (i = 0; i < n && i < MAXN; i++) {
         int32_t m = clamp(keyed((int32_t)notes[i] + 12 * set.octave), 0, 127);
         h->note[h->n++] = (uint8_t)m;
         ev_push(QE_ON, (uint32_t)m, vel);
-        plat_midi_send(0x09u | 0x90u << 8 | (uint32_t)m << 16 | vel << 24, TO_USB);
+        plat_midi_send(0x09u | (0x90u | h->ch) << 8 | (uint32_t)m << 16 | vel << 24, TO_USB);
     }
 }
 static void notes_off(uint32_t k)
@@ -850,7 +866,7 @@ static void notes_off(uint32_t k)
     held_t *h = &held[k];
     for (i = 0; i < h->n; i++) {
         ev_push(QE_OFF, h->note[i], 0);
-        plat_midi_send(0x08u | 0x80u << 8 | (uint32_t)h->note[i] << 16, TO_USB);
+        plat_midi_send(0x08u | (0x80u | h->ch) << 8 | (uint32_t)h->note[i] << 16, TO_USB);
     }
     h->n = 0;
 }
@@ -1105,6 +1121,9 @@ static void settings_defaults(void)
     set.arprate = 3;                     /* 1/16 */
     set.om_slice = 1;                    /* ORCHID: BARS */
     set.om_amt = 4;
+    set.ch[0] = 0;                       /* MIDI: A pads on 1, B pads on 2, C pads on 3 */
+    set.ch[1] = 1;
+    set.ch[2] = 2;
 }
 
 /* kits: KIT01.CSK .. KIT08.CSK on the drive, each the whole pad block (K) */
@@ -1544,8 +1563,24 @@ static void orchid_fill_(void)
 static uint8_t first_boot;               /* no settings yet: GUIDE opens by itself */
 void app_init(void)
 {
-    first_boot = plat_store_load(OBJ_SETTINGS, &set, sizeof set) != (int)sizeof set;
-    if (plat_store_load(OBJ_SETTINGS, &set, sizeof set) != (int)sizeof set || set.magic != SET_MAGIC
+    {
+        int got = plat_store_load(OBJ_SETTINGS, &set, sizeof set);
+        first_boot = got != (int)sizeof set && got != (int)SET_OLD_SIZE;
+        if (got == (int)SET_OLD_SIZE) {  /* saved before the MIDI channels: kept, the channels their defaults */
+            set.ch[0] = 0;
+            set.ch[1] = 1;
+            set.ch[2] = 2;
+            set.ch_rsv = 0;
+            set_dirty = 1;
+        } else if (got != (int)sizeof set)
+            set.magic = 0;
+    }
+    if (set.ch[0] > 15u || set.ch[1] > 15u || set.ch[2] > 15u) {
+        set.ch[0] = 0;
+        set.ch[1] = 1;
+        set.ch[2] = 2;
+    }
+    if (set.magic != SET_MAGIC
         || set.root > 11u || set.scale >= NSCALES || set.octave < -2 || set.octave > 2 || set.kit < 1u ||
         set.kit > NKITS || set.steps < -7 || set.steps > 7 || set.arp > 4u || set.arprate > 5u || set.human > 50u ||
         set.inv < -3 || set.inv > 3 || set.strum > 100u || set.om_slice >= OM_N)
@@ -1567,7 +1602,7 @@ void app_init(void)
 }
 
 /* ======================================================================= UI === */
-enum { SCR_HOME, SCR_SLICE, SCR_FILES, SCR_DISK, SCR_KEY, SCR_FX, SCR_LIB, SCR_TRIM, SCR_FIND, SCR_GUIDE };
+enum { SCR_HOME, SCR_SLICE, SCR_FILES, SCR_DISK, SCR_KEY, SCR_FX, SCR_LIB, SCR_TRIM, SCR_FIND, SCR_GUIDE, SCR_MIDI };
 static struct {
     char msg[2][24];
     uint32_t msg_until;
@@ -2258,6 +2293,11 @@ buttons:
         }
         if (!down)
             continue;
+        if (ui.screen == SCR_MIDI && i == B_HOME) {   /* HOME: back from the MIDI page */
+            ui.screen = SCR_HOME;
+            ui.redraw = 1;
+            continue;
+        }
         if (ui.screen == SCR_DISK && i != B_HOME)
             continue;                    /* the drive is the computer's until it ejects (or HOME) */
         if (ui.screen == SCR_GUIDE)
@@ -2602,6 +2642,21 @@ buttons:
             }
             if (es || k1 || k2 || k3 || k4)
                 ui.redraw = 1;
+        } else if (ui.screen == SCR_MIDI) {   /* K1-K3: the A, B and C pads' channels; K4 right: the USB drive */
+            int32_t kk[3] = {k1, k2, k3};
+            uint32_t g;
+            for (g = 0; g < 3u; g++)
+                if (kk[g]) {
+                    uint32_t q;
+                    players_stop();      /* nothing left sounding on the old channel */
+                    for (q = 0; q < NKEYS; q++)
+                        notes_off(q);
+                    set.ch[g] = (uint8_t)clamp((int32_t)set.ch[g] + kk[g], 0, 15);
+                    set_dirty = 1;
+                    ui.redraw = 1;
+                }
+            if (k4 > 0)
+                disk_enter();
         } else if (ui.screen == SCR_FILES) {
             if (es && nfiles) {
                 ui.file_cur = clamp(ui.file_cur + es, 0, (int32_t)nfiles - 1);
@@ -2649,8 +2704,10 @@ buttons:
                 }
             } else {
                 if (*at && *at != 0xFFFFFFFFu && ui.screen != SCR_GUIDE) {   /* a tap */
-                    if (j)
-                        disk_enter();
+                    if (j) {             /* SYS tapped: the MIDI page (the USB drive is on its K4) */
+                        ui.screen = SCR_MIDI;
+                        ui.redraw = 1;
+                    }
                     else if (!orchid) {  /* HOME tapped in FM mode: ORCHID, as it was */
                         orchid = 1;
                         ui.screen = SCR_HOME;
@@ -2814,7 +2871,7 @@ static void lights(void)
         btn |= 1u << B_SAVE;
     if (rec_on)
         btn |= 1u << B_REC;
-    btn |= 1u << (ui.screen == SCR_SLICE || ui.screen == SCR_FILES ? B_SEL : ui.screen == SCR_DISK ? B_GLO
+    btn |= 1u << (ui.screen == SCR_SLICE || ui.screen == SCR_FILES ? B_SEL : ui.screen == SCR_DISK || ui.screen == SCR_MIDI ? B_GLO
                   : ui.screen == SCR_KEY ? B_EDIT : ui.screen == SCR_FX ? B_FX : ui.screen == SCR_LIB ? B_LFO : ui.screen == SCR_TRIM ? B_ENV : B_HOME);
     plat_lights(btn | ui.btn, bright, 0, dim, 1);
     plat_lights_mid(0, mid);
@@ -3254,6 +3311,35 @@ static void draw_files(void)
     cv_blit(0, 120);
 }
 
+/* MIDI: where each pad group's notes go out (USB), and the way to the USB drive */
+static void draw_midi(void)
+{
+    static const char *const G[3] = {"A PADS", "B PADS", "C PADS"};
+    static const char *const W[3] = {"CHORDS, PHRASES", "BASS, LEAD", "EXTRAS"};
+    const uint16_t EL[3] = {WATER_C, EARTH_C, AIR_C};
+    uint32_t i, h;
+    for (h = 0; h < 2u; h++) {
+        int32_t dy = (int32_t)h * 120;
+        lab_begin();
+        if (!h)
+            top_bar("MIDI", "OUT: USB", C_GRAY);
+        for (i = 0; i < 3u; i++) {       /* a row a group: its name, what it plays, its channel big */
+            char c[8] = "CH ";
+            int32_t y = 32 + (int32_t)i * 50 - dy;
+            num_text((int32_t)set.ch[i] + 1, c + 3, 0);
+            cv_text(8, y, &FONT_XS, i == 0 ? "K1" : i == 1 ? "K2" : "K3", LAB_LABEL);
+            cv_text(30, y - 2, &FONT_M, G[i], EL[i]);
+            cv_text(30, y + 22, &FONT_B, W[i], C_GRAY);
+            cv_text(234 - text_w(&FONT_L, c), y + 2, &FONT_L, c, C_WHITE);
+            cv_rect(8, y + 44, 224, 1, C_LINE);
+        }
+        cv_text(8, 188 - dy, &FONT_XS, "K4", LAB_LABEL);
+        cv_text(30, 184 - dy, &FONT_M, "USB DRIVE", C_WHITE);
+        cv_text(30, 208 - dy, &FONT_B, "TURN K4 RIGHT", C_GRAY);
+        cv_blit(0, h * 120u);
+    }
+}
+
 static void draw_disk(void)
 {
     const char *st = ui.disk_state == PLAT_DISK_MOUNTED ? "CONNECTED" : "WAITING FOR A COMPUTER";
@@ -3367,6 +3453,8 @@ void app_frame(void)
             draw_files();
         else if (ui.screen == SCR_DISK)
             draw_disk();
+        else if (ui.screen == SCR_MIDI)
+            draw_midi();
         else if (ui.screen == SCR_KEY)
             draw_key();
         else if (ui.screen == SCR_FX)
@@ -3563,6 +3651,8 @@ int app_expect(const char *what, int *got)
         *got = (int)nsl;
     else if (!strcmp(what, "guidepg"))
         *got = ui.guide_pg;
+    else if (!strcmp(what, "lastch"))   /* the channel of the last note-on out, 1 .. 16 */
+        *got = ch_last + 1u;
     else if (!strcmp(what, "fmove"))
         *got = set.fmove;
     else if (!strcmp(what, "pivots"))
