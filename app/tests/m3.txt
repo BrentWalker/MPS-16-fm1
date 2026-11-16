@@ -1,10 +1,7 @@
 # Milestone 3: kits on the drive, the KEY screen and scale lock, chord FX, the library. From base/:
 #   ../app/build/host/mps-16_host ../app/tests/m3.txt ../app/build/host
 wait 600
-# FM mode (HOME held): these tests are FM mode's
-press HOME
-wait 900
-release HOME
+tap HOME
 wait 30
 expect kit 1
 # KEY: lock on, two degrees up: pad 1's Am7 (A C E G) sounds as Cmaj7 (C E G B)
@@ -56,45 +53,51 @@ release OCT-
 wait 30
 expect octave 0
 expect lock 0
-# FX: strum 100 ms: the first note at once, all four after 300 ms
-tap FX
+# how pads play is K4 PLAY at home: STRUM: the first note at once, all four soon after
+tap HOME
 wait 30
-expect screen 5
-turn K1 10
+turn K4 2
 wait 30
-expect strum 50
+expect omplay 2
 key 0 down
 wait 15
 expect voices 1
-wait 400
+wait 600
 expect voices 4
-shot fx.png
 key 0 up
 wait 300
-turn K1 -10
-# arp up: one note at a time
-turn K2 1
+# ARP: one note at a time
+turn K4 1
+wait 30
 key 0 down
 wait 500
 expect voices 1
-wav arp.wav
-wait 1200
-wavstop
 key 0 up
 wait 300
-turn K2 -1
-# inversion 1: A C E G -> C E G A
+# CHORD, inversion 1 (OCT+ and K4): A C E G -> C E G A
+turn K4 -2
+press OCT+
 turn K4 1
+wait 30
+release OCT+
+wait 30
 key 0 down
 wait 40
 expect cbuf0_0 60
 expect cbuf0_3 69
 key 0 up
 wait 200
+press OCT+
 turn K4 -1
-# page 2: a bass note under the chord (A2)
+wait 30
+release OCT+
+turn K4 -1
+wait 30
+expect omplay 0
+# FX, the extras: a bass note under the chord (A2)
 tap FX
 wait 30
+expect screen 5
 turn K2 1
 expect bass 1
 key 0 down
@@ -102,7 +105,7 @@ wait 40
 expect cbn0 5
 expect cbuf0_0 45
 expect voices 5
-shot fx2.png
+shot fx.png
 key 0 up
 wait 300
 turn K2 -1
@@ -138,10 +141,13 @@ wait 30
 expect padtype0 1
 expect padtype8 2
 expect padtype15 2
-# SAVE keeps the kit; KIT to 2 (empty: the key's chords), back to 1
+# SAVE keeps the kit; KIT (PRESET on the MIDI page) to 2 (empty: the key's chords), back to 1
 tap SAVE
 wait 50
 expect dirty 0
+tap GLO
+wait 30
+expect screen 10
 turn PRESET 1
 wait 30
 expect kit 2
@@ -156,14 +162,14 @@ reboot
 wait 600
 expect kit 1
 expect padtype8 2
-# HOME: K4 the tempo
-press HOME
-wait 900
-release HOME
+# the MIDI page's SELECT: the tempo
+tap GLO
 wait 30
-turn K4 5
+turn SELECT 5
 wait 30
 expect bpm 95
+tap HOME
+wait 30
 key 14 down
 wait 40
 shot home.png

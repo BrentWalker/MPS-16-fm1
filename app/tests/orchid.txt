@@ -55,32 +55,24 @@ wait 30
 expect mode 1
 turn K2 -1
 wait 30
-# HOLD HOME: FM mode, as ORCHID left it; the pads stay till HOME is tapped
+# one home: the tools open from it and HOME comes back; the pads stay as they were
 turn PRESET 1
 wait 30
-press HOME
-wait 900
-release HOME
-wait 30
-expect orchid 0
-expect screen 0
 tap LFO
 wait 30
 expect screen 6
+expect orchid 1
 tap HOME
 wait 50
 expect orchid 1
 expect omslice 1
 expect padtype0 2
-# FM's own screens take you to FM mode
 tap EDIT
 wait 30
-expect orchid 0
+expect orchid 1
 expect screen 4
-# ---- Step 2 (in FM mode now; back to ORCHID)
 tap HOME
 wait 50
-expect orchid 1
 # K2: 3RD and 5TH
 turn K2 2
 wait 30
@@ -188,33 +180,24 @@ key 7 down
 wait 300
 key 7 up
 expect slicelen0 384
-press OCT-
-wait 20
-turn ALGO -1
-wait 20
-release OCT-
+# FX's K3 the slice length, K4 the velocity curve
+tap FX
+wait 30
+turn K3 -1
 wait 30
 expect omslen -1
 expect slicelen0 192
-expect octave 0
-press OCT+
-wait 20
-turn ALGO 5
-wait 20
-release OCT+
+turn K4 5
 wait 30
 expect omvcurve 5
 expect vc64 95
 expect vc127 127
-press OCT+
-wait 20
-turn ALGO -10
-wait 20
-release OCT+
+turn K4 -10
 wait 30
 expect omvcurve -5
 expect vc64 33
-shot orchid_algo.png
+tap HOME
+wait 30
 # OCT as a shift: any knob turned while it's held, no octave on release; a plain press and release, an octave
 press OCT-
 wait 20

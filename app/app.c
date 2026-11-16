@@ -103,7 +103,8 @@ typedef struct {
     int8_t tune;                         /* semitones, -12 .. 12 */
     uint8_t cut;                         /* the level: 100 - cut, % */
     uint8_t pmode;                       /* a phrase: PM_ONESHOT, PM_GATE, PM_LOOP */
-    uint8_t rsv;
+    uint8_t lock;                        /* 1: kept (TRIMmed, or a slice or LIB chord dropped on it), not refilled from
+                                          * the song; TRIM's PRESET frees it */
 } pad_t;
 enum { PM_ONESHOT, PM_GATE, PM_LOOP };
 static const char *const PM_NAME[3] = {"ONE-SHOT", "GATE", "LOOP"};
@@ -1537,6 +1538,11 @@ static void orchid_fill_(void)
     first = set.om_slice == OM_EQUAL ? 0u : om_first();
     for (i = 0; i < 16u; i++) {
         pad_t *p = &pads[i];
+        if (p->lock && p->type != PAD_EMPTY) {   /* yours: kept */
+            om_pid[i] = 0xFFu;
+            continue;
+        }
+        p->lock = 0;
         if (first + i < nsl) {
             slice_to(first + i, i);
             p->title[0] = 0;
@@ -2186,6 +2192,7 @@ static void input(void)
                 char t[20];
                 ev_push(QE_PSTOP, i, 8);
                 lib_make(lib_sel, i);
+                pads[i].lock = 1;
                 pad_title(&pads[i], t);
                 app_say("PAD", t);
             }
@@ -2194,6 +2201,7 @@ static void input(void)
                 ev_push(QE_PSTOP, i, 8);
                 if (!slice_to(sel, i)) {
                     char n[8] = " ";
+                    pads[i].lock = 1;
                     pad_title(&pads[i], t);
                     n[1] = (char)('0' + (i + 1u) / 10u);
                     n[2] = (char)('0' + (i + 1u) % 10u);
@@ -2306,8 +2314,7 @@ buttons:
             continue;                    /* the drive is the computer's until it ejects (or HOME) */
         if (ui.screen == SCR_GUIDE)
             ui.screen = SCR_HOME;        /* a button leaves the guide and does what it does */
-        if (orchid && (i == B_SEL || i == B_ENV || i == B_LFO || i == B_EDIT || i == B_FX))
-            orchid = 0;                  /* FM mode's own screens: FM mode */
+        /* one home: SLICE, TRIM, LIB, KEY and FX are tools, opened from it, HOME back */
         if (ui.screen == SCR_FIND && (i == B_PLAY || i == B_REC))
             continue;
         if (i == B_SAVE) {
@@ -2391,26 +2398,10 @@ buttons:
         }
         ui.redraw = 1;
     }
-    /* ALGORITHM: everywhere the notes' length (the key is on KEY alone) */
+    /* ALGORITHM: the notes' length, everywhere (slice length and velocity on FX) */
     if ((e = plat_enc(EN_ALGO)) != 0) {
-        /* ORCHID: the notes' length; OCT- held: the slices' length; OCT+ held: the velocity curve */
-        char t[8];
-        if (btn & 1u << B_OCTDN) {
-            static const char *const SL[5] = {"1/4", "1/2", "AS CUT", "X2", "X4"};
-            ui.oct_mod = 1;
-            set.om_slen = (int8_t)clamp(set.om_slen + e, -2, 2);
-            if (orchid)
-                orchid_fill();
-            app_say("SLICE LENGTH", SL[set.om_slen + 2]);
-        } else if (btn & 1u << B_OCTUP) {
-            ui.oct_mod = 1;
-            set.om_vcurve = (int8_t)clamp(set.om_vcurve + e, -5, 5);
-            num_text(set.om_vcurve, t, 1);
-            app_say("VELOCITY CURVE", set.om_vcurve ? t : "AS PLAYED");
-        } else {
-            set.om_len = (int8_t)clamp(set.om_len + e, -5, 5);
-            app_say("NOTE LENGTH", LEN_NAME[set.om_len + 5]);
-        }
+        set.om_len = (int8_t)clamp(set.om_len + e, -5, 5);
+        app_say("NOTE LENGTH", LEN_NAME[set.om_len + 5]);
         set_dirty = 1;
         ui.redraw = 1;
     }
@@ -2485,7 +2476,14 @@ buttons:
                 ui.redraw = 1;
             ek = k1 = k2 = k3 = k4 = es = 0;
         }
-        if (ek) {                        /* KIT: the next kit, loaded at once (SAVE keeps changes first) */
+        if (ek && ui.screen == SCR_TRIM && ui.pad >= 0) {   /* TRIM's PRESET: locked, or following the song */
+            pads[ui.pad].lock = (uint8_t)(ek > 0);
+            if (!pads[ui.pad].lock)
+                orchid_fill();
+            app_say("PAD", pads[ui.pad].lock ? "LOCKED" : "FOLLOWS THE SONG");
+            ek = 0;
+        }
+        if (ek && ui.screen == SCR_MIDI) {   /* KIT (on the MIDI page): the next kit, loaded at once */
             uint32_t nk = (uint32_t)clamp((int32_t)set.kit + ek, 1, (int32_t)NKITS);
             if (nk != set.kit) {
                 char t[8] = "KIT 0";
@@ -2495,6 +2493,7 @@ buttons:
                 t[5] = (char)('0' + nk);
                 t[6] = 0;
                 app_say(t, kit_load(nk) ? "" : "EMPTY: KEY CHORDS");
+                orchid_fill();           /* its locked pads kept, the rest from the song */
                 ui.pad = -1;
             }
         }
@@ -2503,16 +2502,17 @@ buttons:
                 sel = (uint32_t)clamp((int32_t)sel + es, 0, (int32_t)nsl - 1);
                 preview_slice();
             }
-            if (k1) {
-                sl_mode ^= 1u;
-                slice_auto();
+            if (k1) {                    /* K1: the cut, the same as PRESET at home (one cut, two places to see it) */
+                set.om_slice = (uint8_t)clamp(set.om_slice + k1, 0, OM_N - 1);
+                set.om_start = 0;
+                set_dirty = 1;
+                orchid_fill();
+                sel = sel < nsl ? sel : 0;
             }
-            if (k2) {
-                if (sl_mode)
-                    sl_grid = (uint8_t)clamp(sl_grid + k2, 0, 6);
-                else
-                    sl_sens = (uint8_t)clamp(sl_sens + 5 * k2, 0, 100);
-                slice_auto();
+            if (k2 && set.om_slice == OM_HITS) {   /* K2: how sure a hit must be */
+                sl_sens = (uint8_t)clamp(sl_sens + 5 * k2, 0, 100);
+                orchid_fill();
+                sel = sel < nsl ? sel : 0;
             }
             if (k3 || k4) {              /* trim by 16ths */
                 int32_t s = (int32_t)sl_s[sel] + 24 * k3, en = (int32_t)sl_e[sel] + 24 * k4;
@@ -2524,27 +2524,17 @@ buttons:
             }
             if (es || k1 || k2 || k3 || k4)
                 ui.redraw = 1;
-        } else if (ui.screen == SCR_HOME || ui.screen == SCR_FX) {
-            int page2 = ui.screen == SCR_FX && ui.fx_page;
-            if (!page2) {
-                if (k1)
-                    set.strum = (uint8_t)clamp(set.strum + 5 * k1, 0, 100);
-                if (k2)
-                    set.arp = (uint8_t)clamp(set.arp + k2, 0, 4);
-                if (k3)
-                    set.human = (uint8_t)clamp(set.human + 5 * k3, 0, 50);
-                if (k4 && ui.screen == SCR_FX)
-                    set.inv = (int8_t)clamp(set.inv + k4, -3, 3);
-                if (k4 && ui.screen == SCR_HOME) {   /* HOME's K4: the tempo */
-                    set.bpm = (uint8_t)clamp((int32_t)tempo + k4, 40, 240);
-                    tempo = set.bpm;
-                }
-            } else {
-                if (k1)
-                    set.arprate = (uint8_t)clamp(set.arprate + k1, 0, 5);
-                if (k2)
-                    set.bass = (uint8_t)(k2 > 0);
+        } else if (ui.screen == SCR_FX) {   /* the extras: arp rate, a bass note, slice length, velocity curve */
+            if (k1)
+                set.arprate = (uint8_t)clamp(set.arprate + k1, 0, 5);
+            if (k2)
+                set.bass = (uint8_t)(k2 > 0);
+            if (k3) {
+                set.om_slen = (int8_t)clamp(set.om_slen + k3, -2, 2);
+                orchid_fill();
             }
+            if (k4)
+                set.om_vcurve = (int8_t)clamp(set.om_vcurve + k4, -5, 5);
             if (k1 || k2 || k3 || k4) {
                 set_dirty = 1;
                 ui.redraw = 1;
@@ -2594,6 +2584,8 @@ buttons:
                 chord_build((uint32_t)ui.pad);   /* heard at once while held */
             }
             if (es || k1 || k2 || k3 || k4)
+                p->lock = 1;             /* trimmed: yours, kept when the song refills the pads */
+            if (es || k1 || k2 || k3 || k4)
                 ui.redraw = 1;
         } else if (ui.screen == SCR_KEY) {
             if (k1)
@@ -2627,6 +2619,11 @@ buttons:
             if (k4 > 0) {
                 players_stop();
                 lib_build_kit();
+                {                        /* the whole kit yours: locked */
+                    uint32_t q;
+                    for (q = 0; q < NPADS; q++)
+                        pads[q].lock = pads[q].type != PAD_EMPTY;
+                }
                 app_say("KIT BUILT", "8 CHORDS, 8 PROGS");
             }
             if (es || k1 || k2 || k3 || k4)
@@ -2644,6 +2641,12 @@ buttons:
                     set_dirty = 1;
                     ui.redraw = 1;
                 }
+            if (es) {                    /* SELECT: the tempo */
+                set.bpm = (uint8_t)clamp((int32_t)tempo + es, 40, 240);
+                tempo = set.bpm;
+                set_dirty = 1;
+                ui.redraw = 1;
+            }
             if (k4 > 0)
                 disk_enter();
         } else if (ui.screen == SCR_FILES) {
@@ -2675,12 +2678,8 @@ buttons:
                     *at = 0xFFFFFFFFu;   /* once a hold */
                     if (j)
                         guide_open();    /* SYS held: GUIDE */
-                    else {               /* HOME held: FM mode's HOME (from ORCHID: as ORCHID left it) */
-                        if (orchid)
-                            app_say("CORE", "TAP HOME: SURFACE");
-                        orchid = 0;
-                        ui.screen = SCR_HOME;
-                    }
+                    else
+                        ui.screen = SCR_HOME;   /* HOME held: home, as a tap */
                 }
             } else {
                 if (*at && *at != 0xFFFFFFFFu && ui.screen != SCR_GUIDE) {   /* a tap */
@@ -2688,13 +2687,8 @@ buttons:
                         ui.screen = SCR_MIDI;
                         ui.redraw = 1;
                     }
-                    else if (!orchid) {  /* HOME tapped in FM mode: ORCHID, as it was */
-                        orchid = 1;
+                    else
                         ui.screen = SCR_HOME;
-                        om_apply();
-                        orchid_fill();
-                        app_say("SURFACE", OM_NAME[set.om_slice]);
-                    }
                 }
                 *at = 0;
             }
@@ -3201,12 +3195,13 @@ static void draw_slice(void)
     }
     cv_text(8, 42, &FONT_B, "A PAD: DROP IT  PLAY: HEAR", C_GRAY);
     {
-        static const char *const LBL[4] = {"MODE", "SENS", "START", "END"};
-        static const char *const LBLG[4] = {"MODE", "GRID", "START", "END"};
+        static const char *const LBL[4] = {"CUT", "SENS", "START", "END"};
+        static const char *const LBLG[4] = {"CUT", "", "START", "END"};
         char v[4][12];
-        str_set(v[0], sl_mode ? "GRID" : "HITS", 12);
-        if (sl_mode)
-            str_set(v[1], GRID_NAME[sl_grid], 12);
+        int hits = set.om_slice == OM_HITS;
+        str_set(v[0], OM_NAME[set.om_slice % OM_N], 12);
+        if (!hits)
+            v[1][0] = 0;
         else {
             v[1][0] = (char)(sl_sens >= 100u ? '1' : '0' + sl_sens / 10u);
             v[1][1] = (char)(sl_sens >= 100u ? '0' : '0' + sl_sens % 10u);
@@ -3215,7 +3210,7 @@ static void draw_slice(void)
         }
         fmt_pos(sl_s[sel], v[2]);
         fmt_pos(sl_e[sel], v[3]);
-        bottom_bar(68, sl_mode ? LBLG : LBL, v);
+        bottom_bar(68, hits ? LBL : LBLG, v);
     }
     cv_blit(0, 120);
 }
@@ -3305,7 +3300,7 @@ static void draw_midi(void)
             top_bar("MIDI", "OUT: USB", C_GRAY);
         for (i = 0; i < 3u; i++) {       /* a row a group: its name, what it plays, its channel big */
             char c[8] = "CH ";
-            int32_t y = 32 + (int32_t)i * 50 - dy;
+            int32_t y = 30 + (int32_t)i * 48 - dy;
             num_text((int32_t)set.ch[i] + 1, c + 3, 0);
             cv_text(8, y, &FONT_XS, i == 0 ? "K1" : i == 1 ? "K2" : "K3", LAB_LABEL);
             cv_text(30, y - 2, &FONT_M, G[i], EL[i]);
@@ -3313,9 +3308,19 @@ static void draw_midi(void)
             cv_text(234 - text_w(&FONT_L, c), y + 2, &FONT_L, c, C_WHITE);
             cv_rect(8, y + 44, 224, 1, C_LINE);
         }
-        cv_text(8, 188 - dy, &FONT_XS, "K4", LAB_LABEL);
-        cv_text(30, 184 - dy, &FONT_M, "USB DRIVE", C_WHITE);
-        cv_text(30, 208 - dy, &FONT_B, "TURN K4 RIGHT", C_GRAY);
+        {                                /* the kit (PRESET), the tempo (SELECT), the drive (K4) */
+            char kt[8] = "KIT ", bp[8];
+            num_text((int32_t)set.kit, kt + 4, 0);
+            num_text((int32_t)tempo, bp, 0);
+            cv_text(8, 182 - dy, &FONT_XS, "PRESET", LAB_LABEL);
+            cv_text(8, 194 - dy, &FONT_M, kt, C_WHITE);
+            cv_text(86, 182 - dy, &FONT_XS, "SELECT", LAB_LABEL);
+            cv_text(86, 194 - dy, &FONT_M, bp, C_WHITE);
+            cv_text(90 + text_w(&FONT_M, bp), 204 - dy, &FONT_XS, "BPM", LAB_LABEL);
+            cv_text(176, 182 - dy, &FONT_XS, "K4", LAB_LABEL);
+            cv_text(176, 194 - dy, &FONT_B, "USB", C_WHITE);
+            cv_text(176, 212 - dy, &FONT_B, "DRIVE", C_WHITE);
+        }
         cv_blit(0, h * 120u);
     }
 }
@@ -3637,6 +3642,8 @@ int app_expect(const char *what, int *got)
         *got = (int)nsl;
     else if (!strcmp(what, "guidepg"))
         *got = ui.guide_pg;
+    else if (!strncmp(what, "padlock", 7))   /* padlockN: pad N kept from the song */
+        *got = pads[atoi(what + 7) % NPADS].lock;
     else if (!strcmp(what, "lastch"))   /* the channel of the last note-on out, 1 .. 16 */
         *got = ch_last + 1u;
     else if (!strcmp(what, "fmove"))

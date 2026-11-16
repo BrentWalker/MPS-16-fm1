@@ -9,13 +9,13 @@ typedef struct {
 } probe_t;
 
 static const probe_t PR_BTN[NB] = {
-    {"FX", "CHORD FX: STRUM, ARP, HUMANIZE, INVERSION, BASS.", 0, 0},
-    {"SLICE", "CUT THE FILE BY HAND, DROP SLICES ON PADS. AGAIN: FILES.", 0, 0},
-    {"TRIM", "THE LAST PAD: START, END, TUNE, LEVEL, LOOP.", 0, 0},
+    {"FX", "EXTRAS: ARP RATE, BASS NOTE, SLICE LENGTH, VELOCITY.", 0, 0},
+    {"SLICE", "THE SONG'S SLICES: DROP ONE ON AN A PAD. AGAIN: FILES.", 0, 0},
+    {"TRIM", "THE LAST PAD: START, END, TUNE, LEVEL, LOOP, LOCK.", 0, 0},
     {"LIB", "YOUR KEY'S CHORDS. AN A PAD TAKES ONE.", 0, 0},
     {"KEY", "ROOT, SCALE, LOCK. TAP PADS THERE: FIND A KEY.", 0, 0},
     {"SYS", "TAP: MIDI CHANNELS AND THE USB DRIVE. HOLD: GUIDE.", 0, 0},
-    {"HOME", "TAP: SURFACE. HOLD: CORE.", 0, 0},
+    {"HOME", "BACK HOME, FROM ANYWHERE.", 0, 0},
     {"SAVE", "KEEPS YOUR PADS AND SETTINGS.", 0, 0},
     {"ARP", "NOTHING YET: FREE FOR SOMETHING NEW.", 0, 0},
     {"MODE", "NOTHING YET: K2 SETS THE B PADS.", 0, 0},
@@ -27,7 +27,7 @@ static const probe_t PR_BTN[NB] = {
 static const probe_t PR_SURF[7] = {
     {"MUTATE", "REPEATED CHORDS CHANGE: EXTEND, COLOR, FLIP, SUB, MIX.",
      "WHICH CHORDS CHANGE", "A NEW MIX ROLL"},
-    {"NOTE LENGTH", "SHORT TO LONG, THEN LEGATO.", "SLICE LENGTH", "SOFTER OR HARDER"},
+    {"NOTE LENGTH", "SHORT TO LONG, THEN LEGATO.", 0, 0},
     {"SLICE", "HOW THE SONG IS CUT: EQUAL, BARS, HITS, CHORDS.", 0, 0},
     {"START", "WHERE IN THE SONG THE 16 PADS BEGIN.", 0, 0},
     {"B PADS", "WHAT THE 7 B PADS PLAY: ROOT, LEAD, 3RD, 5TH.", 0, 0},
@@ -35,7 +35,7 @@ static const probe_t PR_SURF[7] = {
     {"PLAY", "HOW PADS PLAY: AS IS, CHORD, STRUM, ARP, RHYTHMS.",
      "HOW MUCH", "VOICING"},
 };
-static const probe_t PR_ALGO_CORE = {"NOTE LENGTH", "SHORT TO LONG, THEN LEGATO.", "SLICE LENGTH", "SOFTER OR HARDER"};
+static const probe_t PR_ALGO_CORE = {"NOTE LENGTH", "SHORT TO LONG, THEN LEGATO.", 0, 0};
 static const probe_t PR_PRESET_CORE = {"KIT", "THE NEXT KIT, LOADED AT ONCE (SAVE FIRST TO KEEP CHANGES).", 0, 0};
 
 /* CORE's knobs, by the screen PROBE came from: SELECT, K1-K4 */
@@ -47,8 +47,8 @@ static void probe_core_knob(uint32_t e, uint32_t scr, probe_t *o)
                                             {"HUMANIZE", "TIMING AND VELOCITY OFF BY A LITTLE."},
                                             {"BPM", "THE TEMPO."}};
     static const char *const SLICE_[5][2] = {{"SELECT", "PICKS A SLICE, AND PLAYS IT."},
-                                             {"MODE", "HITS OR GRID."},
-                                             {"SENS / GRID", "HOW SURE A HIT MUST BE; OR THE GRID'S SIZE."},
+                                             {"CUT", "HOW THE SONG IS CUT, AS PRESET AT HOME."},
+                                             {"SENS", "HITS: HOW SURE A HIT MUST BE."},
                                              {"START", "TRIMS THE SLICE'S START."},
                                              {"END", "TRIMS THE SLICE'S END."}};
     static const char *const TRIM_[5][2] = {{"PLAY MODE", "ONE-SHOT, GATE OR LOOP."},
@@ -61,11 +61,16 @@ static void probe_core_knob(uint32_t e, uint32_t scr, probe_t *o)
                                            {"SCALE", "MAJOR, MINOR AND THE MODES."},
                                            {"STEP", "MOVES THE CHORDS ALONG THE SCALE, WITH THE LOCK ON."},
                                            {"LOCK", "SCALE LOCK: EVERY NOTE SNAPS TO THE KEY."}};
-    static const char *const FX_[5][2] = {{"SELECT", "THE NEXT PAGE OF FX."},
-                                          {"STRUM / RATE", "THE STRUM; ON PAGE 2 THE ARP'S RATE."},
-                                          {"ARP / BASS", "THE ARPEGGIO; ON PAGE 2 A BASS NOTE UNDER EVERY CHORD."},
-                                          {"HUMANIZE", "TIMING AND VELOCITY OFF BY A LITTLE."},
-                                          {"INVERT", "THE CHORDS' INVERSION."}};
+    static const char *const FX_[5][2] = {{"SELECT", "NOTHING ON FX."},
+                                          {"ARP RATE", "HOW FAST K4'S ARP PLAYS."},
+                                          {"BASS NOTE", "THE ROOT UNDER EVERY CHORD, ON OR OFF."},
+                                          {"SLICE LENGTH", "EACH SLICE X1/4 TO X4 FROM ITS START."},
+                                          {"VELOCITY", "SOFTER OR HARDER THAN PLAYED."}};
+    static const char *const MIDI_[5][2] = {{"BPM", "THE TEMPO."},
+                                            {"A PADS", "THEIR MIDI CHANNEL."},
+                                            {"B PADS", "THEIR MIDI CHANNEL."},
+                                            {"C PADS", "THEIR MIDI CHANNEL."},
+                                            {"USB DRIVE", "TURN RIGHT: THE FM-1 AS A USB DRIVE."}};
     static const char *const LIB_[5][2] = {{"SELECT", "PICKS A CHORD OR A PROGRESSION, AND PLAYS IT."},
                                            {"TYPE", "TRIADS, 7THS, 9THS, SUS AND MORE."},
                                            {"RHYTHM", "HOW A PROGRESSION PLAYS: HELD, STABS, ARP."},
@@ -78,7 +83,7 @@ static void probe_core_knob(uint32_t e, uint32_t scr, probe_t *o)
                                             {"USE", "TURN RIGHT: USES THE KEY AND OPENS LIB."}};
     const char *const (*t)[2] = scr == SCR_SLICE || scr == SCR_FILES ? SLICE_ : scr == SCR_TRIM ? TRIM_
                                 : scr == SCR_KEY ? KEY_ : scr == SCR_FX ? FX_ : scr == SCR_LIB ? LIB_
-                                : scr == SCR_FIND ? FIND_ : HOME_;
+                                : scr == SCR_FIND ? FIND_ : scr == SCR_MIDI ? MIDI_ : HOME_;
     uint32_t r = e == 0u ? 0u : e - 2u;  /* SELECT, or K1-K4 (e 3 .. 6) */
     o->title = t[r][0];
     o->what = t[r][1];
@@ -96,12 +101,15 @@ static void probe_info(int32_t it, probe_t *o)
     }
     if (it < PR_KEY) {
         uint32_t e = (uint32_t)(it - PR_ENC);
-        if (orchid && ui.probe_from == SCR_HOME)
+        static const probe_t PR_LOCK = {"LOCK", "RIGHT: THE PAD STAYS YOURS. LEFT: IT FOLLOWS THE SONG.", 0, 0};
+        static const probe_t PR_NONE = {"PRESET", "NOTHING HERE.", 0, 0};
+        if (ui.probe_from == SCR_HOME)
             *o = PR_SURF[e % 7u];
         else if (e == 1u)
             *o = PR_ALGO_CORE;
         else if (e == 2u)
-            *o = PR_PRESET_CORE;
+            *o = ui.probe_from == SCR_MIDI ? PR_PRESET_CORE : ui.probe_from == SCR_TRIM ? PR_LOCK
+               : ui.probe_from == SCR_SLICE ? PR_SURF[2] : PR_NONE;
         else
             probe_core_knob(e, ui.probe_from, o);
         return;
@@ -277,8 +285,8 @@ static void draw_probe(void)
         int32_t w = text_w(&FONT_B, nm);
         cv_rect(4, 3, w + 12, 21, FIRE_C);
         cv_text(10, 5, &FONT_B, nm, C_BLACK);
-        cv_text(w + 26, 5, &FONT_B, orchid && ui.probe_from == SCR_HOME ? "SURFACE" : "CORE",
-                orchid && ui.probe_from == SCR_HOME ? AIR_C : EARTH_C);
+        cv_text(w + 26, 5, &FONT_B, ui.probe_from == SCR_HOME ? "HOME" : "TOOLS",
+                ui.probe_from == SCR_HOME ? AIR_C : EARTH_C);
     }
     if (!o.title) {
         {

@@ -1,10 +1,7 @@
 # Milestone 2: MIDI files on the drive, slicing, phrase pads, REC. From base/:
 #   ../app/build/host/mps-16_host ../app/tests/m2.txt ../app/build/host
 wait 600
-# FM mode (HOME held): these tests are FM mode's
-press HOME
-wait 900
-release HOME
+tap HOME
 wait 30
 expect files 0
 # a computer copies two files on (as the USB drive would)
@@ -15,6 +12,10 @@ load 0
 expect notes 163
 expect tracks 3
 expect bpm 92
+expect slices 8
+# PRESET to HITS: cut where notes land together
+turn PRESET 2
+wait 30
 expect slices 24
 # SLICE: the slices of the file; a white key drops the selected one on its pad and plays it
 tap SEL
@@ -59,9 +60,7 @@ key 7 up
 expect padtype4 1
 expect padtag4 3
 # HOME: a chord pad and a phrase pad
-press HOME
-wait 900
-release HOME
+tap HOME
 wait 30
 key 7 down
 wait 40
@@ -74,10 +73,10 @@ shot home_phrase.png
 key 0 up
 wait 1200
 expect playing0 0
-# the grid: one bar each, 8 slices
+# SLICE's K1, the cut (as PRESET): back to BARS, 8 slices
 tap SEL
 wait 30
-turn K1 1
+turn K1 -2
 wait 30
 expect slices 8
 shot slice_grid.png

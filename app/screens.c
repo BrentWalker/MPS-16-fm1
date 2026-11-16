@@ -72,49 +72,23 @@ static void fx_tile(int32_t x, int32_t y, const char *k, const char *name, const
         cv_rect(x + 8, y + 40, fill * 96 / 100, 4, AMBER);
 }
 
-static void draw_fx(void)
+static void draw_fx(void)                /* the extras: how pads play is K4 PLAY at home */
 {
-    char a[12], b[12], c[12], d[12];
+    static const char *const SL[5] = {"X1/4", "X1/2", "AS CUT", "X2", "X4"};
+    char c[8], d[8];
+    num_text(set.om_vcurve, d, 1);
     lab_begin();
-    top_bar("FX", ui.fx_page ? "2/2  FX: BACK" : "1/2  FX: MORE", C_GRAY);
-    if (!ui.fx_page) {
-        num_text(set.strum * 2, a, 0);
-        text_cat(a, " MS");
-        num_text(set.human, c, 0);
-        text_cat(c, "%");
-        num_text(set.inv, d, 1);
-        fx_tile(6, 34, "K1", "STRUM", a, set.strum);
-        fx_tile(122, 34, "K2", "ARP", ARP_NAME[set.arp], set.arp * 25);
-    } else {
-        fx_tile(6, 34, "K1", "ARP RATE", ARP_RATE_NAME[set.arprate], set.arprate * 20);
-        fx_tile(122, 34, "K2", "BASS NOTE", set.bass ? "ON" : "OFF", set.bass ? 100 : 0);
-    }
+    top_bar("FX", "EXTRAS", C_GRAY);
+    fx_tile(6, 34, "K1", "ARP RATE", ARP_RATE_NAME[set.arprate], set.arprate * 20);
+    fx_tile(122, 34, "K2", "BASS NOTE", set.bass ? "ON" : "OFF", set.bass ? 100 : 0);
     cv_blit(0, 0);
     lab_begin();
-    if (!ui.fx_page) {
-        fx_tile(6, 0, "K3", "HUMANIZE", c, set.human * 2);
-        fx_tile(122, 0, "K4", "INVERT", d, (set.inv + 3) * 100 / 6);
-    }
-    {
-        static const char *const L1[4] = {"STRUM", "ARP", "HUMAN", "INVERT"};
-        static const char *const L2[4] = {"RATE", "BASS", "", ""};
-        char v[4][12];
-        if (!ui.fx_page) {
-            num_text(set.strum * 2, v[0], 0);
-            str_set(v[1], ARP_NAME[set.arp], 12);
-            num_text(set.human, v[2], 0);
-            text_cat(v[2], "%");
-            num_text(set.inv, v[3], 1);
-        } else {
-            str_set(v[0], ARP_RATE_NAME[set.arprate], 12);
-            str_set(v[1], set.bass ? "ON" : "OFF", 12);
-            v[2][0] = 0;
-            v[3][0] = 0;
-        }
-        bottom_bar(68, ui.fx_page ? L2 : L1, v);
-    }
+    fx_tile(6, 0, "K3", "SLICE LENGTH", SL[(set.om_slen + 2) % 5], (set.om_slen + 2) * 25);
+    fx_tile(122, 0, "K4", "VELOCITY", set.om_vcurve ? d : "AS PLAYED", (set.om_vcurve + 5) * 10);
+    cv_text(10, 62, &FONT_B, "HOW PADS PLAY: K4 AT HOME", C_GRAY);
+    cv_text(10, 84, &FONT_B, "NOTE LENGTH: ALGORITHM", C_GRAY);
+    (void)c;
     cv_blit(0, 120);
-    (void)b;
 }
 
 static void draw_lib(void)
@@ -266,6 +240,8 @@ static void draw_trim(void)
         str_set(v[0], "-", sizeof v[0]);
         str_set(v[1], "-", sizeof v[1]);
     }
+    cv_text(234 - text_w(&FONT_B, p->lock ? "LOCKED" : "FOLLOWS SONG"), 36, &FONT_B,
+            p->lock ? "LOCKED" : "FOLLOWS SONG", p->lock ? AMBER : C_GRAY);
     num_text(p->tune, v[2], 1);
     num_text(100 - p->cut, v[3], 0);
     bottom_bar(68, LBL, v);
@@ -348,9 +324,18 @@ static void draw_orchid(void)
     if (plat_ms() < ui.msg_until)
         top_bar(0, 0, 0);
     else {
-        int32_t w = text_w(&FONT_B, "SURFACE");
-        cv_rect(4, 3, w + 12, 21, AIR_C);   /* the mode: Air */
-        cv_text(10, 5, &FONT_B, "SURFACE", C_BLACK);
+        char fn[12] = "HOME";            /* home: the song's name in Air (no file: HOME) */
+        int32_t w;
+        if (cur_file >= 0) {
+            uint32_t q;
+            str_set(fn, files[cur_file].name, sizeof fn);
+            for (q = 0; fn[q]; q++)
+                if (fn[q] == '.')
+                    fn[q] = 0;
+        }
+        w = text_w(&FONT_B, fn);
+        cv_rect(4, 3, w + 12, 21, AIR_C);
+        cv_text(10, 5, &FONT_B, fn, C_BLACK);
         key_text(t);                     /* the key: Earth, outlined; a C pad's key change in Air beside it */
         w = text_w(&FONT_B, t);
         cv_rect(222 - w, 3, w + 14, 21, EARTH_C);
@@ -410,11 +395,17 @@ static void draw_orchid(void)
             cv_rect(bx, by, 28, 22, bg);
             if (p->title[0])           /* a chord's name: CHORDS, or MUTATE's (moved by a bridge) */
                 title_bridged(p->title, tb, sizeof tb);
-            else
+            else if (p->type == PAD_CHORD && p->n) {   /* a LIB chord: its name */
+                pc_name(p->root_pc, tb);
+                if (cs_len(tb) + cs_len(p->qual) < sizeof tb)
+                    text_cat(tb, p->qual);
+            } else
                 num_text((int32_t)i + 1, tb, 0);
             f = text_w(&FONT_B, tb) <= 28 ? &FONT_B : &FONT_XS;
             cv_text(bx + (28 - text_w(f, tb)) / 2, by + (f == &FONT_B ? 3 : 4), f, tb,
-                    lit ? C_BLACK : p->title[0] ? C_WHITE : LAB_LABEL);
+                    lit ? C_BLACK : p->title[0] || p->type == PAD_CHORD ? C_WHITE : LAB_LABEL);
+            if (p->lock && p->type != PAD_EMPTY)   /* yours: an amber corner */
+                cv_rect(bx + 22, by, 6, 4, AMBER);
         }
         cv_blit(0, 0);
     }
@@ -440,7 +431,7 @@ static void draw_orchid(void)
         x = cv_text(8, 0, &FONT_B, "MUTATE", LAB_LABEL);
         cv_text(x + 8, 0, &FONT_B, MU_NAME[set.om_mut % MU_N], AMBER);
     } else
-        cv_text(8, 0, &FONT_B, "HOLD HOME: CORE", LAB_LABEL);
+        cv_text(8, 0, &FONT_B, "PLAY AN A PAD", LAB_LABEL);
     if (set.om_slice == OM_EQUAL || !nsl)
         str_set(v[0], "-", sizeof v[0]);
     else {
