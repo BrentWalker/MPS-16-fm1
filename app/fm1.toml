@@ -21,4 +21,4 @@ description = "A MIDI phrase sampler in the Earth Science family. Load a MIDI fi
 tags = ["chords", "sampler", "midi"]
 install = "https://brentwalker.github.io/MPS-16-fm1/install/"
 site = "https://brentwalker.github.io/MPS-16-fm1/"
-screenshot = "docs/img/screen-orchid.png"
+screenshot = "app/docs/img/screen-orchid.png"
