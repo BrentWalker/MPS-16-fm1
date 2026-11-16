@@ -13,16 +13,16 @@ static const probe_t PR_BTN[NB] = {
     {"SLICE", "CUT THE FILE BY HAND, DROP SLICES ON PADS. AGAIN: FILES.", 0, 0},
     {"TRIM", "THE LAST PAD: START, END, TUNE, LEVEL, LOOP.", 0, 0},
     {"LIB", "YOUR KEY'S CHORDS. AN A PAD TAKES ONE.", 0, 0},
-    {"KEY", "ROOT, SCALE, STEPS AND SCALE LOCK.", 0, 0},
+    {"KEY", "ROOT, SCALE, LOCK. TAP PADS THERE: FIND A KEY.", 0, 0},
     {"SYS", "TAP: MIDI CHANNELS AND THE USB DRIVE. HOLD: GUIDE.", 0, 0},
     {"HOME", "TAP: SURFACE. HOLD: CORE.", 0, 0},
     {"SAVE", "KEEPS YOUR PADS AND SETTINGS.", 0, 0},
-    {"ARP", "HOLD: PROBE, THIS. TAP TO LEAVE.", 0, 0},
-    {"MODE", "WHAT THE B PADS PLAY: ROOT, LEAD, 3RD, 5TH.", 0, 0},
-    {"PLAY", "ALL NOTES OFF. WITH REC: FIND A KEY.", 0, 0},
+    {"ARP", "NOTHING YET: FREE FOR SOMETHING NEW.", 0, 0},
+    {"MODE", "NOTHING YET: K2 SETS THE B PADS.", 0, 0},
+    {"PLAY", "ALL NOTES OFF. IN SLICE OR LIB: HEAR IT.", 0, 0},
     {"REC", "RECORD MIDI IN. AGAIN: SAVE IT.", 0, 0},
-    {"OCT-", "OCTAVE DOWN WHEN YOU LET GO. HOLD + KNOB: MORE. BOTH: ANALYZE.", 0, 0},
-    {"OCT+", "OCTAVE UP WHEN YOU LET GO. HOLD + KNOB: MORE. BOTH: ANALYZE.", 0, 0},
+    {"OCT-", "OCTAVE DOWN WHEN YOU LET GO. HOLD + KNOB: MORE. TAP BOTH: ANALYZE.", 0, 0},
+    {"OCT+", "OCTAVE UP WHEN YOU LET GO. HOLD + KNOB: MORE. TAP BOTH: ANALYZE.", 0, 0},
 };
 static const probe_t PR_SURF[7] = {
     {"MUTATE", "REPEATED CHORDS CHANGE: EXTEND, COLOR, FLIP, SUB, MIX.",
@@ -35,7 +35,7 @@ static const probe_t PR_SURF[7] = {
     {"PLAY", "HOW PADS PLAY: AS IS, CHORD, STRUM, ARP, RHYTHMS.",
      "HOW MUCH", "VOICING"},
 };
-static const probe_t PR_ALGO_CORE = {"ROOT", "THE KEY'S ROOT.", "THE SCALE", "THE SCALE"};
+static const probe_t PR_ALGO_CORE = {"NOTE LENGTH", "SHORT TO LONG, THEN LEGATO.", "SLICE LENGTH", "SOFTER OR HARDER"};
 static const probe_t PR_PRESET_CORE = {"KIT", "THE NEXT KIT, LOADED AT ONCE (SAVE FIRST TO KEEP CHANGES).", 0, 0};
 
 /* CORE's knobs, by the screen PROBE came from: SELECT, K1-K4 */
@@ -223,31 +223,23 @@ static void probe_input(uint32_t keys, uint32_t btn)
             ui.probe_item = PR_ENC + (int32_t)i;
             ui.redraw = 1;
         }
-    if (ui.probe_oct) {                  /* opened by OCT- and OCT+: let go of either, and it's gone */
-        if ((btn & (1u << B_OCTDN | 1u << B_OCTUP)) != (1u << B_OCTDN | 1u << B_OCTUP)) {
-            ui.probe = 0;
-            ui.probe_oct = 0;
-            ui.redraw = 1;
-        }
-        btn &= ~(1u << B_OCTDN | 1u << B_OCTUP);
-    }
-    for (i = 0; i < NB; i++) {
-        uint32_t bit = 1u << i;
-        if (i == B_OCTDN || i == B_OCTUP) {
-            if (ui.probe_oct)
-                continue;
-        }
-        if (i == B_ARP && !(btn & bit) && (ui.btn & bit)) {
-            if (ui.probe_skip)
+    {                                    /* ANALYZE: on with OCT- and OCT+ tapped together, off the same way or HOME */
+        const uint32_t both = 1u << B_OCTDN | 1u << B_OCTUP;
+        if (ui.probe_skip) {             /* the taps that opened it: wait till both are up */
+            if (!(btn & both))
                 ui.probe_skip = 0;
-            else {
-                ui.probe = 0;
-                ui.redraw = 1;
-            }
-        } else if (i == B_HOME && (btn & bit) && !(ui.btn & bit)) {
+        } else if ((btn & both) == both && (ui.btn & both) != both) {
+            ui.probe = 0;                /* both again: off (the octave stays as it was) */
+            ui.oct_mod = 1;
+            ui.redraw = 1;
+        }
+    }
+    for (i = 0; i < NB && ui.probe; i++) {
+        uint32_t bit = 1u << i;
+        if (i == B_HOME && (btn & bit) && !(ui.btn & bit)) {
             ui.probe = 0;
             ui.redraw = 1;
-        } else if ((btn & bit) && !(ui.btn & bit) && i != B_ARP) {
+        } else if ((btn & bit) && !(ui.btn & bit)) {
             ui.probe_item = (int32_t)i;
             ui.redraw = 1;
         }
@@ -263,7 +255,7 @@ static void probe_input(uint32_t keys, uint32_t btn)
 
 static void probe_lights(void)          /* ARP, and what was touched */
 {
-    uint32_t b = ui.probe_oct ? (1u << B_OCTDN | 1u << B_OCTUP) : 1u << B_ARP, k = 0;
+    uint32_t b = 1u << B_OCTDN | 1u << B_OCTUP, k = 0;
     if (ui.probe_item >= 0 && ui.probe_item < (int32_t)NB)
         b |= 1u << ui.probe_item;
     else if (ui.probe_item >= PR_KEY)
@@ -281,7 +273,7 @@ static void draw_probe(void)
     lab_paper();
     cv_rect(0, 0, 240, 27, LAB_BG);
     {                                    /* ANALYZE (OCT- and OCT+ held) or PROBE (ARP held), and where from */
-        const char *nm = ui.probe_oct ? "ANALYZE" : "PROBE";
+        const char *nm = "ANALYZE";
         int32_t w = text_w(&FONT_B, nm);
         cv_rect(4, 3, w + 12, 21, FIRE_C);
         cv_text(10, 5, &FONT_B, nm, C_BLACK);
@@ -299,10 +291,10 @@ static void draw_probe(void)
                 }
                 cv_rect(0, 28 - dy, 240, 212, LAB_BG);
                 cv_text(10, 32 - dy, &FONT_M, "TOUCH ANYTHING", FIRE_C);
-                cv_text(10, 66 - dy, &FONT_L, ui.probe_oct ? "ANY PAD:" : "A KNOB, BUTTON", C_WHITE);
-                cv_text(10, 99 - dy, &FONT_L, ui.probe_oct ? "IT SAYS" : "OR PAD: IT SAYS", C_WHITE);
+                cv_text(10, 66 - dy, &FONT_L, "A PAD, KNOB OR", C_WHITE);
+                cv_text(10, 99 - dy, &FONT_L, "BUTTON: IT SAYS", C_WHITE);
                 cv_text(10, 132 - dy, &FONT_L, "WHAT IT DOES.", C_WHITE);
-                cv_text(10, 182 - dy, &FONT_M, ui.probe_oct ? "LET GO OF OCT" : "TAP ARP TO LEAVE", LAB_LABEL);
+                cv_text(10, 182 - dy, &FONT_M, "TAP BOTH OCT: OFF", LAB_LABEL);
                 cv_blit(0, h * 120u);
             }
         }

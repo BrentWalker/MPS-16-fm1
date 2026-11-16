@@ -2014,7 +2014,7 @@ static void find_enter(void)
     fd_pcs = 0;
     fd_rank();
     ui.screen = SCR_FIND;
-    app_say("FIND KEY", "TAP A FEW NOTES");
+    app_say("FIND KEY", "TAP A FEW MORE");
 }
 static void find_keys(uint32_t keys)     /* every key a note, from F3 */
 {
@@ -2169,6 +2169,10 @@ static void input(void)
         ui.btn = btn;
         return;
     }
+    if (ui.screen == SCR_KEY && (keys & ~ui.keys)) {
+        find_enter();                    /* KEY: tapping pads finds a key from their notes */
+        ui.redraw = 1;
+    }
     if (ui.screen == SCR_FIND) {
         find_keys(keys);
         goto buttons;
@@ -2271,10 +2275,10 @@ buttons:
         int down = (btn & bit) && !(ui.btn & bit), up = !(btn & bit) && (ui.btn & bit);
         if (i == B_OCTDN || i == B_OCTUP) {
             uint32_t other = 1u << (i == B_OCTUP ? B_OCTDN : B_OCTUP);
-            if (down && (btn & other)) { /* both held: PROBE while they're held */
+            if (down && (btn & other)) { /* both tapped: ANALYZE, till they're tapped again */
                 ui.oct_mod = 1;
                 probe_open();
-                ui.probe_skip = 0;
+                ui.probe_skip = 1;
                 ui.probe_oct = 1;
                 continue;
             }
@@ -2304,11 +2308,6 @@ buttons:
             ui.screen = SCR_HOME;        /* a button leaves the guide and does what it does */
         if (orchid && (i == B_SEL || i == B_ENV || i == B_LFO || i == B_EDIT || i == B_FX))
             orchid = 0;                  /* FM mode's own screens: FM mode */
-        if ((i == B_PLAY && (btn & 1u << B_REC)) || (i == B_REC && (btn & 1u << B_PLAY))) {
-            find_enter();                /* REC and PLAY together: FIND */
-            ui.redraw = 1;
-            continue;
-        }
         if (ui.screen == SCR_FIND && (i == B_PLAY || i == B_REC))
             continue;
         if (i == B_SAVE) {
@@ -2357,10 +2356,7 @@ buttons:
                 ui.screen = song_n ? SCR_SLICE : SCR_FILES;
             if (ui.file_cur < 0 || (uint32_t)ui.file_cur >= nfiles)
                 ui.file_cur = cur_file < 0 ? 0 : cur_file;
-        } else if (i == B_SEQ) {         /* MODE: the black keys as roots or as the lead */
-            set.mode = (uint8_t)((set.mode + 1u) % MODE_N);
-            set_dirty = 1;
-            app_say("MODE", MODE_NAME[set.mode % MODE_N]);
+        } else if (i == B_SEQ && 0) {    /* MODE: free for now (K2 in SURFACE sets the B pads) */
         } else if (i == B_ENV) {         /* TRIM: the pad played last (a white key there picks another) */
             if (ui.pad < 0 || pads[ui.pad].type == PAD_EMPTY)
                 app_say("TRIM", "PLAY AN A PAD FIRST");
@@ -2388,22 +2384,23 @@ buttons:
         } else {
             static const char *const LABEL[NB] = {"FX", "SLICE", "TRIM", "LIB", "KEY", "SYS", "HOME", "SAVE",
                                                   "ARP", "MODE", "PLAY", "REC", "OCT-", "OCT+"};
-            if (i == B_ARP)
-                app_say("ARP", "HOLD IT: PROBE");
+            if (i == B_ARP || i == B_SEQ)
+                app_say(LABEL[i], "FREE FOR NOW");
             else
                 app_say(LABEL[i], "COMING SOON");
         }
         ui.redraw = 1;
     }
-    /* ALGORITHM (ROOT): the key's root; with OCT held, the scale */
-    if ((e = plat_enc(EN_ALGO)) != 0 && orchid && ui.screen == SCR_HOME) {
+    /* ALGORITHM: everywhere the notes' length (the key is on KEY alone) */
+    if ((e = plat_enc(EN_ALGO)) != 0) {
         /* ORCHID: the notes' length; OCT- held: the slices' length; OCT+ held: the velocity curve */
         char t[8];
         if (btn & 1u << B_OCTDN) {
             static const char *const SL[5] = {"1/4", "1/2", "AS CUT", "X2", "X4"};
             ui.oct_mod = 1;
             set.om_slen = (int8_t)clamp(set.om_slen + e, -2, 2);
-            orchid_fill();
+            if (orchid)
+                orchid_fill();
             app_say("SLICE LENGTH", SL[set.om_slen + 2]);
         } else if (btn & 1u << B_OCTUP) {
             ui.oct_mod = 1;
@@ -2416,14 +2413,6 @@ buttons:
         }
         set_dirty = 1;
         ui.redraw = 1;
-    } else if (e) {
-        if (btn & (1u << B_OCTDN | 1u << B_OCTUP)) {
-            ui.oct_mod = 1;
-            set.scale = (uint8_t)(((int32_t)set.scale + e % (int32_t)NSCALES + (int32_t)NSCALES) % (int32_t)NSCALES);
-        } else {
-            set.root = (uint8_t)(((int32_t)set.root + e % 12 + 12) % 12);
-        }
-        rekey();
     }
     /* SELECT and K1 .. K4: what the screen's bottom bar says */
     {
@@ -2677,15 +2666,6 @@ buttons:
     }
     {                                    /* HOME and SYS: a tap, or held 0.8 s */
         uint32_t now = plat_ms(), j;
-        if (btn & 1u << B_ARP) {         /* ARP held: PROBE */
-            if (!ui.arp_at)
-                ui.arp_at = now ? now : 1u;
-            else if (ui.arp_at != 0xFFFFFFFFu && now - ui.arp_at >= 800u) {
-                ui.arp_at = 0xFFFFFFFFu;
-                probe_open();
-            }
-        } else
-            ui.arp_at = 0;
         for (j = 0; j < 2u; j++) {
             uint32_t b = j ? B_GLO : B_HOME, *at = j ? &ui.sys_at : &ui.home_at;
             if (btn & 1u << b) {
@@ -3521,6 +3501,12 @@ static int web_import(uint32_t n)       /* (exported by web.c: the host blanks _
 int app_host_cmd(const char *cmd, const char *a, const char *b, const char *c, const char *d)
 {
     (void)c, (void)d;
+    if (!strcmp(cmd, "setmode")) {       /* setmode N: the B pads' mode (as K2 in SURFACE sets it) */
+        set.mode = (uint8_t)(atoi(a) % MODE_N);
+        set_dirty = 1;
+        ui.redraw = 1;
+        return 1;
+    }
     if (!strcmp(cmd, "import")) {
         static uint8_t buf[96 * 1024];
         char n83[12] = "           ";

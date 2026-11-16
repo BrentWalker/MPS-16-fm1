@@ -16,6 +16,8 @@ turn K3 2
 wait 30
 expect lock 1
 expect steps 2
+tap SEL
+wait 30
 key 0 down
 wait 40
 expect cbuf0_0 60
@@ -25,13 +27,18 @@ expect cbuf0_3 71
 shot key.png
 key 0 up
 wait 300
+tap EDIT
+wait 30
 turn K3 -2
 turn K4 -1
 wait 30
 expect lock 0
-# OCT- and OCT+ held: PROBE while held; a pad says what it is and plays nothing; let go: back, no octave step
+# OCT- and OCT+ tapped together: ANALYZE on; a pad says what it is and plays nothing; both again: off, no octave step
 press OCT-
 press OCT+
+wait 30
+release OCT+
+release OCT-
 wait 30
 expect probe 1
 key 0 down
@@ -40,9 +47,11 @@ expect probeitem 32
 expect playing0 0
 key 0 up
 wait 30
-release OCT+
+press OCT-
+press OCT+
 wait 30
 expect probe 0
+release OCT+
 release OCT-
 wait 30
 expect octave 0

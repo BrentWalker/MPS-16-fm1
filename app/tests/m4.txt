@@ -19,8 +19,8 @@ press HOME
 wait 900
 release HOME
 wait 50
-# LEAD: SEQ
-tap SEQ
+# LEAD (K2 in SURFACE)
+setmode 1
 wait 50
 expect mode 1
 expect dirty 1
@@ -42,13 +42,13 @@ wait 30
 expect leadnext -1
 key 2 up
 # on through 3RD and 5TH, back to ROOT
-tap SEQ
+setmode 2
 wait 50
 expect mode 2
-tap SEQ
+setmode 3
 wait 50
 expect mode 3
-tap SEQ
+setmode 0
 wait 50
 expect mode 0
 # TRIM (ENV): pad 1's phrase, played last
@@ -107,16 +107,10 @@ press HOME
 wait 900
 release HOME
 wait 50
-# FIND: REC and PLAY together, tap D F# A B, the best key D major, into LIB
-press REC
-wait 20
-press PLAY
-wait 20
-release PLAY
-release REC
+# FIND: on KEY, tap D F# A B, the best key D major, into LIB
+tap EDIT
 wait 50
-expect screen 8
-expect fdn 0
+expect screen 4
 key 9 down
 wait 20
 key 9 up
@@ -190,8 +184,10 @@ wait 700
 key 25 up
 wait 30
 expect fmove 2
-# a key picked by hand is the new home
-turn ALGO 1
+# a key picked by hand (KEY's K1) is the new home
+tap EDIT
+wait 30
+turn K1 1
 wait 30
 expect fmove 0
 expect root 8

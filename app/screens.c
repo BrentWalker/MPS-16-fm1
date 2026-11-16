@@ -43,8 +43,9 @@ static void draw_key(void)
         if (dim)
             deg_sign(x + 1, 4, C_GRAY);
     }
+    cv_text(10, 30, &FONT_B, "TAP PADS: FIND A KEY", AMBER);
     if (cur_file >= 0)
-        cv_text(10, 34, &FONT_B, "PLAY: FIND THE FILE'S KEY", C_GRAY);
+        cv_text(10, 50, &FONT_B, "PLAY: THE FILE'S KEY", C_GRAY);
     {
         static const char *const LBL[4] = {"ROOT", "SCALE", "STEP", "LOCK"};
         char v[4][12];

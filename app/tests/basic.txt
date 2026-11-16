@@ -54,8 +54,12 @@ wavstop
 key 0 up
 key 1 up
 wait 300
-# the root: ALGORITHM two to the right, A minor to B minor
-turn ALGO 2
+# the root: KEY's K1 two to the right, A minor to B minor
+tap EDIT
+wait 30
+turn K1 2
+wait 30
+tap HOME
 wait 30
 expect root 11
 expect dirty 1
@@ -65,11 +69,12 @@ expect padnote0 59
 shot b_minor.png
 key 0 up
 wait 300
-# the scale: OCT+ held while ALGORITHM turns: B minor to B major; its release steps no octave
-press OCT+
-turn ALGO 1
+# the scale: KEY's K2: B minor to B major
+tap EDIT
 wait 30
-release OCT+
+turn K2 1
+wait 30
+tap HOME
 wait 30
 expect scale 1
 expect octave 0

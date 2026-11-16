@@ -1,13 +1,15 @@
-# PROBE: hold ARP; everything frozen, saying what it does; ARP tapped or HOME: out
+# ANALYZE: OCT- and OCT+ tapped together; everything frozen, saying what it does; both again or HOME: out
 wait 600
 tap HOME
 wait 30
 import ../app/tests/midi/canon.mid canon.mid
 load 0
 wait 30
-press ARP
-wait 900
-release ARP
+press OCT-
+press OCT+
+wait 30
+release OCT+
+release OCT-
 wait 30
 expect probe 1
 shot probe_empty.png
@@ -34,7 +36,11 @@ turn ALGO 1
 wait 30
 expect omlen 0
 shot probe_algo.png
-tap ARP
+press OCT-
+press OCT+
+wait 30
+release OCT+
+release OCT-
 wait 30
 expect probe 0
 expect screen 0
@@ -49,9 +55,11 @@ key 0 up
 tap ENV
 wait 30
 expect screen 7
-press ARP
-wait 900
-release ARP
+press OCT-
+press OCT+
+wait 30
+release OCT+
+release OCT-
 wait 30
 turn K3 1
 wait 30

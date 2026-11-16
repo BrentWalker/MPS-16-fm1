@@ -26,10 +26,16 @@ wait 30
 press OCT-
 press OCT+
 wait 30
+release OCT+
+release OCT-
+wait 30
 key 5 down
 wait 30
 shot s05_probe.png
 key 5 up
+press OCT-
+press OCT+
+wait 30
 release OCT+
 release OCT-
 wait 30
@@ -77,11 +83,7 @@ wait 30
 tap ENV
 wait 60
 shot s14_trim.png
-press REC
-press PLAY
-wait 30
-release PLAY
-release REC
+tap EDIT
 wait 30
 key 16 down
 wait 20
