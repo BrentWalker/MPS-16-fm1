@@ -88,7 +88,7 @@ static void disk_format(void)
         DISK_BLOCKS & 0xFF, DISK_BLOCKS >> 8, 0xF8, FAT_BLOCKS, 0x00,     /* sectors, media, sectors per FAT */
         0x20, 0x00, 0x02, 0x00, 0, 0, 0, 0, 0, 0, 0, 0,                   /* geometry, hidden, total32 */
         0x80, 0x00, 0x29, 0x16, 0x07, 0x19, 0x87,                         /* drive, sig, volume id */
-        'C', 'H', 'O', 'R', 'D', 'S', 'M', 'I', 'T', 'H', ' ', 'F', 'A', 'T', '1', '2', ' ', ' ', ' '};
+        'M', 'P', 'S', '-', '1', '6', ' ', ' ', ' ', ' ', ' ', 'F', 'A', 'T', '1', '2', ' ', ' ', ' '};
     static uint8_t b[512];
     uint32_t i;
     for (i = 0; i < 512u; i++)
