@@ -11,35 +11,26 @@ typedef struct {
     uint32_t btn, keys;                  /* what blinks */
 } gpage_t;
 static const gpage_t GUIDE[] = {
-    {"WELCOME", "MPS-16 MAKES THE FM-1 A CHORD AND PHRASE SAMPLER. TURN SELECT FOR THE NEXT PAGE. HOME LEAVES.", 0,
-     0},
-    {"SURFACE", "LOAD A MIDI FILE: IT'S ON THE 16 PADS AT ONCE. PRESET: HOW IT'S CUT. K1: WHERE IN THE SONG.",
-     0, G_WHITE},
-    {"SURFACE KNOBS", "K2: THE 7 BLACK KEYS. K3: THE 4 EXTRA BLACK KEYS. K4: HOW THE PADS PLAY. ALGORITHM: NOTE LENGTH. HOLD OCT- OR OCT+ FOR MORE.",
-     GB(B_OCTDN) | GB(B_OCTUP), G_DEG | G_FKEYS},
-    {"MUTATE", "REPEATED CHORDS GET MORE INTERESTING: TURN SELECT FOR EXTEND, COLOR, FLIP, SUB OR MIX. THE PADS SHOW THE NEW NAMES.",
-     0, G_WHITE},
-    {"CORE", "HOLD HOME FOR CORE: EVERYTHING ELSE, ON THE NEXT PAGES. TAP HOME TO COME BACK TO THE SURFACE.", GB(B_HOME),
-     0},
-    {"PLAY CHORDS", "THE WHITE KEYS ARE 16 PADS. EACH PLAYS A CHORD IN YOUR KEY. PLAY THEM NOW.", 0, G_WHITE},
-    {"BASS AND LEAD", "BLACK KEYS 1-7 PLAY THE KEY'S NOTES. THE LIT BUTTON (MODE) SWITCHES THEM: BASS (ROOT) OR LEAD.",
-     GB(B_SEQ), G_DEG},
-    {"PICK A KEY", "TURN THE ALGORITHM KNOB FOR THE ROOT. THE LIT BUTTON (KEY) PICKS THE SCALE.", GB(B_EDIT), 0},
-    {"FIND A KEY", "HOLD REC AND PRESS PLAY. TAP A FEW NOTES, TURN SELECT TO PICK A KEY, TURN K4 TO USE IT.",
-     GB(B_REC) | GB(B_PLAY), 0},
-    {"CHORD LIBRARY", "THE LIT BUTTON (LIB) LISTS THE KEY'S CHORDS. PRESS A WHITE KEY TO PUT ONE ON THAT PAD.",
-     GB(B_LFO), 0},
-    {"CHORD FX", "THE LIT BUTTON (FX): STRUM, ARPEGGIO, HUMANIZE AND MORE, ON THE FOUR K KNOBS.", GB(B_FX), 0},
-    {"LOAD A MIDI FILE", "THE LIT BUTTON (SYS) MAKES THE FM-1 A USB DRIVE. COPY .MID FILES ON, THEN EJECT IT.",
-     GB(B_GLO), 0},
-    {"SLICE IT", "THE LIT BUTTON (SLICE) SHOWS THE FILE. K1 CUTS IT, SELECT PICKS A SLICE, A WHITE KEY DROPS IT.",
-     GB(B_SEL), G_WHITE},
-    {"TRIM A PAD", "PLAY A PAD, THEN THE LIT BUTTON (TRIM): ITS START, END, TUNE, LEVEL AND LOOP.", GB(B_ENV), 0},
-    {"A BRIDGE", "THE LAST 4 BLACK KEYS CHANGE KEY. TAP ONE TO GO, TAP IT AGAIN TO COME HOME.", 0, G_FKEYS},
-    {"PROBE", "HOLD ARP: EVERY KNOB, BUTTON AND KEY STOPS AND SAYS WHAT IT DOES, AND WITH OCT- OR OCT+. TAP ARP TO LEAVE.",
-     GB(B_ARP), 0},
-    {"SAVE", "THE LIT BUTTON (SAVE) KEEPS YOUR PADS AND SETTINGS. HOLD SYS TO SEE THIS GUIDE AGAIN.", GB(B_SAVE),
-     0},
+    {"WELCOME", "TURN SELECT FOR THE NEXT PAGE. HOME LEAVES.", 0, 0},
+    {"SURFACE", "LOAD A MIDI FILE: IT'S ON THE 16 PADS AT ONCE.", 0, G_WHITE},
+    {"THE CUT", "PRESET: HOW THE SONG IS CUT. K1: WHERE IN THE SONG.", 0, G_WHITE},
+    {"BLACK KEYS", "K2: WHAT KEYS 1-7 PLAY. K3: WHAT THE LAST 4 DO.", 0, G_DEG | G_FKEYS},
+    {"HOW PADS PLAY", "K4: CHORD, STRUM, ARP AND MORE. ALGORITHM: NOTE LENGTH.", 0, G_WHITE},
+    {"SECOND JOBS", "HOLD OCT- OR OCT+ AND TURN A KNOB FOR MORE.", GB(B_OCTDN) | GB(B_OCTUP), 0},
+    {"MUTATE", "TURN SELECT: REPEATED CHORDS GET MORE INTERESTING.", 0, G_WHITE},
+    {"CORE", "HOLD HOME FOR CORE. TAP HOME TO COME BACK.", GB(B_HOME), 0},
+    {"PLAY CHORDS", "THE WHITE KEYS ARE 16 PADS. PLAY THEM NOW.", 0, G_WHITE},
+    {"BASS AND LEAD", "KEYS 1-7 PLAY BASS OR LEAD. THE LIT BUTTON SWITCHES.", GB(B_SEQ), G_DEG},
+    {"PICK A KEY", "THE LIT BUTTON: ROOT, SCALE AND SCALE LOCK.", GB(B_EDIT), 0},
+    {"FIND A KEY", "HOLD REC, PRESS PLAY. TAP NOTES. SELECT PICKS A KEY.", GB(B_REC) | GB(B_PLAY), 0},
+    {"CHORD LIBRARY", "THE LIT BUTTON: YOUR KEY'S CHORDS. A WHITE KEY DROPS ONE.", GB(B_LFO), 0},
+    {"CHORD FX", "THE LIT BUTTON: STRUM, ARP AND HUMANIZE ON THE K KNOBS.", GB(B_FX), 0},
+    {"LOAD A FILE", "THE LIT BUTTON: USB DRIVE. COPY .MID FILES ON, EJECT.", GB(B_GLO), 0},
+    {"SLICE IT", "THE LIT BUTTON SHOWS THE FILE. A WHITE KEY DROPS A SLICE.", GB(B_SEL), G_WHITE},
+    {"TRIM A PAD", "PLAY A PAD, THEN THE LIT BUTTON: START, END, LOOP.", GB(B_ENV), 0},
+    {"A BRIDGE", "THE LAST 4 BLACK KEYS: TAP TO CHANGE KEY, AGAIN FOR HOME.", 0, G_FKEYS},
+    {"PROBE", "HOLD ARP, THEN TOUCH ANYTHING: IT SAYS WHAT IT DOES.", GB(B_ARP), 0},
+    {"SAVE", "THE LIT BUTTON KEEPS YOUR PADS. HOLD SYS FOR THIS GUIDE.", GB(B_SAVE), 0},
 };
 #define NGUIDE (sizeof GUIDE / sizeof GUIDE[0])
 static uint32_t guide_count(void) { return NGUIDE; }
@@ -61,7 +52,7 @@ static void guide_lights(void)          /* the page's controls blink; all else d
 }
 
 /* the words of t, wrapped to w pixels: up to max lines into ln (each up to 48 characters) */
-static uint32_t guide_wrap(const char *t, int32_t w, char ln[][48], uint32_t max)
+static uint32_t guide_wrap_f(const felucca_font_t *f, const char *t, int32_t w, char ln[][48], uint32_t max)
 {
     uint32_t n = 0, len = 0;
     ln[0][0] = 0;
@@ -80,7 +71,7 @@ static uint32_t guide_wrap(const char *t, int32_t w, char ln[][48], uint32_t max
             str_set(tryl, ln[n], sizeof tryl);
             text_cat(tryl, " ");
             text_cat(tryl, word);
-            if (text_w(&FONT_XS, tryl) <= w && cs_len(tryl) < 47u) {
+            if (text_w(f, tryl) <= w && cs_len(tryl) < 47u) {
                 str_set(ln[n], tryl, 48);
                 len = cs_len(tryl);
                 continue;
@@ -93,27 +84,33 @@ static uint32_t guide_wrap(const char *t, int32_t w, char ln[][48], uint32_t max
     }
     return n < max ? n + 1u : max;
 }
+static uint32_t guide_wrap(const char *t, int32_t w, char ln[][48], uint32_t max)
+{
+    return guide_wrap_f(&FONT_XS, t, w, ln, max);
+}
 
+
+/* big text on a 240 x 240 screen drawn as two 120-row halves: each line drawn in both, the canvas clips it */
+static void big_rows(int half, int32_t y0, int32_t step, const felucca_font_t *f, char ln[][48], uint32_t n, uint16_t c)
+{
+    uint32_t i;
+    for (i = 0; i < n; i++)
+        cv_text(10, y0 + (int32_t)i * step - (half ? 120 : 0), f, ln[i], c);
+}
 static void draw_guide(void)
 {
     const gpage_t *g = &GUIDE[ui.guide_pg % NGUIDE];
-    char ln[9][48], pg[8];
-    uint32_t n = guide_wrap(g->text, 220, ln, 9), i;
+    char ln[6][48], pg[8];
+    uint32_t n = guide_wrap_f(&FONT_L, g->text, 226, ln, 6), h;
     num_text((int32_t)ui.guide_pg + 1, pg, 0);
     text_cat(pg, "/");
     num_text((int32_t)NGUIDE, pg + cs_len(pg), 0);
-    lab_begin();
-    top_bar("GUIDE", pg, C_GRAY);
-    cv_text(10, 32, &FONT_B, g->title, AMBER);
-    for (i = 0; i < n && i < 3u; i++)
-        cv_text(10, 66 + (int32_t)i * 16, &FONT_XS, ln[i], C_WHITE);
-    cv_blit(0, 0);
-    lab_begin();
-    for (i = 3; i < n; i++)
-        cv_text(10, 2 + (int32_t)(i - 3u) * 16, &FONT_XS, ln[i], C_WHITE);
-    for (i = 0; i < NGUIDE; i++)         /* where you are */
-        cv_rect(120 - (int32_t)NGUIDE * 5 + (int32_t)i * 10, 84, 6, 6, i == ui.guide_pg ? AMBER : C_LINE);
-    cv_text((240 - text_w(&FONT_XS, "SELECT: PAGES   HOME: DONE")) / 2, 98, &FONT_XS, "SELECT: PAGES   HOME: DONE",
-            C_DIM);
-    cv_blit(0, 120);
+    for (h = 0; h < 2u; h++) {
+        lab_begin();
+        if (!h)
+            top_bar("GUIDE", pg, C_GRAY);
+        cv_text(10, 26 - (int32_t)h * 120, &FONT_M, g->title, AMBER);
+        big_rows((int)h, 54, 31, &FONT_L, ln, n, C_WHITE);
+        cv_blit(0, h * 120u);
+    }
 }

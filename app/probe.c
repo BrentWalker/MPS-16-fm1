@@ -9,31 +9,31 @@ typedef struct {
 } probe_t;
 
 static const probe_t PR_BTN[NB] = {
-    {"FX", "CHORD FX: STRUM, ARP, HUMANIZE, INVERSION, RATE, BASS. IN SURFACE IT OPENS CORE.", 0, 0},
-    {"SLICE", "THE FILE AS SLICES: CUT IT, PICK ONE, DROP IT ON A PAD. AGAIN: THE FILES.", 0, 0},
-    {"TRIM", "THE PAD PLAYED LAST: ITS START, END, TUNE, LEVEL AND ONE-SHOT, GATE OR LOOP.", 0, 0},
-    {"LIB", "THE CHORD LIBRARY: THE KEY'S CHORDS AND PROGRESSIONS, A WHITE KEY DROPS ONE.", 0, 0},
-    {"KEY", "THE KEY: ROOT, SCALE, SCALE STEPS, SCALE LOCK. PLAY: FIND IT FROM THE FILE.", 0, 0},
-    {"SYS", "THE USB DRIVE, FOR COPYING MIDI FILES ON. HELD: THE GUIDE.", 0, 0},
-    {"HOME", "SURFACE, AS YOU LEFT IT. HELD: CORE.", 0, 0},
-    {"SAVE", "KEEPS THE PADS AND SETTINGS. LIT WHEN SOMETHING CHANGED.", 0, 0},
-    {"ARP", "HELD: PROBE, THIS. TAP IT TO LEAVE.", 0, 0},
-    {"MODE", "IN CORE: THE BLACK KEYS 1-7: ROOT, LEAD, 3RD, 5TH.", 0, 0},
-    {"PLAY", "WITH REC: FIND A KEY FROM A FEW NOTES. IN SLICE OR LIB: HEAR THE PICK.", 0, 0},
-    {"REC", "RECORD MIDI COMING IN, AGAIN TO SAVE IT. WITH PLAY: FIND A KEY.", 0, 0},
-    {"OCT-", "AN OCTAVE DOWN, WHEN YOU LET GO. HELD: THE SHIFT FOR THE KNOBS. WITH OCT+: SCALE LOCK.", 0, 0},
-    {"OCT+", "AN OCTAVE UP, WHEN YOU LET GO. HELD: THE OTHER SHIFT. WITH OCT-: SCALE LOCK.", 0, 0},
+    {"FX", "CHORD FX: STRUM, ARP, HUMANIZE, INVERSION, BASS.", 0, 0},
+    {"SLICE", "CUT THE FILE BY HAND, DROP SLICES ON PADS. AGAIN: FILES.", 0, 0},
+    {"TRIM", "THE LAST PAD: START, END, TUNE, LEVEL, LOOP.", 0, 0},
+    {"LIB", "YOUR KEY'S CHORDS. A WHITE KEY DROPS ONE ON A PAD.", 0, 0},
+    {"KEY", "ROOT, SCALE, STEPS AND SCALE LOCK.", 0, 0},
+    {"SYS", "TAP: USB DRIVE FOR MIDI FILES. HOLD: GUIDE.", 0, 0},
+    {"HOME", "TAP: SURFACE. HOLD: CORE.", 0, 0},
+    {"SAVE", "KEEPS YOUR PADS AND SETTINGS.", 0, 0},
+    {"ARP", "HOLD: PROBE, THIS. TAP TO LEAVE.", 0, 0},
+    {"MODE", "WHAT KEYS 1-7 PLAY: ROOT, LEAD, 3RD, 5TH.", 0, 0},
+    {"PLAY", "ALL NOTES OFF. WITH REC: FIND A KEY.", 0, 0},
+    {"REC", "RECORD MIDI IN. AGAIN: SAVE IT.", 0, 0},
+    {"OCT-", "OCTAVE DOWN WHEN YOU LET GO. HOLD + KNOB: MORE.", 0, 0},
+    {"OCT+", "OCTAVE UP WHEN YOU LET GO. HOLD + KNOB: MORE.", 0, 0},
 };
 static const probe_t PR_SURF[7] = {
-    {"MUTATE", "WHAT REPEATED CHORDS BECOME: OFF, EXTEND, COLOR, FLIP, SUB, MIX.",
-     "WHICH: EACH REPEAT, EVERY OTHER, ALL CHORDS", "A NEW MIX ROLL"},
-    {"NOTE LENGTH", "SHORT TO LONG: 10% TO 450%, THEN LEGATO.", "SLICE LENGTH: X1/4 TO X4", "VELOCITY CURVE: SOFTER OR HARDER"},
-    {"SLICE", "HOW THE FILE IS CUT: EQUAL, BARS, 2 BARS, HITS, CHORDS.", 0, 0},
-    {"START", "WHERE IN THE SONG THE 16 PADS BEGIN, A SLICE A CLICK.", 0, 0},
-    {"BLACK 7", "WHAT BLACK KEYS 1-7 PLAY: ROOT, LEAD, 3RD, 5TH.", 0, 0},
-    {"BLACK 4", "WHAT THE 4 EXTRA BLACK KEYS DO: BRIDGE, SUGGEST, OUTSIDE, BORROW.", 0, 0},
-    {"PLAY", "HOW THE PADS PLAY: AS IS, CHORD, STRUM, ARP, SLOPPY, RHYTHMS.",
-     "HOW MUCH: STRUM WIDTH, ARP OCTAVES, HUMANIZE", "VOICING: INVERSIONS, WIDE, RANDOM"},
+    {"MUTATE", "REPEATED CHORDS CHANGE: EXTEND, COLOR, FLIP, SUB, MIX.",
+     "WHICH CHORDS CHANGE", "A NEW MIX ROLL"},
+    {"NOTE LENGTH", "SHORT TO LONG, THEN LEGATO.", "SLICE LENGTH", "SOFTER OR HARDER"},
+    {"SLICE", "HOW THE SONG IS CUT: EQUAL, BARS, HITS, CHORDS.", 0, 0},
+    {"START", "WHERE IN THE SONG THE 16 PADS BEGIN.", 0, 0},
+    {"BLACK 7", "WHAT KEYS 1-7 PLAY: ROOT, LEAD, 3RD, 5TH.", 0, 0},
+    {"BLACK 4", "THE LAST 4 BLACK KEYS: BRIDGE, SUGGEST, OUTSIDE, BORROW.", 0, 0},
+    {"PLAY", "HOW PADS PLAY: AS IS, CHORD, STRUM, ARP, RHYTHMS.",
+     "HOW MUCH", "VOICING"},
 };
 static const probe_t PR_ALGO_CORE = {"ROOT", "THE KEY'S ROOT.", "THE SCALE", "THE SCALE"};
 static const probe_t PR_PRESET_CORE = {"KIT", "THE NEXT KIT, LOADED AT ONCE (SAVE FIRST TO KEEP CHANGES).", 0, 0};
@@ -112,8 +112,8 @@ static void probe_info(int32_t it, probe_t *o)
         for (j = 0; j < 16u; j++)
             if (WK[j] == k) {
                 o->title = "A PAD";
-                o->what = orchid ? "WHITE KEY: A SLICE OF THE FILE, PLAYED AS PLAY (K4) SAYS."
-                                 : "WHITE KEY: ITS CHORD OR PHRASE. IN SLICE OR LIB IT TAKES THE PICK.";
+                o->what = orchid ? "A SLICE OF THE SONG, PLAYED AS K4 SAYS."
+                                 : "ITS CHORD OR PHRASE.";
                 return;
             }
         for (j = 0; j < 7u; j++)
@@ -122,14 +122,27 @@ static void probe_info(int32_t it, probe_t *o)
                 num_text((int32_t)j + 1, line + cs_len(line), 0);
                 text_cat(line, ": THE KEY'S NOTE, AS ");
                 text_cat(line, MODE_NAME[set.mode % MODE_N]);
-                text_cat(line, ". BLACK 7 (K2) CHANGES IT.");
+                text_cat(line, ". K2 CHANGES IT.");
                 o->title = MODE_NAME[set.mode % MODE_N];
                 o->what = line;
                 return;
             }
+        for (j = 0; j < 4u; j++)
+            if (BK[7u + j] == k)
+                break;
+        if (set.om_f4 == FK_BRIDGE && j < 4u) {   /* say where it goes */
+            char kn[24];
+            fd_name(fk_target(set.fmove == j + 1u ? 0u : j + 1u), kn);
+            str_set(line, set.fmove == j + 1u ? "TAP: BACK HOME TO " : "TAP: CHANGE KEY TO ", sizeof line);
+            text_cat(line, kn);
+            text_cat(line, ". HOLD: PREVIEW.");
+            o->title = FK_NAME[j];
+            o->what = line;
+            return;
+        }
         str_set(line, "AN EXTRA BLACK KEY, AS ", sizeof line);
         text_cat(line, FK_MODE[set.om_f4 % FK_N]);
-        text_cat(line, ". BLACK 4 (K3) CHANGES IT.");
+        text_cat(line, ". K3 CHANGES IT.");
         o->title = FK_MODE[set.om_f4 % FK_N];
         o->what = line;
     }
@@ -208,45 +221,64 @@ static void draw_probe(void)
     cv_text(text_w(&FONT_XS, "PROBE") + 22, 6, &FONT_XS, orchid && ui.probe_from == SCR_HOME ? "SURFACE" : "CORE",
             orchid && ui.probe_from == SCR_HOME ? AIR_C : EARTH_C);
     if (!o.title) {
-        cv_text(10, 40, &FONT_B, "TOUCH ANYTHING", FIRE_C);
-        cv_text(10, 74, &FONT_XS, "A KNOB, A BUTTON OR A KEY:", C_WHITE);
-        cv_text(10, 90, &FONT_XS, "IT SAYS WHAT IT DOES, AND DOES NOTHING.", LAB_LABEL);
-        cv_blit(0, 0);
-        cv_begin(240, 120, LAB_BG);
-        lab_paper();
-        cv_rect(0, 90, 240, 30, LAB_BG);
-        cv_text((240 - text_w(&FONT_XS, "TAP ARP OR HOME TO LEAVE")) / 2, 98, &FONT_XS, "TAP ARP OR HOME TO LEAVE",
-                LAB_LABEL);
-        cv_blit(0, 120);
+        {
+            uint32_t h;
+            for (h = 0; h < 2u; h++) {
+                int32_t dy = (int32_t)h * 120;
+                if (h) {
+                    cv_begin(240, 120, LAB_BG);
+                    lab_paper();
+                }
+                cv_rect(0, 28 - dy, 240, 212, LAB_BG);
+                cv_text(10, 32 - dy, &FONT_M, "TOUCH ANYTHING", FIRE_C);
+                cv_text(10, 66 - dy, &FONT_L, "A KNOB, BUTTON", C_WHITE);
+                cv_text(10, 99 - dy, &FONT_L, "OR KEY: IT SAYS", C_WHITE);
+                cv_text(10, 132 - dy, &FONT_L, "WHAT IT DOES.", C_WHITE);
+                cv_text(10, 182 - dy, &FONT_M, "TAP ARP TO LEAVE", LAB_LABEL);
+                cv_blit(0, h * 120u);
+            }
+        }
         return;
     }
-    cv_rect(0, 30, 240, 90, LAB_BG);
-    cv_text(10, 32, &FONT_B, o.title, FIRE_C);
-    n = guide_wrap(o.what, 220, ln, 4);
-    for (i = 0; i < n && i < 3u; i++)
-        cv_text(10, 64 + (int32_t)i * 16, &FONT_XS, ln[i], C_WHITE);
-    cv_blit(0, 0);
-    cv_begin(240, 120, LAB_BG);
-    lab_paper();
-    cv_rect(0, 0, 240, 120, LAB_BG);
-    y = 2;
-    for (i = 3; i < n; i++, y += 16)
-        cv_text(10, y, &FONT_XS, ln[i], C_WHITE);
-    y += 8;
-    if (o.om) {                          /* the shifts */
-        cv_text(10, y, &FONT_XS, "OCT- HELD", EARTH_C);
-        n = guide_wrap(o.om, 150, ln, 2);
-        for (i = 0; i < n; i++)
-            cv_text(80, y + (int32_t)i * 14, &FONT_XS, ln[i], C_WHITE);
-        y += 14 * (int32_t)(n ? n : 1u) + 8;
+    {
+        /* big: the title, then what it does, then its second jobs, each row in the colour of whose it is */
+        char rows[8][48], tmp[4][48], t[96];
+        uint16_t col[8];
+        uint32_t nr = 0, h, k;
+        n = guide_wrap_f(&FONT_M, o.what, 224, tmp, 4);
+        for (k = 0; k < n && nr < 8u; k++, nr++) {
+            str_set(rows[nr], tmp[k], 48);
+            col[nr] = C_WHITE;
+        }
+        if (o.om) {
+            str_set(t, "OCT-: ", sizeof t);
+            text_cat(t, o.om);
+            n = guide_wrap_f(&FONT_M, t, 224, tmp, 3);
+            for (k = 0; k < n && nr < 7u; k++, nr++) {
+                str_set(rows[nr], tmp[k], 48);
+                col[nr] = EARTH_C;
+            }
+        }
+        if (o.op) {
+            str_set(t, "OCT+: ", sizeof t);
+            text_cat(t, o.op);
+            n = guide_wrap_f(&FONT_M, t, 224, tmp, 3);
+            for (k = 0; k < n && nr < 7u; k++, nr++) {
+                str_set(rows[nr], tmp[k], 48);
+                col[nr] = AIR_C;
+            }
+        }
+        for (h = 0; h < 2u; h++) {
+            int32_t dy = (int32_t)h * 120;
+            if (h) {
+                cv_begin(240, 120, LAB_BG);
+                lab_paper();
+            }
+            cv_rect(0, 28 - dy, 240, 212, LAB_BG);
+            cv_text(10, 30 - dy, &FONT_M, o.title, FIRE_C);
+            for (k = 0; k < nr; k++)
+                cv_text(10, 58 + (int32_t)k * 25 - dy, &FONT_M, rows[k], col[k]);
+            cv_blit(0, h * 120u);
+        }
     }
-    if (o.op) {
-        cv_text(10, y, &FONT_XS, "OCT+ HELD", AIR_C);
-        n = guide_wrap(o.op, 150, ln, 2);
-        for (i = 0; i < n; i++)
-            cv_text(80, y + (int32_t)i * 14, &FONT_XS, ln[i], C_WHITE);
-    }
-    cv_text((240 - text_w(&FONT_XS, "TAP ARP OR HOME TO LEAVE")) / 2, 100, &FONT_XS, "TAP ARP OR HOME TO LEAVE",
-            LAB_LABEL);
-    cv_blit(0, 120);
 }

@@ -1,0 +1,59 @@
+wait 600
+shot g01.png
+turn SELECT 1
+wait 30
+shot g02.png
+turn SELECT 1
+wait 30
+shot g03.png
+turn SELECT 1
+wait 30
+shot g04.png
+turn SELECT 1
+wait 30
+shot g05.png
+turn SELECT 1
+wait 30
+shot g06.png
+turn SELECT 1
+wait 30
+shot g07.png
+turn SELECT 1
+wait 30
+shot g08.png
+turn SELECT 1
+wait 30
+shot g09.png
+turn SELECT 1
+wait 30
+shot g10.png
+turn SELECT 1
+wait 30
+shot g11.png
+turn SELECT 1
+wait 30
+shot g12.png
+turn SELECT 1
+wait 30
+shot g13.png
+turn SELECT 1
+wait 30
+shot g14.png
+turn SELECT 1
+wait 30
+shot g15.png
+turn SELECT 1
+wait 30
+shot g16.png
+turn SELECT 1
+wait 30
+shot g17.png
+turn SELECT 1
+wait 30
+shot g18.png
+turn SELECT 1
+wait 30
+shot g19.png
+turn SELECT 1
+wait 30
+shot g20.png
