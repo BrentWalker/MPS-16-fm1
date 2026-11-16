@@ -1,11 +1,10 @@
 # MPS-16 ver FM1
 
-Free firmware for the M-VAVE FM-1 by BeatSmith. It turns the FM-1 into a chord and phrase player: 16 pads on the white keys, scale degrees on the black keys, a chord library built from any key, MIDI FX (strum, arp, humanize, inversion) and MIDI file slicing.
+Free firmware for the M-VAVE FM-1 by BeatSmith, in the Earth Science family. A MIDI phrase sampler: load a MIDI file and it is on the 16 A pads (the white keys) at once, in its own key. The B pads (the first 7 black keys) play bass and lead in the key, the C pads (the last 4) change key for a bridge, MUTATE makes repeated chords more interesting, and each pad group sends MIDI on its own channel.
 
-MPS-16 ver FM1 is the hardware version of MPS-16 ver WEB, and groundwork for MPS-16.
+MPS-16 ver FM1 is the hardware version of MPS-16 ver WEB, and groundwork for the MPS-16 plugin.
 
-**Status:** early test builds (0.3). Try it in the browser or install it: https://brentwalker.github.io/MPS-16-fm1/
-(the site needs GitHub Pages on: Settings > Pages > gh-pages). Manual: app/docs/MANUAL.md.
+**Status:** 0.23.1, test builds. Install it or try it in the browser: https://brentwalker.github.io/MPS-16-fm1/ (older versions for testing: /v/VERSION/install/). Manual: [app/docs/MANUAL.md](app/docs/MANUAL.md).
 
 ## Built on
 
