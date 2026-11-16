@@ -1,0 +1,48 @@
+# BRIDGE in SURFACE: F2-F4 move the song's pads into the new key, F1 brings them home
+wait 600
+tap HOME
+wait 30
+import ../app/tests/midi/canon.mid canon.mid
+load 0
+turn PRESET 3
+wait 30
+turn K4 1
+wait 30
+expect omplay 1
+expect omf4 0
+key 0 down
+wait 30
+expect cbuf0_0 50
+key 0 up
+wait 30
+shot br_home.png
+key 20 down
+wait 30
+key 20 up
+wait 30
+expect fmove 2
+key 0 down
+wait 30
+expect cbuf0_0 55
+key 0 up
+wait 30
+shot br_f2.png
+key 22 down
+wait 30
+key 22 up
+wait 30
+expect fmove 3
+key 2 down
+wait 30
+key 2 up
+wait 30
+shot br_f3.png
+key 17 down
+wait 30
+key 17 up
+wait 30
+expect fmove 0
+key 0 down
+wait 30
+expect cbuf0_0 50
+key 0 up

@@ -204,6 +204,50 @@ static int32_t keyed(int32_t p)
     return set.root + 12 * oct + sc[nn];
 }
 
+/* BRIDGE in SURFACE: the song's pads follow the key change. The pads are worked out in the home key
+ * (scale lock, MUTATE), then each note moves degree for degree into the key F2-F4 went to */
+static uint8_t orchid;
+static uint8_t hk_root, hk_scale;
+static int home_swap(void)               /* the home key in set.root/scale for a moment; 1: swapped */
+{
+    if (!orchid || !set.fmove)
+        return 0;
+    hk_root = set.root;
+    hk_scale = set.scale;
+    set.root = (uint8_t)(set.home >> 4);
+    set.scale = (uint8_t)(set.home & 15u);
+    return 1;
+}
+static void home_back(int sw)
+{
+    if (sw) {
+        set.root = hk_root;
+        set.scale = hk_scale;
+    }
+}
+static int32_t bridged(int32_t p)        /* a home-key note in the key in use */
+{
+    uint32_t hr, hs, i = 0;
+    int32_t delta, rel, c;
+    if (!orchid || !set.fmove)
+        return p;
+    hr = set.home >> 4;
+    hs = set.home & 15u;
+    delta = (((int32_t)set.root - (int32_t)hr + 18) % 12) - 6;
+    rel = ((p - (int32_t)hr) % 12 + 12) % 12;
+    while (i < 6u && (int32_t)SCALES[hs][i + 1u] <= rel)
+        i++;
+    c = rel - (int32_t)SCALES[hs][i];
+    return p - rel + delta + (int32_t)SCALES[set.scale][i] + c;
+}
+static int32_t pad_keyed(int32_t p)      /* a pad's note: scale lock in the home key, then the bridge */
+{
+    int sw = home_swap();
+    p = keyed(p);
+    home_back(sw);
+    return bridged(p);
+}
+
 static void num_text(int32_t v, char *o, int sign)   /* "12", "+3", "-2" */
 {
     char t[8];
@@ -493,8 +537,8 @@ static void phrase_tick(uint32_t n)
             int starts = s >= a && s < b && s >= ws && s < we;
             if (starts) {
                 int32_t sh = orchid && i < NPADS ? mshift[i][x->p % 12u] : 0;
-                uint32_t m = (uint32_t)clamp(sh ? (int32_t)x->p + sh + 12 * P->oct + pd->tune   /* FLIP wins */
-                                                : keyed((int32_t)x->p + 12 * P->oct + pd->tune), 0, 127);
+                uint32_t m = (uint32_t)clamp(sh ? bridged((int32_t)x->p + sh + 12 * P->oct + pd->tune)   /* FLIP wins */
+                                                : pad_keyed((int32_t)x->p + 12 * P->oct + pd->tune), 0, 127);
                 uint32_t v = (uint32_t)x->v * lv / 100u;
                 if (set.human)
                     v = human_vel(v ? v : 1u);   /* humanize (ORCHID's SLOPPY): phrases too */
@@ -884,7 +928,14 @@ static void pc_name(uint32_t pc, char *out)
     static const char *const SH[12] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
     static const char *const FL[12] = {"C", "Db", "D", "Eb", "E", "F", "Gb", "G", "Ab", "A", "Bb", "B"};
     char t[4];
+    uint32_t r = set.root;
     tonic_name(t);
+    if (set.scale <= 1u) {               /* major or minor: flats in a flat key signature (D minor: Bb) */
+        if (set.scale == 0u)
+            r = (r + 3u) % 12u;
+        str_set(out, (r == 5u || r == 10u || r == 3u || r == 8u || r == 1u || r == 6u) ? FL[pc % 12u] : SH[pc % 12u], 4);
+        return;
+    }
     str_set(out, (t[1] == 'b' || (t[0] == 'F' && !t[1])) ? FL[pc % 12u] : SH[pc % 12u], 4);
 }
 
@@ -1424,7 +1475,14 @@ static void mut_plan(void)
 }
 
 /* the 16 pads from the file, as PRESET and K1 say (no file: the key's chords, as always) */
-static void orchid_fill(void)
+static void orchid_fill_(void);
+static void orchid_fill(void)            /* (worked out in the home key while a bridge is in use) */
+{
+    int sw = home_swap();
+    orchid_fill_();
+    home_back(sw);
+}
+static void orchid_fill_(void)
 {
     uint32_t i, first;
     if (!song_n) {
@@ -1642,7 +1700,7 @@ static void chord_build(uint32_t i)
         out[no++] = v[k];
     cbuf_n[i] = 0;
     for (k = 0; k < no && cbuf_n[i] < MAXC; k++) {
-        int32_t m = clamp(keyed(out[k] + 12 * set.octave + p->tune), 0, 127);
+        int32_t m = clamp(pad_keyed(out[k] + 12 * set.octave + p->tune), 0, 127);
         for (j = 0; j < cbuf_n[i]; j++)
             if (cbuf[i][j] == (uint8_t)m)
                 break;
@@ -1694,7 +1752,7 @@ static void pad_play(uint32_t i, uint32_t k, uint32_t vel)
         n = om_voice(v, n, MAXC);
         cbuf_n[i] = 0;
         for (k = 0; k < n && cbuf_n[i] < MAXC; k++)
-            cbuf[i][cbuf_n[i]++] = (uint8_t)clamp(keyed(v[k] + 12 * set.octave + p->tune), 0, 127);
+            cbuf[i][cbuf_n[i]++] = (uint8_t)clamp(pad_keyed(v[k] + 12 * set.octave + p->tune), 0, 127);
         ev_push(QE_CSTART, i, vel);
     } else if (p->type == PAD_PHRASE) {
         if (p->pmode == PM_LOOP && pl[i].on)   /* LOOP: a second press stops it */
@@ -1959,26 +2017,26 @@ static void find_use(void)
 }
 
 /* F1-F4: the key changes, each from the home key */
-static const char *const FK_NAME[4] = {"F1 RELATIVE", "F2 PARALLEL", "F3 UP A 4TH", "F4 UP A STEP"};
-static uint32_t fk_target(uint32_t mv)   /* the key move mv (0: home) goes to, root << 4 | scale */
+static const char *const FK_NAME[4] = {"F1 HOME", "F2 UP A 4TH", "F3 PARALLEL", "F4 UP A STEP"};
+static uint32_t fk_target(uint32_t mv)   /* where F-key mv goes (0 and 1, F1: home), root << 4 | scale */
 {
     uint32_t h = set.fmove ? set.home : (uint32_t)(set.root << 4 | set.scale), r = h >> 4, sc = h & 15u;
     int minor = SCALES[sc][2] == 3u;
-    if (mv == 1u)                        /* relative: the same notes */
-        return minor ? ((r + 3u) % 12u) << 4 | 1u : ((r + 9u) % 12u) << 4 | 0u;
-    if (mv == 2u)                        /* parallel: the same tonic */
-        return r << 4 | (minor ? 1u : 0u);
-    if (mv == 3u)
+    if (mv == 2u)                        /* up a 4th, the usual bridge */
         return ((r + 5u) % 12u) << 4 | sc;
-    if (mv == 4u)
+    if (mv == 3u)                        /* parallel: the same tonic, major and minor swapped */
+        return r << 4 | (minor ? 1u : 0u);
+    if (mv == 4u)                        /* up a step, the last-chorus lift */
         return ((r + 2u) % 12u) << 4 | sc;
     return h;
 }
-static void fk_go(uint32_t mv)           /* a tap: there, or home again */
+static void fk_go(uint32_t mv)           /* a tap: F1 home, F2-F4 there (from home, always) */
 {
     uint32_t e;
-    if (set.fmove == mv)
+    if (mv <= 1u)
         mv = 0;
+    if (set.fmove == mv)
+        return;
     if (!set.fmove)
         set.home = (uint8_t)(set.root << 4 | set.scale);
     e = fk_target(mv);
@@ -2045,7 +2103,7 @@ static uint32_t fk_notes(uint32_t i, uint8_t *m, char *name)
 }
 static uint32_t fk_pivots(void)          /* held: the chord pads whose notes are all in the key it goes to */
 {
-    uint32_t e = fk_target(set.fmove == ui.f_hold ? 0u : ui.f_hold), i, k, out = 0;
+    uint32_t e = fk_target(ui.f_hold), i, k, out = 0;
     uint16_t m = scale_mask(e >> 4, e & 15u);
     for (i = 0; i < NPADS; i++) {
         const pad_t *p = &pads[i];
@@ -2158,11 +2216,11 @@ static void input(void)
         uint32_t k = BK[7u + i], bit = 1u << k;
         if ((keys & bit) && !(ui.keys & bit)) {
             char t[24];
-            uint32_t mv = i + 1u, e = fk_target(set.fmove == mv ? 0u : mv);
+            uint32_t mv = i + 1u, e = fk_target(mv);
             ui.f_hold = (uint8_t)mv;
             ui.f_at = plat_ms();
             fd_name(e, t);
-            app_say(set.fmove == mv ? "HOME" : FK_NAME[i], t);
+            app_say(FK_NAME[i], t);
             ui.redraw = 1;
         } else if (!(keys & bit) && (ui.keys & bit)) {
             if (ui.f_hold == i + 1u && plat_ms() - ui.f_at < 500u)
@@ -2657,7 +2715,7 @@ static void lead_update(void)
         uint32_t nat = 0xFFFFFFFFu;
         for (k = 0; k < pads[src].pn && k < MAXPH; k++) {
             const pnote_t *x = &ph[src][k];
-            int32_t m = keyed((int32_t)x->p + 12 * P->oct + pads[src].tune);
+            int32_t m = pad_keyed((int32_t)x->p + 12 * P->oct + pads[src].tune);
             if (x->s < pads[src].ts || x->s >= pad_end(&pads[src]))
                 continue;
             if ((float)x->s <= pos && pos < (float)x->s + (float)x->d) {
@@ -2748,7 +2806,7 @@ static void lights(void)
     }
     for (i = 0; i < 4u; i++) {           /* F1-F4: the one in use full */
         uint32_t bit = 1u << BK[7u + i];
-        if ((set.om_f4 == FK_BRIDGE && set.fmove == i + 1u) || (ui.keys & bit))
+        if ((set.om_f4 == FK_BRIDGE && (set.fmove ? set.fmove == i + 1u : i == 0u)) || (ui.keys & bit))
             bright |= bit;
         else
             dim |= bit;
@@ -3209,6 +3267,47 @@ static void draw_disk(void)
     cv_text(12, 76, &FONT_XS, "No USB MIDI while the drive is on.", C_DIM);
     cv_text(12, 94, &FONT_XS, "HOME: leave drive mode.", C_DIM);
     cv_blit(0, 120);
+}
+
+/* a pad's chord name in the key in use: its root moved by the bridge, minor or major as its third lands */
+static void title_bridged(const char *in, char *out, uint32_t max)
+{
+    static const char LET[7] = {'C', 'D', 'E', 'F', 'G', 'A', 'B'};
+    static const uint8_t PC[7] = {0, 2, 4, 5, 7, 9, 11};
+    uint32_t i, k = 1;
+    int32_t r = -1, nr, minor, nminor;
+    const char *suf;
+    char t[16];
+    str_set(out, in, max);
+    if (!orchid || !set.fmove || !in[0])
+        return;
+    for (i = 0; i < 7u; i++)
+        if (in[0] == LET[i])
+            r = PC[i];
+    if (r < 0)
+        return;
+    if (in[1] == '#')
+        r++, k = 2;
+    else if (in[1] == 'b')
+        r--, k = 2;
+    r = (r + 12) % 12;
+    suf = in + k;
+    minor = suf[0] == 'm';
+    nr = bridged(48 + r);
+    nminor = minor;
+    if (suf[0] == 0 || suf[0] == 'm' || suf[0] == 'M' || (suf[0] >= '0' && suf[0] <= '9')) {
+        int32_t third = bridged(48 + r + (minor ? 3 : 4)) - nr;
+        nminor = third == 3;
+    }
+    pc_name((uint32_t)((nr % 12 + 12) % 12), t);
+    if (nminor && !minor) {
+        text_cat(t, "m");
+        text_cat(t, suf[0] == 'M' ? suf + 1 : suf);
+    } else if (!nminor && minor)
+        text_cat(t, suf + 1);
+    else
+        text_cat(t, suf);
+    str_set(out, t, max);
 }
 
 #include "screens.c"                     /* KEY, FX, LIB, TRIM */

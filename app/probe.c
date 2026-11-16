@@ -132,10 +132,10 @@ static void probe_info(int32_t it, probe_t *o)
                 break;
         if (set.om_f4 == FK_BRIDGE && j < 4u) {   /* say where it goes */
             char kn[24];
-            fd_name(fk_target(set.fmove == j + 1u ? 0u : j + 1u), kn);
-            str_set(line, set.fmove == j + 1u ? "TAP: BACK HOME TO " : "TAP: CHANGE KEY TO ", sizeof line);
+            fd_name(fk_target(j + 1u), kn);
+            str_set(line, j ? "TAP: SONG AND KEYS TO " : "TAP: BACK HOME TO ", sizeof line);
             text_cat(line, kn);
-            text_cat(line, ". HOLD: PREVIEW.");
+            text_cat(line, j ? ". F1: HOME." : ".");
             o->title = FK_NAME[j];
             o->what = line;
             return;
@@ -209,9 +209,7 @@ static void probe_lights(void)          /* ARP, and what was touched */
 static void draw_probe(void)
 {
     probe_t o;
-    char ln[9][48];
-    uint32_t n = 0, i;
-    int32_t y;
+    uint32_t n = 0;
     probe_info(ui.probe_item, &o);
     cv_begin(240, 120, LAB_BG);
     lab_paper();

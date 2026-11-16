@@ -154,37 +154,36 @@ press HOME
 wait 900
 release HOME
 wait 50
-# F1-F4: key changes from the home key (D major here)
+# F1-F4: F1 home, F2 up a 4th, F3 parallel, F4 up a step, each from the home key (D major here)
 expect fmove 0
 key 22 down
 wait 40
-expect pivots 35370
+expect pivots 32768
 key 22 up
 wait 30
 expect fmove 3
-expect root 7
-expect scale 1
+expect root 2
+expect scale 0
 shot fkey.png
 key 22 down
 wait 30
 key 22 up
 wait 30
-expect fmove 0
-expect root 2
+expect fmove 3
 key 17 down
 wait 30
 key 17 up
 wait 30
-expect fmove 1
-expect root 11
-expect scale 0
+expect fmove 0
+expect root 2
+expect scale 1
 key 20 down
 wait 30
 key 20 up
 wait 30
 expect fmove 2
-expect root 2
-expect scale 0
+expect root 7
+expect scale 1
 # held: a look only
 key 25 down
 wait 700
@@ -195,4 +194,4 @@ expect fmove 2
 turn ALGO 1
 wait 30
 expect fmove 0
-expect root 3
+expect root 8

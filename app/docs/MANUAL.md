@@ -115,21 +115,21 @@ HOME shows the mode beside the degree row.
 
 ### F1-F4: key changes for a bridge
 
-The **last four black keys** change key, always from your home key:
+With BLACK 4 (K3) on BRIDGE, the **last four black keys** change key, always from your home key:
 
-| Key | Goes to | From C major | From A minor |
-|---|---|---|---|
-| F1 | The relative key: the same notes | A minor | C major |
-| F2 | The parallel key: the same tonic | C minor | A major |
-| F3 | Up a 4th, the usual bridge | F major | D minor |
-| F4 | Up a step, the last-chorus lift | D major | B minor |
+| Key | Goes to | From D major |
+|---|---|---|
+| F1 | Home: your key | D major |
+| F2 | Up a 4th, the usual bridge | G major |
+| F3 | The parallel key: same root, major and minor swapped | D minor |
+| F4 | Up a step, the last-chorus lift | E major |
 
-**Tap** one to go there: the key's chords on the pads follow, the F key stays lit and HOME shows it beside the key.
-Tap the lit one to come home. Tapping another goes there from home, so you're only ever one change away.
+**Tap** one to go there. The F key in use is lit (F1 when you're home). In SURFACE the **whole song moves**: the pads,
+the bass and the lead. Each note moves degree for degree, so in F3 a D chord becomes Dm and a Bm becomes Bb, and
+the pads show the new names. **Tap F1** to come home.
 
-**Hold** one for a look first: the screen names the key and the pads whose chords fit it light up, the pivot
-chords that lead you into it smoothly. Let go after a moment and nothing changes. Picking a key by hand (ROOT, KEY,
-FIND) makes it the new home.
+**Hold** one for a look first: the screen names the key and the pads whose chords fit it light up. Let go after a
+moment and nothing changes. Picking a key by hand (ROOT, KEY, FIND) makes it the new home.
 
 The lights: an empty pad is dark, a loaded pad glows, a playing pad is lit. In SLICE and LIB the pads breathe to show
 they take a drop.
