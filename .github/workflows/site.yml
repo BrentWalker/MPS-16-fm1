@@ -75,6 +75,16 @@ jobs:
           test -n "$pkg"
           ./build.sh --web --release "$VERSION"
           python3 base/tools/make_site.py app "$pkg" "$VERSION" app/build/site
+          # every version stays installable at v/VERSION/ (the site as it was), the newest at the top
+          mkdir -p "$RUNNER_TEMP/v"
+          if git clone -q --depth 1 -b gh-pages "https://github.com/${GITHUB_REPOSITORY}.git" "$RUNNER_TEMP/old"; then
+            if [ -d "$RUNNER_TEMP/old/v" ]; then cp -r "$RUNNER_TEMP/old/v/." "$RUNNER_TEMP/v/"; fi
+          fi
+          rm -rf "$RUNNER_TEMP/v/$VERSION"
+          mkdir -p "$RUNNER_TEMP/v/$VERSION"
+          cp -r app/build/site/. "$RUNNER_TEMP/v/$VERSION/"
+          mkdir -p app/build/site/v
+          cp -r "$RUNNER_TEMP/v/." app/build/site/v/
           cd app/build/site
           git init -q -b gh-pages
           git config user.name "github-actions"
