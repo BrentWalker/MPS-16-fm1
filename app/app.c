@@ -2017,7 +2017,7 @@ static void find_use(void)
 }
 
 /* F1-F4: the key changes, each from the home key */
-static const char *const FK_NAME[4] = {"F1 HOME", "F2 UP A 4TH", "F3 PARALLEL", "F4 UP A STEP"};
+static const char *const FK_NAME[4] = {"C1 HOME", "C2 UP A 4TH", "C3 PARALLEL", "C4 UP A STEP"};
 static uint32_t fk_target(uint32_t mv)   /* where F-key mv goes (0 and 1, F1: home), root << 4 | scale */
 {
     uint32_t h = set.fmove ? set.home : (uint32_t)(set.root << 4 | set.scale), r = h >> 4, sc = h & 15u;
@@ -2323,7 +2323,7 @@ buttons:
             app_say("MODE", MODE_NAME[set.mode % MODE_N]);
         } else if (i == B_ENV) {         /* TRIM: the pad played last (a white key there picks another) */
             if (ui.pad < 0 || pads[ui.pad].type == PAD_EMPTY)
-                app_say("TRIM", "PLAY A PAD FIRST");
+                app_say("TRIM", "PLAY AN A PAD FIRST");
             else
                 ui.screen = SCR_TRIM;
         } else if (i == B_EDIT) {        /* KEY */
@@ -2412,12 +2412,12 @@ buttons:
             if (k2) {                    /* K2: the 7 black keys */
                 set.mode = (uint8_t)clamp(set.mode + k2, MODE_ROOT, MODE_N - 1);
                 set_dirty = 1;
-                app_say("BLACK 7", MODE_NAME[set.mode]);
+                app_say("B PADS", MODE_NAME[set.mode]);
             }
             if (k3) {                    /* K3: the 4 extra black keys */
                 set.om_f4 = (uint8_t)clamp(set.om_f4 + k3, 0, FK_N - 1);
                 set_dirty = 1;
-                app_say("BLACK 4", FK_MODE[set.om_f4]);
+                app_say("C PADS", FK_MODE[set.om_f4]);
             }
             if (k4) {                    /* K4: how the pads play; OCT- held: how much; OCT+ held: the voicing */
                 char t[8];
@@ -2852,27 +2852,61 @@ static void deg_sign(int32_t x, int32_t y, uint16_t c)   /* a small degree sign:
     cv_rect(x + 3, y + 1, 1, 2, c);
 }
 
+static int has_lower(const char *t)      /* M and L have capitals only */
+{
+    for (; *t; t++)
+        if (*t >= 'a' && *t <= 'z')
+            return 1;
+    return 0;
+}
+/* the biggest face that fits w pixels: L, M (capitals only), B, else XS */
+static const felucca_font_t *fit_font(const char *t, int32_t w, const felucca_font_t *big)
+{
+    if (has_lower(t))
+        big = &FONT_B;
+    if (big == &FONT_L && text_w(&FONT_L, t) <= w)
+        return &FONT_L;
+    if ((big == &FONT_L || big == &FONT_M) && text_w(&FONT_M, t) <= w)
+        return &FONT_M;
+    if (text_w(&FONT_B, t) <= w)
+        return &FONT_B;
+    return &FONT_XS;
+}
+/* a centred value in the biggest face that fits */
+static void fit_text_c(int32_t cx, int32_t w, int32_t y, const char *t, const felucca_font_t *big, uint16_t c)
+{
+    const felucca_font_t *f = fit_font(t, w, big);
+    int32_t dy = f == &FONT_L ? 0 : f == &FONT_M ? 4 : f == &FONT_B ? 8 : 9;
+    if (big == &FONT_M)
+        dy -= 4;
+    cv_text(cx + (w - text_w(f, t)) / 2, y + dy, f, t, c);
+}
+
 static void top_bar(const char *pill, const char *right, uint16_t right_c)
 {
     uint32_t now = plat_ms();
     int32_t x;
-    if (now < ui.msg_until) {
-        x = cv_text(10, 5, &FONT_B, ui.msg[0], C_WHITE);
-        cv_text(x + 8, 5, &FONT_B, ui.msg[1], AMBER);
+    if (now < ui.msg_until) {            /* a message: big */
+        const felucca_font_t *f = !has_lower(ui.msg[0]) && !has_lower(ui.msg[1])
+                                          && text_w(&FONT_M, ui.msg[0]) + text_w(&FONT_M, ui.msg[1]) + 10 <= 230
+                                      ? &FONT_M
+                                      : &FONT_B;
+        x = cv_text(6, f == &FONT_M ? 1 : 5, f, ui.msg[0], C_WHITE);
+        cv_text(x + 8, f == &FONT_M ? 1 : 5, f, ui.msg[1], AMBER);
     } else {
         x = 8;
         if (pill) {
-            int32_t w = text_w(&FONT_XS, pill);
-            cv_rect(6, 5, w + 10, 17, C_WHITE);
-            cv_text(11, 6, &FONT_XS, pill, C_BLACK);
+            int32_t w = text_w(&FONT_B, pill);
+            cv_rect(4, 3, w + 12, 21, C_WHITE);
+            cv_text(10, 5, &FONT_B, pill, C_BLACK);
             x = w + 24;
         }
         if (rec_on) {
-            cv_rect(x, 9, 9, 9, REDC);
-            x = cv_text(x + 13, 6, &FONT_XS, "REC", REDC) + 10;
+            cv_rect(x, 9, 10, 10, REDC);
+            x = cv_text(x + 14, 5, &FONT_B, "REC", REDC) + 10;
         }
         if (right)
-            cv_text(232 - text_w(&FONT_XS, right), 6, &FONT_XS, right, right_c);
+            cv_text(234 - text_w(&FONT_B, right), 5, &FONT_B, right, right_c);
     }
     cv_rect(0, 27, 240, 1, C_LINE);
 }
@@ -2883,8 +2917,8 @@ static void bottom_bar(int32_t y, const char *const lbl[4], char val[4][12])
     cv_rect(0, y, 240, 1, C_LINE);
     for (i = 0; i < 4u; i++) {
         int32_t cx = (int32_t)i * 60;
-        cv_text(cx + (60 - text_w(&FONT_XS, lbl[i])) / 2, y + 7, &FONT_XS, lbl[i], C_GRAY);
-        cv_text(cx + (60 - text_w(&FONT_B, val[i])) / 2, y + 24, &FONT_B, val[i], C_WHITE);
+        cv_text(cx + (60 - text_w(&FONT_XS, lbl[i])) / 2, y + 3, &FONT_XS, lbl[i], C_GRAY);
+        fit_text_c(cx + 1, 58, y + 20, val[i], &FONT_M, C_WHITE);
     }
 }
 
@@ -2901,27 +2935,21 @@ static void draw_home(void)
     if (plat_ms() < ui.msg_until)
         top_bar(0, 0, 0);
     else {
-        int32_t w = text_w(&FONT_XS, t);
+        int32_t w = text_w(&FONT_B, t), cw = text_w(&FONT_B, "CORE");
+        char kt[8] = "KIT 0";
+        kt[5] = (char)('0' + set.kit);
+        kt[6] = 0;
         top_bar(0, 0, 0);
-        {
-            char kt[8] = "KIT 0";
-            int32_t kx;
-            kt[5] = (char)('0' + set.kit);
-            kt[6] = 0;
-            int32_t cw = text_w(&FONT_XS, "CORE");
-            cv_rect(4, 5, cw + 10, 17, EARTH_C);   /* CORE (FM mode): Earth */
-            cv_text(9, 6, &FONT_XS, "CORE", C_BLACK);
-            kx = cv_text(cw + 20, 6, &FONT_XS, kt, C_WHITE);
-            if (cur_file >= 0)
-                cv_text(kx + 10, 6, &FONT_XS, files[cur_file].name, C_GRAY);
-        }
-        cv_rect(226 - w, 5, w + 10, 17, AMBER);
-        cv_text(231 - w, 6, &FONT_XS, t, C_BLACK);
-        if (set.fmove) {                 /* a key change in use: which, beside the key */
-            char f[3] = {'F', (char)('0' + set.fmove), 0};
-            int32_t fw = text_w(&FONT_XS, f);
-            cv_rect(218 - w - fw, 5, fw + 6, 17, TEAL);
-            cv_text(221 - w - fw, 6, &FONT_XS, f, C_BLACK);
+        cv_rect(4, 3, cw + 12, 21, EARTH_C);   /* CORE (FM mode): Earth */
+        cv_text(10, 5, &FONT_B, "CORE", C_BLACK);
+        cv_text(cw + 26, 5, &FONT_B, kt, C_WHITE);
+        cv_rect(222 - w, 3, w + 14, 21, AMBER);
+        cv_text(229 - w, 5, &FONT_B, t, C_BLACK);
+        if (set.fmove) {                 /* a key change in use: which C pad, beside the key */
+            char f[3] = {'C', (char)('0' + set.fmove), 0};
+            int32_t fw = text_w(&FONT_B, f);
+            cv_rect(214 - w - fw, 3, fw + 10, 21, TEAL);
+            cv_text(219 - w - fw, 5, &FONT_B, f, C_BLACK);
         }
     }
     if (p && p->type == PAD_CHORD) {
@@ -2932,38 +2960,27 @@ static void draw_home(void)
         pad_title(p, t);
         {
             char h[24] = "PAD ";
-            char d[4] = {(char)('0' + (ui.pad + 1) / 10), (char)('0' + (ui.pad + 1) % 10), 0, 0};
-            text_cat(h, ui.pad + 1 >= 10 ? d : d + 1);
-            if (p->tag) {
-                char sn[6] = "  S";
-                sn[3] = (char)('0' + p->tag / 10u);
-                sn[4] = (char)('0' + p->tag % 10u);
-                if (p->tag < 10u) {
-                    sn[3] = sn[4];
-                    sn[4] = 0;
-                }
-                text_cat(h, sn);
-            }
-            x = cv_text(10, 36, &FONT_XS, h, C_GRAY);
+            num_text(ui.pad + 1, h + 4, 0);
+            x = cv_text(8, 32, &FONT_B, h, C_GRAY);
         }
-        x = cv_text(x + 10, 36, &FONT_XS, p->roman, C_GRAY);
+        x = cv_text(x + 10, 32, &FONT_B, p->roman, C_GRAY);
         if (p->dim)
-            deg_sign(x + 1, 38, C_GRAY);
+            deg_sign(x + 1, 34, C_GRAY);
         rw = text_w(&FONT_L, r) + text_w(&FONT_B, acc);
         qw = text_w(&FONT_B, p->qual);
         w = rw + qw + 4;
         x = (240 - w) / 2;
-        x = cv_text(x, 58, &FONT_L, r, playing ? AMBER : AMBER_DIM);
+        x = cv_text(x, 52, &FONT_L, r, playing ? AMBER : AMBER_DIM);
         if (*acc)
-            x = cv_text(x, 58, &FONT_B, acc, playing ? AMBER : AMBER_DIM);
-        cv_text(x + 3, 72, &FONT_B, p->qual, playing ? AMBER : AMBER_DIM);
+            x = cv_text(x, 52, &FONT_B, acc, playing ? AMBER : AMBER_DIM);
+        cv_text(x + 3, 66, &FONT_B, p->qual, playing ? AMBER : AMBER_DIM);
         {
             int32_t tw = 0;
             for (i = 0; i < p->n; i++)
-                tw += text_w(&FONT_XS, p->nm[i]) + 14;
-            x = (240 - tw + 14) / 2;
+                tw += text_w(&FONT_B, p->nm[i]) + 16;
+            x = (240 - tw + 16) / 2;
             for (i = 0; i < p->n; i++) {
-                const char *nm = i ? p->nm[i] : p->nm[0];
+                const char *nm;
                 char tmp[4];
                 int32_t nw;
                 int root = p->note[i] % 12u == p->root_pc;
@@ -2973,78 +2990,64 @@ static void draw_home(void)
                     pc_name(p->note[0] % 12u, tmp);
                     nm = p->fromkey ? p->nm[0] : tmp;
                 }
-                nw = text_w(&FONT_XS, nm);
-                cv_rect(x - 4, 97, nw + 8, 16, root ? TEAL : C_LINE);
-                cv_text(x, 97, &FONT_XS, nm, root ? C_BLACK : C_GRAY);
-                x += nw + 14;
+                nw = text_w(&FONT_B, nm);
+                cv_rect(x - 5, 92, nw + 10, 22, root ? TEAL : C_LINE);
+                cv_text(x, 95, &FONT_B, nm, root ? C_BLACK : C_WHITE);
+                x += nw + 16;
             }
         }
     } else if (p && p->type == PAD_PHRASE) {
         char h[16] = "PAD ";
-        char d[4] = {(char)('0' + (ui.pad + 1) / 10), (char)('0' + (ui.pad + 1) % 10), 0, 0};
-        text_cat(h, ui.pad + 1 >= 10 ? d : d + 1);
-        cv_text(10, 36, &FONT_XS, h, C_GRAY);
+        num_text(ui.pad + 1, h + 4, 0);
+        cv_text(8, 32, &FONT_B, h, C_GRAY);
         pad_title(p, t);
         if (p->title[0])                 /* numerals need lower case: the big font has none */
-            cv_text((240 - text_w(&FONT_B, t)) / 2, 64, &FONT_B, t, playing ? TEAL : TEAL_DIM);
+            cv_text((240 - text_w(&FONT_B, t)) / 2, 62, &FONT_B, t, playing ? TEAL : TEAL_DIM);
         else
-            cv_text((240 - text_w(&FONT_M, t)) / 2, 58, &FONT_M, t, playing ? TEAL : TEAL_DIM);
-        {
-            char n[16];
-            uint32_t k = p->pn, q = 0;
-            char *o = n;
-            if (k >= 10u)
-                *o++ = (char)('0' + k / 10u);
-            *o++ = (char)('0' + k % 10u);
-            *o = 0;
-            str_set(t, "PHRASE  ", sizeof t);
-            text_cat(t, n);
-            text_cat(t, " NOTES");
-            (void)q;
-            cv_text((240 - text_w(&FONT_XS, t)) / 2, 97, &FONT_XS, t, C_GRAY);
-        }
+            cv_text((240 - text_w(fit_font(t, 230, &FONT_L), t)) / 2, 54, fit_font(t, 230, &FONT_L), t,
+                    playing ? TEAL : TEAL_DIM);
+        str_set(t, "", sizeof t);
+        num_text((int32_t)p->pn, t, 0);
+        text_cat(t, p->pn == 1u ? " NOTE" : " NOTES");
+        cv_text((240 - text_w(&FONT_B, t)) / 2, 94, &FONT_B, t, C_GRAY);
     } else {
-        cv_text((240 - text_w(&FONT_M, "PLAY A PAD")) / 2, 58, &FONT_M, "PLAY A PAD", C_GRAY);
-        cv_text((240 - text_w(&FONT_XS, "SLICE: chop MIDI files onto pads")) / 2, 92, &FONT_XS,
-                "SLICE: chop MIDI files onto pads", C_DIM);
+        cv_text((240 - text_w(&FONT_L, "PLAY A PAD")) / 2, 48, &FONT_L, "PLAY A PAD", C_GRAY);
+        cv_text((240 - text_w(&FONT_B, "SLICE: MIDI FILES ON PADS")) / 2, 90, &FONT_B, "SLICE: MIDI FILES ON PADS",
+                C_DIM);
     }
     cv_blit(0, 0);
 
     lab_begin();
-    for (i = 0; i < 16u; i++) {
+    for (i = 0; i < 16u; i++) {          /* the 16 A pads */
         int on = (int)(ui.keys >> WK[i] & 1u) || pl[i].on;
         uint16_t c = pads[i].type == PAD_PHRASE ? (on ? TEAL : TEAL_DIM)
                      : pads[i].type == PAD_CHORD ? (on ? AMBER : AMBER_DIM) : C_LINE;
-        cv_rect(6 + (int32_t)i * 14, 8, 12, 14, c);
+        cv_rect(4 + (int32_t)i * 15, 2, 13, 14, c);
     }
-    {
+    {                                    /* the 7 B pads, and what they play */
         int lead = set.mode == MODE_LEAD;
-        cv_text(6, 30, &FONT_XS, MODE_NAME[set.mode % MODE_N], lead ? AMBER : TEAL);
+        cv_text(4, 24, &FONT_B, MODE_NAME[set.mode % MODE_N], lead ? AMBER : TEAL);
         for (i = 0; i < 7u; i++) {
             int lit = (int32_t)i == (lead ? ui.lead_now : ui.root_lit);
             int nx = lead && (int32_t)i == ui.lead_next;
-            int32_t cx = 46 + (int32_t)i * 27;
+            int32_t cx = 54 + (int32_t)i * 26;
             char d[2] = {(char)('1' + i), 0};
             uint16_t on = lead ? AMBER : TEAL;
-            cv_rect(cx, 28, 24, 20, lit ? on : nx ? on : C_LINE);
+            cv_rect(cx, 20, 24, 24, lit ? on : nx ? on : C_LINE);
             if (nx)
-                cv_rect(cx + 2, 30, 20, 16, LAB_BG);   /* next: an outline */
-            cv_text(cx + (24 - text_w(&FONT_XS, d)) / 2, 30, &FONT_XS, d, lit ? C_BLACK : nx ? on : C_GRAY);
+                cv_rect(cx + 2, 22, 20, 20, LAB_BG);   /* next: an outline */
+            cv_text(cx + (24 - text_w(&FONT_B, d)) / 2, 24, &FONT_B, d, lit ? C_BLACK : nx ? on : C_GRAY);
         }
     }
     {
         static const char *const LBL[4] = {"STRUM", "ARP", "HUMAN", "BPM"};
         char v[4][12];
-        uint32_t b = tempo;
         num_text(set.strum * 2, v[0], 0);
         str_set(v[1], ARP_NAME[set.arp], sizeof v[1]);
         num_text(set.human, v[2], 0);
         text_cat(v[2], "%");
-        v[3][0] = (char)(b >= 100u ? '0' + b / 100u : ' ');
-        v[3][1] = (char)('0' + b / 10u % 10u);
-        v[3][2] = (char)('0' + b % 10u);
-        v[3][3] = 0;
-        bottom_bar(68, LBL, v);
+        num_text((int32_t)tempo, v[3], 0);
+        bottom_bar(52, LBL, v);
     }
     cv_blit(0, 120);
 }
@@ -3081,9 +3084,9 @@ static void draw_slice(void)
     lab_begin();
     top_bar("SLICE", cur_file >= 0 ? files[cur_file].name : "NO FILE", C_GRAY);
     if (!nsl) {
-        cv_text(10, 50, &FONT_B, "NO SLICES", C_GRAY);
-        cv_text(10, 72, &FONT_XS, "SLICE again: pick a file", C_DIM);
-        cv_text(10, 88, &FONT_XS, "SYS: copy files over USB", C_DIM);
+        cv_text(10, 44, &FONT_M, "NO SLICES", C_GRAY);
+        cv_text(10, 76, &FONT_B, "SLICE AGAIN: PICK A FILE", C_GRAY);
+        cv_text(10, 96, &FONT_B, "SYS: COPY FILES OVER USB", C_GRAY);
         cv_blit(0, 0);
         lab_begin();
         cv_blit(0, 120);
@@ -3148,7 +3151,7 @@ static void draw_slice(void)
     }
     if (!slice_to(sel, PREVIEW)) {       /* the slice: its number and what it is */
         pad_title(&pads[PREVIEW], t);
-        cv_text(10, 14, &FONT_B, t, pads[PREVIEW].type == PAD_CHORD ? AMBER : TEAL);
+        cv_text(8, 12, fit_font(t, 150, &FONT_M), t, pads[PREVIEW].type == PAD_CHORD ? AMBER : TEAL);
     }
     {
         char a[10], b[10];
@@ -3157,9 +3160,9 @@ static void draw_slice(void)
         str_set(t, a, sizeof t);
         text_cat(t, " - ");
         text_cat(t, b);
-        cv_text(230 - text_w(&FONT_XS, t), 16, &FONT_XS, t, C_GRAY);
+        cv_text(234 - text_w(&FONT_B, t), 18, &FONT_B, t, C_GRAY);
     }
-    cv_text(10, 40, &FONT_T, "WHITE KEY: DROP ON PAD    PLAY: HEAR IT", C_DIM);
+    cv_text(8, 42, &FONT_B, "A PAD: DROP IT  PLAY: HEAR", C_GRAY);
     {
         static const char *const LBL[4] = {"MODE", "SENS", "START", "END"};
         static const char *const LBLG[4] = {"MODE", "GRID", "START", "END"};
@@ -3198,29 +3201,29 @@ static void draw_files(void)
         top_bar("FILES", kb, C_GRAY);
     }
     if (!nfiles) {
-        cv_text(10, 44, &FONT_B, "NO MIDI FILES YET", C_GRAY);
-        cv_text(10, 66, &FONT_XS, "SYS: the FM-1 becomes a USB drive.", C_DIM);
-        cv_text(10, 82, &FONT_XS, "Copy .mid files on, then eject.", C_DIM);
-        cv_text(10, 98, &FONT_XS, "Or REC: record MIDI coming in.", C_DIM);
+        cv_text(10, 36, &FONT_M, "NO MIDI FILES", C_GRAY);
+        cv_text(10, 66, &FONT_B, "SYS: A USB DRIVE. COPY", C_WHITE);
+        cv_text(10, 84, &FONT_B, ".MID FILES ON, EJECT.", C_WHITE);
+        cv_text(10, 102, &FONT_B, "OR REC: RECORD MIDI IN.", C_GRAY);
     } else {
-        int32_t first = ui.file_cur > 3 ? ui.file_cur - 3 : 0;
-        for (i = 0; i < 5u && (uint32_t)(first + (int32_t)i) < nfiles; i++) {
-            int32_t f = first + (int32_t)i, y = 32 + (int32_t)i * 17;
+        int32_t first = ui.file_cur > 2 ? ui.file_cur - 2 : 0;
+        for (i = 0; i < 4u && (uint32_t)(first + (int32_t)i) < nfiles; i++) {
+            int32_t f = first + (int32_t)i, y = 31 + (int32_t)i * 22;
             int cur = f == ui.file_cur;
             if (cur)
-                cv_rect(4, y, 232, 16, AMBER);
-            cv_text(10, y, &FONT_XS, files[f].name, cur ? C_BLACK : (f == cur_file ? C_WHITE : C_GRAY));
+                cv_rect(4, y, 232, 21, AMBER);
+            cv_text(10, y + 2, &FONT_B, files[f].name, cur ? C_BLACK : (f == cur_file ? C_WHITE : C_GRAY));
         }
     }
     cv_blit(0, 0);
 
     lab_begin();
     cv_rect(0, 0, 240, 1, C_LINE);
-    for (i = 0; i < ntrk && i < 4u; i++) {
-        int32_t y = 4 + (int32_t)i * 15;
+    for (i = 0; i < ntrk && i < 3u; i++) {
+        int32_t y = 4 + (int32_t)i * 20;
         int cur = i == ui.trk_cur;
-        cv_rect(8, y + 3, 9, 9, trk[i].on ? TEAL : C_LINE);
-        cv_text(24, y, &FONT_XS, trk[i].name, cur ? C_WHITE : C_GRAY);
+        cv_rect(8, y + 3, 12, 12, trk[i].on ? TEAL : C_LINE);
+        cv_text(26, y, &FONT_B, trk[i].name, cur ? C_WHITE : C_GRAY);
         {
             char c[8];
             uint32_t n = trk[i].count, k = 0;
@@ -3230,10 +3233,10 @@ static void draw_files(void)
                 c[k++] = (char)('0' + n / 10u % 10u);
             c[k++] = (char)('0' + n % 10u);
             c[k] = 0;
-            cv_text(200 - text_w(&FONT_XS, c), y, &FONT_XS, c, C_DIM);
+            cv_text(230 - text_w(&FONT_B, c), y, &FONT_B, c, C_GRAY);
         }
         if (cur)
-            cv_rect(4, y + 4, 2, 8, C_WHITE);
+            cv_rect(2, y + 3, 3, 12, C_WHITE);
     }
     (void)t;
     {
@@ -3256,15 +3259,16 @@ static void draw_disk(void)
     const char *st = ui.disk_state == PLAT_DISK_MOUNTED ? "CONNECTED" : "WAITING FOR A COMPUTER";
     lab_begin();
     top_bar("USB DRIVE", 0, 0);
-    cv_text((240 - text_w(&FONT_M, "USB DRIVE")) / 2, 44, &FONT_M, "USB DRIVE", C_WHITE);
-    cv_text((240 - text_w(&FONT_XS, st)) / 2, 82, &FONT_XS, st, ui.disk_state == PLAT_DISK_MOUNTED ? TEAL : AMBER);
+    cv_text((240 - text_w(fit_font(st, 230, &FONT_M), st)) / 2, 40, fit_font(st, 230, &FONT_M), st,
+            ui.disk_state == PLAT_DISK_MOUNTED ? TEAL : AMBER);
+    cv_text(10, 76, &FONT_M, "1 PLUG IN USB", C_WHITE);
+    cv_text(10, 106, &FONT_M, "2 COPY .MID FILES", C_WHITE);   /* across the halves: drawn in both */
     cv_blit(0, 0);
     lab_begin();
-    cv_text(12, 4, &FONT_XS, "1  Connect USB to a computer.", C_GRAY);
-    cv_text(12, 22, &FONT_XS, "2  Copy .mid files onto MPS-16.", C_GRAY);
-    cv_text(12, 40, &FONT_XS, "3  Eject it. Files show in SLICE.", C_GRAY);
-    cv_text(12, 76, &FONT_XS, "No USB MIDI while the drive is on.", C_DIM);
-    cv_text(12, 94, &FONT_XS, "HOME: leave drive mode.", C_DIM);
+    cv_text(10, -14, &FONT_M, "2 COPY .MID FILES", C_WHITE);
+    cv_text(10, 16, &FONT_M, "3 EJECT IT", C_WHITE);
+    cv_text(10, 58, &FONT_B, "NO USB MIDI MEANWHILE.", C_GRAY);
+    cv_text(10, 82, &FONT_B, "HOME: LEAVE DRIVE MODE.", C_GRAY);
     cv_blit(0, 120);
 }
 

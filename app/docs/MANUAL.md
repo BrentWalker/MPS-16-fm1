@@ -31,15 +31,20 @@ MIDI when the browser asks. Don't unplug the cable while it writes. From a termi
 To go back to the stock firmware, use the installer's last section with M-VAVE's own firmware file. On its first
 start MPS-16 ver FM1 sets up its drive in the FM-1's spare flash.
 
-## PROBE: what does this do?
+## A, B and C pads
 
-**Hold OCT- and OCT+ together**, then touch any key or pad: nothing plays, and the screen says what it is and what it
-does right now ("PAD 2: A", "KEY 1: D, plays D as bass"). Let go of the OCT buttons and you're back where you
+The FM-1's keys have names in MPS-16: the **16 white keys are the A pads**, the **first 7 black keys are the B pads**
+(bass, lead, 3rds or 5ths in the key) and the **last 4 black keys are the C pads** (C1 to C4: key changes and more).
+
+## ANALYZE and PROBE: what does this do?
+
+**ANALYZE: hold OCT- and OCT+ together**, then touch any A, B or C pad: nothing plays, and the screen says what it is and what it
+does right now ("A PAD 2: A", "B PAD 1: D, plays D as bass"). Let go of the OCT buttons and you're back where you
 were. It works in SURFACE and CORE.
 
 ![PROBE on SURFACE's K4](img/screen-probe.png)
 
-**Hold ARP** and every control freezes and explains itself instead: turn a knob, press a button or touch a key and
+**PROBE: hold ARP** and every control freezes and explains itself instead: turn a knob, press a button or touch a key and
 the screen shows its name, what it does, and what it does with OCT- or OCT+ held, for where you are (SURFACE, or the
 CORE screen you came from). Nothing changes while PROBE is on. The control you touched lights up. **Tap ARP or HOME**
 to leave.
@@ -62,8 +67,8 @@ MPS-16 starts in **SURFACE**. Load a MIDI file and it's already on the 16 pads: 
 |---|---|
 | PRESET | How the file is cut: EQUAL (16 equal parts), BARS, 2 BARS, HITS (each new hit), CHORDS (each chord change, its name on the pad) |
 | K1 | Where in the song the 16 pads start: one slice a click |
-| K2 | The black keys 1-7: ROOT (bass), LEAD, 3RD or 5TH (each note with its 3rd or 5th in the key) |
-| K3 | The 4 extra black keys: BRIDGE (key changes), SUGGEST (4 chords that tend to follow the pad you played), OUTSIDE (4 notes off the scale, the bluest first), BORROW (4 chords from the parallel key) |
+| K2 | B PADS, the 7 B pads: ROOT (bass), LEAD, 3RD or 5TH (each note with its 3rd or 5th in the key) |
+| K3 | C PADS, the 4 C pads: BRIDGE (key changes), SUGGEST (4 chords that tend to follow the pad you played), OUTSIDE (4 notes off the scale, the bluest first), BORROW (4 chords from the parallel key) |
 | K4 | How the pads play: AS IS (the slice as recorded), CHORD (the slice as one held chord), STRUM, ARP, SLOPPY (as recorded, humanized), or PERFORM rhythms: STABS, OFFBT, 3-3-2, SYNC |
 
 **Hold OCT- and turn K4**: more of the way they play: a wider strum, 1 to 3 arp octaves, more humanize for SLOPPY
@@ -89,8 +94,7 @@ played AS IS. Loading a file in SURFACE also sets the key from it, so the chords
 **ALGORITHM** in SURFACE is the **note length**: left shorter (down to 10%, tight stabs), the middle as played, right
 longer (up to 450%, then LEGATO: each note on to the next). It shapes the slices and PERFORM's hits. **Hold OCT- and
 turn ALGORITHM**: the **slice length**, each slice from its start x1/4, x1/2, as cut, x2 or x4. **Hold OCT+ and turn
-ALGORITHM**: the **velocity curve**: the middle as played, left softer, right harder. The three show under the pad
-played. (In CORE, ALGORITHM is still the key's root.)
+ALGORITHM**: the **velocity curve**: the middle as played, left softer, right harder. The screen shows each as you turn. (In CORE, ALGORITHM is still the key's root.)
 
 The bar under the mode shows the whole song and the stretch of it on the pads.
 
@@ -102,14 +106,14 @@ own slices on the pads again. Pressing one of CORE's screen buttons in SURFACE t
 
 ![HOME: pad 2 playing Bm7b5](img/screen-playing.png)
 
-The **16 white keys are pads**, left to right. A new kit holds the key's chords: pads 1 to 7 the seventh chords on
+The **16 A pads** (the white keys), left to right. A new kit holds the key's chords: pads 1 to 7 the seventh chords on
 each degree, pad 8 the first an octave up, pads 9 to 15 the ninth chords, pad 16 a sus4 on V.
 
-The **first seven black keys are the scale's degrees**. SEQ (MODE) switches what they do:
+The **7 B pads are the scale's degrees**. K2 in SURFACE, or SEQ (MODE), switches what they do:
 
-- **ROOT**: each plays a bass note an octave under the pads. When a pad plays, the black key of its chord's root
+- **ROOT**: each plays a bass note an octave under the pads. When a pad plays, the B pad of its chord's root
   lights up, so you can add the bass under it.
-- **LEAD**: each plays a lead note an octave over the pads. While a phrase plays, the black keys follow its top
+- **LEAD**: each plays a lead note an octave over the pads. While a phrase plays, the B pads follow its top
   note: the key of the note sounding now is full, the key of the next one breathes. Play along on them. A chord pad
   held lights its top note.
 
@@ -117,20 +121,20 @@ The **first seven black keys are the scale's degrees**. SEQ (MODE) switches what
 
 HOME shows the mode beside the degree row.
 
-### F1-F4: key changes for a bridge
+### C1-C4: key changes for a bridge
 
-With BLACK 4 (K3) on BRIDGE, the **last four black keys** change key, always from your home key:
+With C PADS (K3) on BRIDGE, the **4 C pads** change key, always from your home key:
 
 | Key | Goes to | From D major |
 |---|---|---|
-| F1 | Home: your key | D major |
-| F2 | Up a 4th, the usual bridge | G major |
-| F3 | The parallel key: same root, major and minor swapped | D minor |
-| F4 | Up a step, the last-chorus lift | E major |
+| C1 | Home: your key | D major |
+| C2 | Up a 4th, the usual bridge | G major |
+| C3 | The parallel key: same root, major and minor swapped | D minor |
+| C4 | Up a step, the last-chorus lift | E major |
 
-**Tap** one to go there. The F key in use is lit (F1 when you're home). In SURFACE the **whole song moves**: the pads,
-the bass and the lead. Each note moves degree for degree, so in F3 a D chord becomes Dm and a Bm becomes Bb, and
-the pads show the new names. **Tap F1** to come home.
+**Tap** one to go there. The C pad in use is lit (C1 when you're home). In SURFACE the **whole song moves**: the pads,
+the bass and the lead. Each note moves degree for degree, so on C3 a D chord becomes Dm and a Bm becomes Bb, and
+the pads show the new names. **Tap C1** to come home.
 
 **Hold** one for a look first: the screen names the key and the pads whose chords fit it light up. Let go after a
 moment and nothing changes. Picking a key by hand (ROOT, KEY, FIND) makes it the new home.
@@ -145,14 +149,14 @@ phrases) and the degree keys.
 
 | Control | Does |
 | --- | --- |
-| White keys | Play a pad. In SLICE or LIB, drop the selected slice or chord on that pad |
-| Black keys 1-7 | Play the scale's degrees: bass notes (ROOT) or lead notes (LEAD) |
-| Black keys F1-F4 | Key changes from home: tap to go, tap again to come back, hold to look |
+| A pads (white keys) | Play a pad. In SLICE or LIB, drop the selected slice or chord on that pad |
+| B pads (black keys 1-7) | Play the scale's degrees: bass notes (ROOT) or lead notes (LEAD) |
+| C pads (last 4 black keys) | With BRIDGE: C2-C4 key changes, C1 home; hold to look |
 | ALGORITHM (ROOT) | The key's root. With OCT- or OCT+ held, the scale |
 | PRESETS (KIT) | The kit, 1 to 8 |
 | SELECT | Pick a slice, a file or a library row |
 | K1 to K4 | What the screen's bottom bar says |
-| OCT- / OCT+ | The octave, when you let go. Held with a knob: its second job. Both held: PROBE for keys and pads |
+| OCT- / OCT+ | The octave, when you let go. Held with a knob: its second job. Both held: ANALYZE, for the A, B and C pads |
 | HOME | SURFACE. Leaves any screen |
 | HOME (hold) | CORE's HOME |
 | SYS (hold) | GUIDE: the getting-started pages |
@@ -167,7 +171,7 @@ phrases) and the degree keys.
 | PLAY | In SLICE and LIB, hear the selection; in KEY, detect the file's key; elsewhere, all notes off |
 | REC | Record MIDI coming in, again to stop and save it |
 | REC + PLAY | FIND: tap a few notes, pick a key that has them |
-| SEQ (MODE) | The black keys: ROOT or LEAD |
+| SEQ (MODE) | The B pads: ROOT, LEAD, 3RD, 5TH |
 
 On CORE's HOME, K1 is the strum, K2 the arp, K3 humanize and K4 the tempo, and PRESET the kit.
 
@@ -186,7 +190,7 @@ PLAY on this screen finds the key of the loaded file.
 
 ![FIND: D, F#, A and B tapped](img/screen-find.png)
 
-Press **REC and PLAY together**. Every key, white and black, is now a note from F3 up: tap a few notes of a melody or
+Press **REC and PLAY together**. Every A, B and C pad is now a note from F3 up: tap a few notes of a melody or
 a chord you have in your head. FIND lists every key that has all of them, best first: the first note you tapped as
 the tonic, then major and minor before the modes. SELECT picks one; the keyboard lights its notes, the ones you
 tapped full. K1 takes back the last note, K2 clears them all. **K4 uses the key** and opens LIB, its chords ready
@@ -210,7 +214,7 @@ FX shapes the chord pads (phrases play as they were played).
 
 The library is built from the key. K3 picks the group: the seven **chords** of a type (K1: triads, 7ths, 9ths, sus2,
 sus4, add9), or ten four-bar **progressions** in a rhythm (K2: sustain, stabs, arp 8ths) with a bass line. SELECT
-picks a row and plays it; a white key drops it on that pad. K4 builds a whole kit: the chords on pads 1 to 8, the
+picks a row and plays it; an A pad takes it. K4 builds a whole kit: the chords on pads 1 to 8, the
 progressions on 9 to 16.
 
 ## 7. MIDI files
@@ -229,7 +233,7 @@ drive as RECnn.MID and opens in SLICE.
 
 SLICE shows the file as a waveform, four bars at a time, with its cuts. K1 the mode: **hits** (cuts where notes land
 together; K2 the sensitivity) or **grid** (K2 the length, 1/16 to 4 bars). SELECT picks a slice and plays it, K3 and
-K4 move its start and end by 16ths. A white key drops it on that pad: a **chord pad** when its notes land together
+K4 move its start and end by 16ths. An A pad takes it: a **chord pad** when its notes land together
 (named, with its numeral in the key), else a **phrase pad** that plays at the tempo.
 
 ![FILES](img/screen-files.png)
@@ -240,7 +244,7 @@ SLICE again opens FILES: SELECT picks the file, K1 a track and K2 turns it on or
 
 ![TRIM: a phrase between START and END, looping](img/screen-trim.png)
 
-ENV (TRIM) opens the pad played last; a white key there picks another. Nothing is cut away: TRIM only sets what
+ENV (TRIM) opens the pad played last; an A pad there picks another. Nothing is cut away: TRIM only sets what
 plays, so you can always widen it again.
 
 - **K1 START, K2 END**: the part of a phrase that plays, by 16ths. The piano roll shades it, START green, END red,

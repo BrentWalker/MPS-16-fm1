@@ -1,0 +1,104 @@
+# every screen, for checking the layout: from base/, ../app/build/host/mps-16_host ../app/tests/allshots.txt OUT
+wait 600
+shot s01_guide.png
+tap HOME
+wait 30
+import ../app/tests/midi/canon.mid canon.mid
+load 0
+turn PRESET 3
+wait 2500
+key 5 down
+wait 60
+shot s02_surface.png
+key 5 up
+turn SELECT 1
+wait 2500
+shot s03_mutate.png
+key 20 down
+wait 30
+key 20 up
+wait 2500
+shot s04_bridge.png
+key 17 down
+wait 30
+key 17 up
+wait 30
+press OCT-
+press OCT+
+wait 30
+key 5 down
+wait 30
+shot s05_probe.png
+key 5 up
+release OCT+
+release OCT-
+wait 30
+press HOME
+wait 1000
+release HOME
+wait 30
+wait 2500
+key 2 down
+wait 60
+shot s06_core.png
+key 2 up
+wait 30
+tap SEQ
+wait 2500
+shot s07_core_lead.png
+tap SEL
+wait 60
+turn SELECT 2
+wait 60
+shot s08_slice.png
+tap SEL
+wait 60
+shot s09_files.png
+tap LFO
+wait 60
+turn SELECT 1
+wait 60
+shot s10_lib.png
+tap EDIT
+wait 60
+shot s11_key.png
+tap FX
+wait 60
+turn K1 10
+wait 60
+shot s12_fx.png
+tap FX
+wait 60
+shot s13_fx2.png
+key 0 down
+wait 30
+key 0 up
+wait 30
+tap ENV
+wait 60
+shot s14_trim.png
+press REC
+press PLAY
+wait 30
+release PLAY
+release REC
+wait 30
+key 16 down
+wait 20
+key 16 up
+key 18 down
+wait 20
+key 18 up
+key 21 down
+wait 20
+key 21 up
+wait 50
+shot s15_find.png
+tap HOME
+wait 30
+tap GLO
+wait 60
+shot s16_drive.png
+tap HOME
+wait 2000
+shot s17_after_drive.png

@@ -12,17 +12,17 @@ static const probe_t PR_BTN[NB] = {
     {"FX", "CHORD FX: STRUM, ARP, HUMANIZE, INVERSION, BASS.", 0, 0},
     {"SLICE", "CUT THE FILE BY HAND, DROP SLICES ON PADS. AGAIN: FILES.", 0, 0},
     {"TRIM", "THE LAST PAD: START, END, TUNE, LEVEL, LOOP.", 0, 0},
-    {"LIB", "YOUR KEY'S CHORDS. A WHITE KEY DROPS ONE ON A PAD.", 0, 0},
+    {"LIB", "YOUR KEY'S CHORDS. AN A PAD TAKES ONE.", 0, 0},
     {"KEY", "ROOT, SCALE, STEPS AND SCALE LOCK.", 0, 0},
     {"SYS", "TAP: USB DRIVE FOR MIDI FILES. HOLD: GUIDE.", 0, 0},
     {"HOME", "TAP: SURFACE. HOLD: CORE.", 0, 0},
     {"SAVE", "KEEPS YOUR PADS AND SETTINGS.", 0, 0},
     {"ARP", "HOLD: PROBE, THIS. TAP TO LEAVE.", 0, 0},
-    {"MODE", "WHAT KEYS 1-7 PLAY: ROOT, LEAD, 3RD, 5TH.", 0, 0},
+    {"MODE", "WHAT THE B PADS PLAY: ROOT, LEAD, 3RD, 5TH.", 0, 0},
     {"PLAY", "ALL NOTES OFF. WITH REC: FIND A KEY.", 0, 0},
     {"REC", "RECORD MIDI IN. AGAIN: SAVE IT.", 0, 0},
-    {"OCT-", "OCTAVE DOWN WHEN YOU LET GO. HOLD + KNOB: MORE. BOTH: PROBE.", 0, 0},
-    {"OCT+", "OCTAVE UP WHEN YOU LET GO. HOLD + KNOB: MORE. BOTH: PROBE.", 0, 0},
+    {"OCT-", "OCTAVE DOWN WHEN YOU LET GO. HOLD + KNOB: MORE. BOTH: ANALYZE.", 0, 0},
+    {"OCT+", "OCTAVE UP WHEN YOU LET GO. HOLD + KNOB: MORE. BOTH: ANALYZE.", 0, 0},
 };
 static const probe_t PR_SURF[7] = {
     {"MUTATE", "REPEATED CHORDS CHANGE: EXTEND, COLOR, FLIP, SUB, MIX.",
@@ -30,8 +30,8 @@ static const probe_t PR_SURF[7] = {
     {"NOTE LENGTH", "SHORT TO LONG, THEN LEGATO.", "SLICE LENGTH", "SOFTER OR HARDER"},
     {"SLICE", "HOW THE SONG IS CUT: EQUAL, BARS, HITS, CHORDS.", 0, 0},
     {"START", "WHERE IN THE SONG THE 16 PADS BEGIN.", 0, 0},
-    {"BLACK 7", "WHAT KEYS 1-7 PLAY: ROOT, LEAD, 3RD, 5TH.", 0, 0},
-    {"BLACK 4", "THE LAST 4 BLACK KEYS: BRIDGE, SUGGEST, OUTSIDE, BORROW.", 0, 0},
+    {"B PADS", "WHAT THE 7 B PADS PLAY: ROOT, LEAD, 3RD, 5TH.", 0, 0},
+    {"C PADS", "WHAT THE 4 C PADS DO: BRIDGE, SUGGEST, OUTSIDE, BORROW.", 0, 0},
     {"PLAY", "HOW PADS PLAY: AS IS, CHORD, STRUM, ARP, RHYTHMS.",
      "HOW MUCH", "VOICING"},
 };
@@ -114,7 +114,7 @@ static void probe_info(int32_t it, probe_t *o)
             if (WK[j] == k) {            /* a pad: its number, what's on it now, how it plays */
                 const pad_t *pd = &pads[j];
                 char nm[16];
-                str_set(ttl, "PAD ", sizeof ttl);
+                str_set(ttl, "A PAD ", sizeof ttl);
                 num_text((int32_t)j + 1, ttl + cs_len(ttl), 0);
                 nm[0] = 0;
                 if (pd->title[0])
@@ -153,7 +153,7 @@ static void probe_info(int32_t it, probe_t *o)
                 static const char *const AS[MODE_N] = {"BASS", "LEAD", "WITH ITS 3RD", "WITH ITS 5TH"};
                 char nm[4];
                 pc_name((uint32_t)(deg_pitch((int32_t)j) % 12), nm);
-                str_set(ttl, "KEY ", sizeof ttl);
+                str_set(ttl, "B PAD ", sizeof ttl);
                 num_text((int32_t)j + 1, ttl + cs_len(ttl), 0);
                 text_cat(ttl, ": ");
                 text_cat(ttl, nm);
@@ -174,7 +174,7 @@ static void probe_info(int32_t it, probe_t *o)
             fd_name(fk_target(j + 1u), kn);
             str_set(line, j ? "TAP: SONG AND KEYS TO " : "TAP: BACK HOME TO ", sizeof line);
             text_cat(line, kn);
-            text_cat(line, j ? ". F1: HOME." : ".");
+            text_cat(line, j ? ". C1: HOME." : ".");
             o->title = FK_NAME[j];
             o->what = line;
             return;
@@ -189,12 +189,12 @@ static void probe_info(int32_t it, probe_t *o)
                 text_cat(ttl, ": ");
                 text_cat(ttl, nm);
             }
-            str_set(line, "PLAYS IT. K3 CHANGES WHAT THESE 4 KEYS DO.", sizeof line);
+            str_set(line, "PLAYS IT. K3 CHANGES WHAT THE C PADS DO.", sizeof line);
             o->title = ttl;
             o->what = line;
             return;
         }
-        str_set(line, "AN EXTRA BLACK KEY, AS ", sizeof line);
+        str_set(line, "A C PAD, AS ", sizeof line);
         text_cat(line, FK_MODE[set.om_f4 % FK_N]);
         text_cat(line, ". K3 CHANGES IT.");
         o->title = FK_MODE[set.om_f4 % FK_N];
@@ -280,10 +280,14 @@ static void draw_probe(void)
     cv_begin(240, 120, LAB_BG);
     lab_paper();
     cv_rect(0, 0, 240, 27, LAB_BG);
-    cv_rect(4, 5, text_w(&FONT_XS, "PROBE") + 10, 17, FIRE_C);
-    cv_text(9, 6, &FONT_XS, "PROBE", C_BLACK);
-    cv_text(text_w(&FONT_XS, "PROBE") + 22, 6, &FONT_XS, orchid && ui.probe_from == SCR_HOME ? "SURFACE" : "CORE",
-            orchid && ui.probe_from == SCR_HOME ? AIR_C : EARTH_C);
+    {                                    /* ANALYZE (OCT- and OCT+ held) or PROBE (ARP held), and where from */
+        const char *nm = ui.probe_oct ? "ANALYZE" : "PROBE";
+        int32_t w = text_w(&FONT_B, nm);
+        cv_rect(4, 3, w + 12, 21, FIRE_C);
+        cv_text(10, 5, &FONT_B, nm, C_BLACK);
+        cv_text(w + 26, 5, &FONT_B, orchid && ui.probe_from == SCR_HOME ? "SURFACE" : "CORE",
+                orchid && ui.probe_from == SCR_HOME ? AIR_C : EARTH_C);
+    }
     if (!o.title) {
         {
             uint32_t h;
@@ -295,8 +299,8 @@ static void draw_probe(void)
                 }
                 cv_rect(0, 28 - dy, 240, 212, LAB_BG);
                 cv_text(10, 32 - dy, &FONT_M, "TOUCH ANYTHING", FIRE_C);
-                cv_text(10, 66 - dy, &FONT_L, ui.probe_oct ? "A KEY OR A PAD:" : "A KNOB, BUTTON", C_WHITE);
-                cv_text(10, 99 - dy, &FONT_L, ui.probe_oct ? "IT SAYS" : "OR KEY: IT SAYS", C_WHITE);
+                cv_text(10, 66 - dy, &FONT_L, ui.probe_oct ? "ANY PAD:" : "A KNOB, BUTTON", C_WHITE);
+                cv_text(10, 99 - dy, &FONT_L, ui.probe_oct ? "IT SAYS" : "OR PAD: IT SAYS", C_WHITE);
                 cv_text(10, 132 - dy, &FONT_L, "WHAT IT DOES.", C_WHITE);
                 cv_text(10, 182 - dy, &FONT_M, ui.probe_oct ? "LET GO OF OCT" : "TAP ARP TO LEAVE", LAB_LABEL);
                 cv_blit(0, h * 120u);
@@ -339,9 +343,9 @@ static void draw_probe(void)
                 lab_paper();
             }
             cv_rect(0, 28 - dy, 240, 212, LAB_BG);
-            cv_text(10, 30 - dy, &FONT_M, o.title, FIRE_C);
+            cv_text(10, 30 - dy, has_lower(o.title) ? &FONT_B : &FONT_M, o.title, FIRE_C);
             for (k = 0; k < nr; k++)
-                cv_text(10, 58 + (int32_t)k * 25 - dy, &FONT_M, rows[k], col[k]);
+                cv_text(10, 58 + (int32_t)k * 25 - dy, has_lower(rows[k]) ? &FONT_B : &FONT_M, rows[k], col[k]);
             cv_blit(0, h * 120u);
         }
     }
