@@ -29,20 +29,23 @@ turn K3 -2
 turn K4 -1
 wait 30
 expect lock 0
-# OCT- and OCT+ together: the lock on, and no octave step
+# OCT- and OCT+ held: PROBE while held; a pad says what it is and plays nothing; let go: back, no octave step
 press OCT-
 press OCT+
 wait 30
+expect probe 1
+key 0 down
+wait 30
+expect probeitem 32
+expect playing0 0
+key 0 up
+wait 30
 release OCT+
+wait 30
+expect probe 0
 release OCT-
 wait 30
-expect lock 1
 expect octave 0
-press OCT-
-press OCT+
-wait 30
-release OCT+
-release OCT-
 expect lock 0
 # FX: strum 100 ms: the first note at once, all four after 300 ms
 tap FX

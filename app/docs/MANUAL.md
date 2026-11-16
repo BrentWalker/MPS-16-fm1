@@ -33,6 +33,10 @@ start MPS-16 ver FM1 sets up its drive in the FM-1's spare flash.
 
 ## PROBE: what does this do?
 
+**Hold OCT- and OCT+ together**, then touch any key or pad: nothing plays, and the screen says what it is and what it
+does right now ("PAD 2: A", "KEY 1: D, plays D as bass"). Let go of the OCT buttons and you're back where you
+were. It works in SURFACE and CORE.
+
 ![PROBE on SURFACE's K4](img/screen-probe.png)
 
 **Hold ARP** and every control freezes and explains itself instead: turn a knob, press a button or touch a key and
@@ -148,7 +152,7 @@ phrases) and the degree keys.
 | PRESETS (KIT) | The kit, 1 to 8 |
 | SELECT | Pick a slice, a file or a library row |
 | K1 to K4 | What the screen's bottom bar says |
-| OCT- / OCT+ | The octave. Both together: the scale lock on or off |
+| OCT- / OCT+ | The octave, when you let go. Held with a knob: its second job. Both held: PROBE for keys and pads |
 | HOME | SURFACE. Leaves any screen |
 | HOME (hold) | CORE's HOME |
 | SYS (hold) | GUIDE: the getting-started pages |

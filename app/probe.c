@@ -21,8 +21,8 @@ static const probe_t PR_BTN[NB] = {
     {"MODE", "WHAT KEYS 1-7 PLAY: ROOT, LEAD, 3RD, 5TH.", 0, 0},
     {"PLAY", "ALL NOTES OFF. WITH REC: FIND A KEY.", 0, 0},
     {"REC", "RECORD MIDI IN. AGAIN: SAVE IT.", 0, 0},
-    {"OCT-", "OCTAVE DOWN WHEN YOU LET GO. HOLD + KNOB: MORE.", 0, 0},
-    {"OCT+", "OCTAVE UP WHEN YOU LET GO. HOLD + KNOB: MORE.", 0, 0},
+    {"OCT-", "OCTAVE DOWN WHEN YOU LET GO. HOLD + KNOB: MORE. BOTH: PROBE.", 0, 0},
+    {"OCT+", "OCTAVE UP WHEN YOU LET GO. HOLD + KNOB: MORE. BOTH: PROBE.", 0, 0},
 };
 static const probe_t PR_SURF[7] = {
     {"MUTATE", "REPEATED CHORDS CHANGE: EXTEND, COLOR, FLIP, SUB, MIX.",
@@ -109,21 +109,60 @@ static void probe_info(int32_t it, probe_t *o)
     {
         static char line[64];
         uint32_t k = (uint32_t)(it - PR_KEY), j;
+        static char ttl[24];
         for (j = 0; j < 16u; j++)
-            if (WK[j] == k) {
-                o->title = "A PAD";
-                o->what = orchid ? "A SLICE OF THE SONG, PLAYED AS K4 SAYS."
-                                 : "ITS CHORD OR PHRASE.";
+            if (WK[j] == k) {            /* a pad: its number, what's on it now, how it plays */
+                const pad_t *pd = &pads[j];
+                char nm[16];
+                str_set(ttl, "PAD ", sizeof ttl);
+                num_text((int32_t)j + 1, ttl + cs_len(ttl), 0);
+                nm[0] = 0;
+                if (pd->title[0])
+                    title_bridged(pd->title, nm, sizeof nm);
+                else if (pd->type == PAD_CHORD && pd->n) {
+                    pc_name(pd->root_pc, nm);
+                    text_cat(nm, pd->qual);
+                }
+                if (nm[0]) {
+                    text_cat(ttl, ": ");
+                    text_cat(ttl, nm);
+                }
+                o->title = ttl;
+                if (pd->type == PAD_EMPTY)
+                    str_set(line, "EMPTY.", sizeof line);
+                else if (orchid) {
+                    str_set(line, "A SLICE OF THE SONG. K4 PLAYS IT: ", sizeof line);
+                    text_cat(line, OP_NAME[set.om_play % OP_N]);
+                    text_cat(line, ".");
+                } else if (pd->type == PAD_PHRASE)
+                    str_set(line, "A PHRASE FROM A MIDI FILE.", sizeof line);
+                else {
+                    uint32_t q;
+                    str_set(line, "A CHORD:", sizeof line);
+                    for (q = 0; q < pd->n && q < MAXN; q++) {
+                        text_cat(line, " ");
+                        text_cat(line, pd->nm[q]);
+                    }
+                    text_cat(line, ".");
+                }
+                o->what = line;
                 return;
             }
         for (j = 0; j < 7u; j++)
-            if (BK[j] == k) {
-                str_set(line, "BLACK KEY ", sizeof line);
-                num_text((int32_t)j + 1, line + cs_len(line), 0);
-                text_cat(line, ": THE KEY'S NOTE, AS ");
-                text_cat(line, MODE_NAME[set.mode % MODE_N]);
+            if (BK[j] == k) {            /* a black key: its note in the key, and as what */
+                static const char *const AS[MODE_N] = {"BASS", "LEAD", "WITH ITS 3RD", "WITH ITS 5TH"};
+                char nm[4];
+                pc_name((uint32_t)(deg_pitch((int32_t)j) % 12), nm);
+                str_set(ttl, "KEY ", sizeof ttl);
+                num_text((int32_t)j + 1, ttl + cs_len(ttl), 0);
+                text_cat(ttl, ": ");
+                text_cat(ttl, nm);
+                str_set(line, "PLAYS ", sizeof line);
+                text_cat(line, nm);
+                text_cat(line, " AS ");
+                text_cat(line, AS[set.mode % MODE_N]);
                 text_cat(line, ". K2 CHANGES IT.");
-                o->title = MODE_NAME[set.mode % MODE_N];
+                o->title = ttl;
                 o->what = line;
                 return;
             }
@@ -137,6 +176,21 @@ static void probe_info(int32_t it, probe_t *o)
             text_cat(line, kn);
             text_cat(line, j ? ". F1: HOME." : ".");
             o->title = FK_NAME[j];
+            o->what = line;
+            return;
+        }
+        if (j < 4u) {                    /* SUGGEST, OUTSIDE, BORROW: what it plays */
+            uint8_t m[4];
+            char nm[16];
+            nm[0] = 0;
+            fk_notes(j, m, nm);
+            str_set(ttl, FK_MODE[set.om_f4 % FK_N], sizeof ttl);
+            if (nm[0]) {
+                text_cat(ttl, ": ");
+                text_cat(ttl, nm);
+            }
+            str_set(line, "PLAYS IT. K3 CHANGES WHAT THESE 4 KEYS DO.", sizeof line);
+            o->title = ttl;
             o->what = line;
             return;
         }
@@ -169,8 +223,20 @@ static void probe_input(uint32_t keys, uint32_t btn)
             ui.probe_item = PR_ENC + (int32_t)i;
             ui.redraw = 1;
         }
+    if (ui.probe_oct) {                  /* opened by OCT- and OCT+: let go of either, and it's gone */
+        if ((btn & (1u << B_OCTDN | 1u << B_OCTUP)) != (1u << B_OCTDN | 1u << B_OCTUP)) {
+            ui.probe = 0;
+            ui.probe_oct = 0;
+            ui.redraw = 1;
+        }
+        btn &= ~(1u << B_OCTDN | 1u << B_OCTUP);
+    }
     for (i = 0; i < NB; i++) {
         uint32_t bit = 1u << i;
+        if (i == B_OCTDN || i == B_OCTUP) {
+            if (ui.probe_oct)
+                continue;
+        }
         if (i == B_ARP && !(btn & bit) && (ui.btn & bit)) {
             if (ui.probe_skip)
                 ui.probe_skip = 0;
@@ -197,7 +263,7 @@ static void probe_input(uint32_t keys, uint32_t btn)
 
 static void probe_lights(void)          /* ARP, and what was touched */
 {
-    uint32_t b = 1u << B_ARP, k = 0;
+    uint32_t b = ui.probe_oct ? (1u << B_OCTDN | 1u << B_OCTUP) : 1u << B_ARP, k = 0;
     if (ui.probe_item >= 0 && ui.probe_item < (int32_t)NB)
         b |= 1u << ui.probe_item;
     else if (ui.probe_item >= PR_KEY)
@@ -229,10 +295,10 @@ static void draw_probe(void)
                 }
                 cv_rect(0, 28 - dy, 240, 212, LAB_BG);
                 cv_text(10, 32 - dy, &FONT_M, "TOUCH ANYTHING", FIRE_C);
-                cv_text(10, 66 - dy, &FONT_L, "A KNOB, BUTTON", C_WHITE);
-                cv_text(10, 99 - dy, &FONT_L, "OR KEY: IT SAYS", C_WHITE);
+                cv_text(10, 66 - dy, &FONT_L, ui.probe_oct ? "A KEY OR A PAD:" : "A KNOB, BUTTON", C_WHITE);
+                cv_text(10, 99 - dy, &FONT_L, ui.probe_oct ? "IT SAYS" : "OR KEY: IT SAYS", C_WHITE);
                 cv_text(10, 132 - dy, &FONT_L, "WHAT IT DOES.", C_WHITE);
-                cv_text(10, 182 - dy, &FONT_M, "TAP ARP TO LEAVE", LAB_LABEL);
+                cv_text(10, 182 - dy, &FONT_M, ui.probe_oct ? "LET GO OF OCT" : "TAP ARP TO LEAVE", LAB_LABEL);
                 cv_blit(0, h * 120u);
             }
         }

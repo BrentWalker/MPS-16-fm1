@@ -1579,7 +1579,7 @@ static struct {
     uint32_t f_at;                       /* when it went down */
     uint8_t guide_pg;                    /* GUIDE: the page */
     uint32_t home_at, sys_at, arp_at;    /* HOME, SYS, ARP went down then (0: up; all ones: held) */
-    uint8_t probe, probe_from, probe_skip;   /* PROBE: on; the screen it came from; the hold's release to come */
+    uint8_t probe, probe_from, probe_skip, probe_oct;   /* probe_oct: opened by OCT- and OCT+ held, gone when let go */   /* PROBE: on; the screen it came from; the hold's release to come */
     int32_t probe_item;                  /* what was touched last (probe.c), -1 nothing */
     uint8_t oct_mod;                     /* OCT held and used as a modifier: its release steps nothing */
     uint8_t screen, disk_state, trk_cur, fx_page;
@@ -2236,12 +2236,11 @@ buttons:
         int down = (btn & bit) && !(ui.btn & bit), up = !(btn & bit) && (ui.btn & bit);
         if (i == B_OCTDN || i == B_OCTUP) {
             uint32_t other = 1u << (i == B_OCTUP ? B_OCTDN : B_OCTUP);
-            if (down && (btn & other)) { /* both: the scale lock on or off */
-                set.lock ^= 1u;
-                set_dirty = 1;
+            if (down && (btn & other)) { /* both held: PROBE while they're held */
                 ui.oct_mod = 1;
-                kit_build();
-                app_say("SCALE LOCK", set.lock ? "ON" : "OFF");
+                probe_open();
+                ui.probe_skip = 0;
+                ui.probe_oct = 1;
                 continue;
             }
             if (down && !(ui.btn & other))
@@ -3350,6 +3349,10 @@ void app_frame(void)
         ui.msg_until = 0;
         ui.redraw = 1;
     }
+#ifndef PLAT_HOST
+    if (now < 3000u)                     /* the MPS-16 splash stays about 3 s from power-on */
+        return;
+#endif
     if (ui.redraw) {
         ui.redraw = 0;
         if (ui.probe)
