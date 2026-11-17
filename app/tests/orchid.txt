@@ -113,41 +113,43 @@ key 7 down
 wait 40
 expect cbufn4 5
 key 7 up
-# STRUM, and OCT- held wider
+# K4 is RHYTHM now: CHORD, then STABS (strum, arp and humanize are FX's first page)
 turn K4 1
 wait 30
-expect omplay 2
-expect strum 41
-press OCT-
-wait 20
-turn K4 2
-wait 20
-release OCT-
+expect omplay 5
+turn K4 -1
 wait 30
-expect omamt 6
-expect strum 59
-expect octave 0
-# ARP: 2 octaves (amount 6)
-turn K4 1
+expect omplay 1
+# FX page 1, MIDI FX: K1 strum, K2 humanize, K3 arp, K4 voicing
+tap FX
+wait 30
+turn K1 8
+wait 30
+expect strum 40
+turn K2 6
+wait 30
+expect human 30
+turn K3 1
 wait 30
 key 7 down
 wait 40
 expect cbufn4 8
 key 7 up
-# OCT+ held: WIDE
-press OCT+
-wait 20
+turn K3 -1
+turn K1 -8
+turn K2 -6
+wait 30
+expect strum 0
+expect human 0
+turn K1 6
 turn K4 4
-wait 20
-release OCT+
 wait 30
 expect omshape 4
 expect octave 0
-# SLOPPY: humanize, slices as they are
-turn K4 1
+shot fx_midi.png
+turn K1 -6
+tap HOME
 wait 30
-expect omplay 4
-expect human 30
 # PERFORM: STABS
 turn K4 1
 wait 30
@@ -180,7 +182,9 @@ key 7 down
 wait 300
 key 7 up
 expect slicelen0 384
-# FX's K3 the slice length, K4 the velocity curve
+# FX page 2: K3 the slice length, K4 the velocity curve
+tap FX
+wait 30
 tap FX
 wait 30
 turn K3 -1

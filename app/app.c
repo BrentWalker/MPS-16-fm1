@@ -1181,14 +1181,21 @@ enum { MU_OFF, MU_EXTEND, MU_COLOR, MU_FLIP, MU_SUB, MU_MIX, MU_N };
 static const char *const MU_NAME[MU_N] = {"OFF", "EXTEND", "COLOR", "FLIP", "SUB", "MIX"};
 static const char *const MU_LVL[3] = {"EACH REPEAT", "EVERY OTHER", "ALL CHORDS"};
 static const char *const SHAPE_NAME[6] = {"ROOT POS", "INV 1", "INV 2", "INV 3", "WIDE", "RANDOM"};
-/* ORCHID's K4 sets the chord FX: STRUM, ARP, SLOPPY and PERFORM, with OCT- held "how much", OCT+ the voicing */
+/* K4 is RHYTHM only (AS IS, CHORD, STABS, OFFBEAT, 3-3-2, SYNC); STRUM, HUMANIZE, ARP and VOICING are FX's first
+ * page, as on MPS-16 ver WEB's MIDI FX. STRUM, ARP and SLOPPY stay in the list only for settings saved before */
+static const uint8_t RHY_OP[6] = {OP_ASIS, OP_CHORD, OP_STABS, OP_OFFBEAT, OP_332, OP_SYNC};
+static int32_t rhy_index(void)
+{
+    int32_t k;
+    for (k = 0; k < 6; k++)
+        if (RHY_OP[k] == set.om_play)
+            return k;
+    return 0;
+}
 static void om_apply(void)
 {
-    uint32_t a = set.om_amt > 10u ? 10u : set.om_amt;
-    set.strum = set.om_play == OP_STRUM ? (uint8_t)(5u + 9u * a) : 0u;
-    set.arp = set.om_play == OP_ARP ? 1u : 0u;
-    set.arprate = 3;
-    set.human = set.om_play == OP_SLOPPY || set.om_play >= OP_STABS ? (uint8_t)(5u * a) : 0u;
+    if (set.om_play == OP_STRUM || set.om_play == OP_ARP || set.om_play == OP_SLOPPY)
+        set.om_play = OP_ASIS;           /* an old PLAY: its strum, arp or humanize were saved, and stay */
     set.inv = (int8_t)(set.om_shape >= 1u && set.om_shape <= 3u ? set.om_shape : 0);
 }
 /* MUTATE on a chord's notes v (low to high): each moved, MUTATE's added notes on top; returns the new count */
@@ -1218,7 +1225,7 @@ static uint32_t mut_apply(uint32_t i, int32_t *v, uint32_t n, uint32_t max)
 }
 static int om_collapse(void)             /* ORCHID: a phrase pad played as its chord */
 {
-    return orchid && set.om_play != OP_ASIS && set.om_play != OP_SLOPPY;
+    return orchid && (set.om_play != OP_ASIS || set.strum || set.arp);
 }
 /* ORCHID's voicing past the inversions: WIDE (every other note up an octave), RANDOM (notes up or down an
  * octave, new each press); and ARP's octaves. v low to high; returns the new count */
@@ -1233,7 +1240,7 @@ static uint32_t om_voice(int32_t *v, uint32_t n, uint32_t max)
     else if (set.om_shape == 5u)
         for (k = 0; k < n; k++)
             v[k] += 12 * ((int32_t)(cs_rnd() % 3u) - 1);
-    if (set.om_play == OP_ARP)           /* 1, 2 or 3 octaves */
+    if (set.arp)                         /* 1, 2 or 3 octaves (FX page 2's SELECT) */
         for (o = 1; o <= (set.om_amt > 10u ? 10u : set.om_amt) / 4u; o++)
             for (k = 0; k < n0 && n < max; k++)
                 v[n++] = v[k] + 12 * (int32_t)o;
@@ -1569,6 +1576,13 @@ static void orchid_fill_(void)
 static uint8_t first_boot;               /* no settings yet: GUIDE opens by itself */
 void app_init(void)
 {
+    /* the screen's five steps in the Earth Science palette: slate rules, purple for the inactive, labels white on
+     * ink, Air for secondary text, white for values */
+    pal[0] = RGB(0x42, 0x4C, 0x60);
+    pal[1] = RGB(0x57, 0x55, 0x6F);
+    pal[2] = RGB(0xA9, 0xA9, 0xB4);
+    pal[3] = RGB(0xAD, 0xCF, 0xDE);
+    pal[4] = RGB(0xFF, 0xFF, 0xFF);
     {
         int got = plat_store_load(OBJ_SETTINGS, &set, sizeof set);
         first_boot = got != (int)sizeof set && got != (int)SET_OLD_SIZE;
@@ -2439,22 +2453,9 @@ buttons:
                 set_dirty = 1;
                 app_say("C PADS", FK_MODE[set.om_f4]);
             }
-            if (k4) {                    /* K4: how the pads play; OCT- held: how much; OCT+ held: the voicing */
-                char t[8];
-                if (btn & 1u << B_OCTDN) {
-                    ui.oct_mod = 1;
-                    set.om_amt = (uint8_t)clamp(set.om_amt + k4, 0, 10);
-                    num_text(set.om_amt, t, 0);
-                    app_say(set.om_play == OP_STRUM ? "STRUM WIDTH" : set.om_play == OP_ARP ? "ARP OCTAVES"
-                            : "HUMANIZE", set.om_play == OP_ARP ? (set.om_amt < 4u ? "1" : set.om_amt < 8u ? "2" : "3") : t);
-                } else if (btn & 1u << B_OCTUP) {
-                    ui.oct_mod = 1;
-                    set.om_shape = (uint8_t)clamp(set.om_shape + k4, 0, 5);
-                    app_say("VOICING", SHAPE_NAME[set.om_shape]);
-                } else {
-                    set.om_play = (uint8_t)clamp(set.om_play + k4, 0, OP_N - 1);
-                    app_say("PLAY", OP_NAME[set.om_play]);
-                }
+            if (k4) {                    /* K4: RHYTHM (strum, arp, humanize and the voicing: FX) */
+                set.om_play = RHY_OP[clamp(rhy_index() + k4, 0, 5)];
+                app_say("RHYTHM", OP_NAME[set.om_play]);
                 om_apply();
                 set_dirty = 1;
             }
@@ -2524,7 +2525,27 @@ buttons:
             }
             if (es || k1 || k2 || k3 || k4)
                 ui.redraw = 1;
-        } else if (ui.screen == SCR_FX) {   /* the extras: arp rate, a bass note, slice length, velocity curve */
+        } else if (ui.screen == SCR_FX && !ui.fx_page) {   /* MIDI FX: strum, humanize, arp, voicing */
+            if (k1)
+                set.strum = (uint8_t)clamp(set.strum + 5 * k1, 0, 100);
+            if (k2)
+                set.human = (uint8_t)clamp(set.human + 5 * k2, 0, 50);
+            if (k3)
+                set.arp = (uint8_t)clamp(set.arp + k3, 0, 4);
+            if (k4) {
+                set.om_shape = (uint8_t)clamp(set.om_shape + k4, 0, 5);
+                om_apply();
+            }
+            if (k1 || k2 || k3 || k4) {
+                set_dirty = 1;
+                ui.redraw = 1;
+            }
+        } else if (ui.screen == SCR_FX) {   /* page 2, the extras: arp rate, a bass note, slice length, velocity curve */
+            if (es) {                    /* SELECT: the arp's octaves */
+                set.om_amt = (uint8_t)clamp((int32_t)set.om_amt + 4 * es, 0, 8);
+                set_dirty = 1;
+                ui.redraw = 1;
+            }
             if (k1)
                 set.arprate = (uint8_t)clamp(set.arprate + k1, 0, 5);
             if (k2)
@@ -2853,14 +2874,16 @@ static void lights(void)
 
 /* ------------------------------------------------------------------ drawing --- */
 /* the Earth Science elements: Earth #B5956B, Air #87CEEB, Fire #CD7F7F, Water #6BB6D6 */
-static const uint16_t EARTH_C = RGB(0xB5, 0x95, 0x6B), AIR_C = RGB(0x87, 0xCE, 0xEB), FIRE_C = RGB(0xCD, 0x7F, 0x7F),
-                      WATER_C = RGB(0x6B, 0xB6, 0xD6);
+/* the Earth Science palette: Earth, Air, Fire, Water; ink, slate, purple and white for the rest */
+static const uint16_t EARTH_C = RGB(0x7C, 0x5D, 0x48), AIR_C = RGB(0xAD, 0xCF, 0xDE), FIRE_C = RGB(0xDC, 0x7B, 0x78),
+                      WATER_C = RGB(0x7E, 0xB3, 0xD2);
+static const uint16_t ES_INK = RGB(0x31, 0x30, 0x43), ES_SLATE = RGB(0x42, 0x4C, 0x60), ES_PURPLE = RGB(0x57, 0x55, 0x6F);
 /* CORE in the Earth Science palette too: what was amber (chords, the key, accents) is Earth, what was teal (phrases,
  * slices) is Water, red (REC) is Fire */
-static const uint16_t AMBER = RGB(0xB5, 0x95, 0x6B), AMBER_DIM = RGB(78, 64, 46), TEAL = RGB(0x6B, 0xB6, 0xD6),
-                      TEAL_DIM = RGB(26, 56, 70), REDC = RGB(0xCD, 0x7F, 0x7F);
+static const uint16_t AMBER = RGB(0xC4, 0xA9, 0x96), AMBER_DIM = RGB(0x7C, 0x5D, 0x48), TEAL = RGB(0x7E, 0xB3, 0xD2),
+                      TEAL_DIM = RGB(0x42, 0x4C, 0x60), REDC = RGB(0xDC, 0x7B, 0x78);   /* AMBER: Earth lifted toward white, to read on ink */
 /* the lab: graph paper on a dark lab grey, every screen */
-static const uint16_t LAB_BG = RGB(18, 20, 22), LAB_GRID = RGB(30, 34, 38), LAB_LABEL = RGB(110, 118, 124);
+static const uint16_t LAB_BG = RGB(0x31, 0x30, 0x43), LAB_GRID = RGB(0x3A, 0x3D, 0x54), LAB_LABEL = RGB(0xA9, 0xA9, 0xB4);
 static void lab_paper(void)              /* graph paper, every 12 px, on the band begun */
 {
     int32_t k;
@@ -3143,10 +3166,10 @@ static void draw_slice(void)
         if (sl_s[i] < wv_lo || sl_s[i] >= wv_lo + wv_len)
             continue;
         sx = (int32_t)((uint32_t)(sl_s[i] - wv_lo) * 240u / wv_len);
-        cv_rect(sx, 32, 1, 96, i == sel ? RGB(92, 207, 122) : C_DIM);
+        cv_rect(sx, 32, 1, 96, i == sel ? AIR_C : C_DIM);
     }
     if (sl_e[sel] > wv_lo && sl_e[sel] <= wv_lo + wv_len)
-        cv_rect((int32_t)((uint32_t)(sl_e[sel] - wv_lo) * 240u / wv_len) - 1, 32, 2, 96, RGB(224, 98, 92));
+        cv_rect((int32_t)((uint32_t)(sl_e[sel] - wv_lo) * 240u / wv_len) - 1, 32, 2, 96, FIRE_C);
     for (i = 0; i <= wv_len / (PPQ * song_bpb); i++) {   /* bar numbers */
         char b[4];
         uint32_t bn = (wv_lo + i * PPQ * song_bpb) / (PPQ * song_bpb) + 1u;
@@ -3175,10 +3198,10 @@ static void draw_slice(void)
             if (sl_s[i2] < wv_lo || sl_s[i2] >= wv_lo + wv_len)
                 continue;
             sx = (int32_t)((uint32_t)(sl_s[i2] - wv_lo) * 240u / wv_len);
-            cv_rect(sx, 0, 1, 8, i2 == sel ? RGB(92, 207, 122) : C_DIM);
+            cv_rect(sx, 0, 1, 8, i2 == sel ? AIR_C : C_DIM);
         }
         if (sl_e[sel] > wv_lo && sl_e[sel] <= wv_lo + wv_len)
-            cv_rect((int32_t)((uint32_t)(sl_e[sel] - wv_lo) * 240u / wv_len) - 1, 0, 2, 8, RGB(224, 98, 92));
+            cv_rect((int32_t)((uint32_t)(sl_e[sel] - wv_lo) * 240u / wv_len) - 1, 0, 2, 8, FIRE_C);
     }
     if (!slice_to(sel, PREVIEW)) {       /* the slice: its number and what it is */
         pad_title(&pads[PREVIEW], t);

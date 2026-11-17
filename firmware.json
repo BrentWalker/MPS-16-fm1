@@ -10,7 +10,7 @@
   "install": "https://brentwalker.github.io/MPS-16-fm1/install/",
   "site": "https://brentwalker.github.io/MPS-16-fm1/",
   "source": "https://github.com/BrentWalker/MPS-16-fm1",
-  "screenshot": "docs/img/screen-playing.png",
+  "screenshot": "app/docs/img/screen-orchid.png",
   "hardware": {
     "models": ["FM-1"],
     "flash": ["856014", "B36014"],

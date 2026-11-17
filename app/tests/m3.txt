@@ -53,12 +53,17 @@ release OCT-
 wait 30
 expect octave 0
 expect lock 0
-# how pads play is K4 PLAY at home: STRUM: the first note at once, all four soon after
+# MIDI FX are FX's first page: STRUM: the first note at once, all four soon after
 tap HOME
 wait 30
-turn K4 2
+turn K4 1
 wait 30
-expect omplay 2
+expect omplay 1
+tap FX
+wait 30
+turn K1 8
+wait 30
+expect strum 40
 key 0 down
 wait 15
 expect voices 1
@@ -66,20 +71,18 @@ wait 600
 expect voices 4
 key 0 up
 wait 300
+turn K1 -8
 # ARP: one note at a time
-turn K4 1
+turn K3 1
 wait 30
 key 0 down
 wait 500
 expect voices 1
 key 0 up
 wait 300
-# CHORD, inversion 1 (OCT+ and K4): A C E G -> C E G A
-turn K4 -2
-press OCT+
+turn K3 -1
+# CHORD, inversion 1 (VOICING, K4): A C E G -> C E G A
 turn K4 1
-wait 30
-release OCT+
 wait 30
 key 0 down
 wait 40
@@ -87,14 +90,16 @@ expect cbuf0_0 60
 expect cbuf0_3 69
 key 0 up
 wait 200
-press OCT+
 turn K4 -1
 wait 30
-release OCT+
+tap HOME
+wait 30
 turn K4 -1
 wait 30
 expect omplay 0
-# FX, the extras: a bass note under the chord (A2)
+# FX, the extras (FX twice): a bass note under the chord (A2)
+tap FX
+wait 30
 tap FX
 wait 30
 expect screen 5

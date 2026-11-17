@@ -64,7 +64,7 @@ static void fx_tile(int32_t x, int32_t y, const char *k, const char *name, const
     str_set(t, k, sizeof t);
     text_cat(t, " ");
     text_cat(t, name);
-    cv_rect(x, y, 112, 52, RGB(20, 20, 24));
+    cv_rect(x, y, 112, 52, ES_SLATE);
     cv_text(x + 8, y + 2, &FONT_XS, t, C_GRAY);
     cv_text(x + 8, y + 14, fit_font(val, 100, &FONT_M), val, C_WHITE);
     cv_rect(x + 8, y + 40, 96, 4, C_LINE);
@@ -72,20 +72,39 @@ static void fx_tile(int32_t x, int32_t y, const char *k, const char *name, const
         cv_rect(x + 8, y + 40, fill * 96 / 100, 4, AMBER);
 }
 
-static void draw_fx(void)                /* the extras: how pads play is K4 PLAY at home */
+static void draw_fx(void)                /* page 1 MIDI FX, page 2 the extras; FX again flips */
 {
     static const char *const SL[5] = {"X1/4", "X1/2", "AS CUT", "X2", "X4"};
     char c[8], d[8];
+    if (!ui.fx_page) {
+        char s[8], h[8];
+        num_text(set.strum * 2, s, 0);
+        text_cat(s, "MS");
+        num_text(set.human, h, 0);
+        text_cat(h, "%");
+        lab_begin();
+        top_bar("FX", "MIDI FX", C_GRAY);
+        fx_tile(6, 34, "K1", "STRUM", set.strum ? s : "OFF", set.strum);
+        fx_tile(122, 34, "K2", "HUMANIZE", set.human ? h : "OFF", set.human * 2);
+        cv_blit(0, 0);
+        lab_begin();
+        fx_tile(6, 0, "K3", "ARP", ARP_NAME[set.arp % 5u], set.arp * 25);
+        fx_tile(122, 0, "K4", "VOICING", SHAPE_NAME[set.om_shape % 6u], set.om_shape * 20);
+        cv_text(10, 62, &FONT_B, "RHYTHM: K4 AT HOME", C_GRAY);
+        cv_text(10, 84, &FONT_B, "FX AGAIN: THE EXTRAS", C_GRAY);
+        cv_blit(0, 120);
+        return;
+    }
     num_text(set.om_vcurve, d, 1);
     lab_begin();
-    top_bar("FX", "EXTRAS", C_GRAY);
+    top_bar("FX", set.om_amt >= 8u ? "EXTRAS: ARP 3 OCT" : set.om_amt >= 4u ? "EXTRAS: ARP 2 OCT" : "EXTRAS: ARP 1 OCT", C_GRAY);
     fx_tile(6, 34, "K1", "ARP RATE", ARP_RATE_NAME[set.arprate], set.arprate * 20);
     fx_tile(122, 34, "K2", "BASS NOTE", set.bass ? "ON" : "OFF", set.bass ? 100 : 0);
     cv_blit(0, 0);
     lab_begin();
     fx_tile(6, 0, "K3", "SLICE LENGTH", SL[(set.om_slen + 2) % 5], (set.om_slen + 2) * 25);
     fx_tile(122, 0, "K4", "VELOCITY", set.om_vcurve ? d : "AS PLAYED", (set.om_vcurve + 5) * 10);
-    cv_text(10, 62, &FONT_B, "HOW PADS PLAY: K4 AT HOME", C_GRAY);
+    cv_text(10, 62, &FONT_B, "SELECT: ARP OCTAVES", C_GRAY);
     cv_text(10, 84, &FONT_B, "NOTE LENGTH: ALGORITHM", C_GRAY);
     (void)c;
     cv_blit(0, 120);
@@ -186,8 +205,8 @@ static void draw_trim(void)
         }
         xs = x0 + (int32_t)(ws * (uint32_t)w / len);
         xe = x0 + (int32_t)(we * (uint32_t)w / len);
-        cv_rect(x0, y0, w, h, RGB(14, 14, 18));
-        cv_rect(xs, y0, xe - xs, h, RGB(16, 36, 34));
+        cv_rect(x0, y0, w, h, ES_INK);
+        cv_rect(xs, y0, xe - xs, h, ES_SLATE);
         for (k = 0; k < p->pn && k < MAXPH; k++) {
             const pnote_t *x = &ph[ui.pad][k];
             int32_t nx = x0 + (int32_t)(x->s * (uint32_t)w / len), nw = (int32_t)(x->d * (uint32_t)w / len);
@@ -199,8 +218,8 @@ static void draw_trim(void)
                 nw = x0 + w - nx;
             cv_rect(nx, ny, nw, 3, in ? TEAL : TEAL_DIM);
         }
-        cv_rect(xs, y0, 2, h, RGB(92, 207, 122));
-        cv_rect(xe - 2 > xs ? xe - 2 : xs, y0, 2, h, RGB(224, 98, 92));
+        cv_rect(xs, y0, 2, h, AIR_C);
+        cv_rect(xe - 2 > xs ? xe - 2 : xs, y0, 2, h, FIRE_C);
         if (pl[ui.pad].on) {
             uint32_t pos = (uint32_t)pl[ui.pad].pos;
             cv_rect(x0 + (int32_t)((pos < len ? pos : len) * (uint32_t)w / len), y0, 1, h, C_WHITE);
@@ -310,10 +329,10 @@ static void draw_find(void)
 
 /* SURFACE (ORCHID in the code): the Earth Science look. Graph paper; the file as Water (the slices, the ruler of the
  * song, the pads); the knobs in their elements: K1 Water, K2 Earth (bass), K3 Air (above), K4 Fire (playing) */
-static const uint16_t ORCHID_C = RGB(0x6B, 0xB6, 0xD6), ORCHID_DIM = RGB(26, 56, 70);   /* Water */
+static const uint16_t ORCHID_C = RGB(0x7E, 0xB3, 0xD2), ORCHID_DIM = RGB(0x42, 0x4C, 0x60);   /* Water */
 static void draw_orchid(void)
 {
-    static const char *const LBL[4] = {"K1 START", "K2 B PADS", "K3 C PADS", "K4 PLAY"};
+    static const char *const LBL[4] = {"K1 START", "K2 B PADS", "K3 C PADS", "K4 RHYTHM"};
     const uint16_t EL[4] = {WATER_C, EARTH_C, AIR_C, FIRE_C};
     char t[40], v[4][12];
     uint32_t i, first = set.om_slice == OM_EQUAL ? 0u : om_first(), len = song_len ? song_len : 1u;
@@ -371,12 +390,12 @@ static void draw_orchid(void)
             uint32_t bar = PPQ * (song_bpb ? song_bpb : 4u), nb = (len + bar - 1u) / bar, b, every = 1;
             while (nb / every > 56u)
                 every *= 2u;
-            cv_rect(4, 63, 232, 1, RGB(70, 78, 84));
+            cv_rect(4, 63, 232, 1, ES_PURPLE);
             for (b = 0; b <= nb; b += every) {
                 int32_t tx = 4 + (int32_t)(b * bar * 232u / len), big = b % (4u * every) == 0u;
                 if (tx > 236)
                     tx = 236;
-                cv_rect(tx, big ? 58 : 60, 1, big ? 10 : 6, RGB(90, 98, 104));
+                cv_rect(tx, big ? 58 : 60, 1, big ? 10 : 6, ES_PURPLE);
             }
             if (nsl) {
                 uint32_t last = (first + 16u < nsl ? first + 16u : nsl) - 1u;
@@ -389,7 +408,7 @@ static void draw_orchid(void)
             const pad_t *p = &pads[i];
             int32_t bx = 4 + (int32_t)(i % 8u) * 29, by = 71 + (int32_t)(i / 8u) * 24;
             int lit = (ui.keys >> WK[i] & 1u) || pl[i].on || cp[i].on;
-            uint16_t bg = p->type == PAD_EMPTY ? RGB(26, 29, 32) : lit ? WATER_C : ORCHID_DIM;
+            uint16_t bg = p->type == PAD_EMPTY ? RGB(0x3A, 0x3D, 0x54) : lit ? WATER_C : ORCHID_DIM;
             char tb[8];
             const felucca_font_t *f;
             cv_rect(bx, by, 28, 22, bg);
@@ -441,11 +460,11 @@ static void draw_orchid(void)
     str_set(v[1], MODE_NAME[set.mode % MODE_N], sizeof v[1]);
     str_set(v[2], FK_MODE[set.om_f4 % FK_N], sizeof v[2]);
     str_set(v[3], OP_NAME[set.om_play % OP_N], sizeof v[3]);
-    cv_rect(0, 21, 240, 1, RGB(42, 48, 53));
+    cv_rect(0, 21, 240, 1, ES_SLATE);
     for (i = 0; i < 4u; i++) {           /* the four knobs, two by two, big, each in its element */
         int32_t cx = (int32_t)(i % 2u) * 120, cy = 24 + (int32_t)(i / 2u) * 48;
         cv_text(cx + 8, cy + 1, &FONT_XS, LBL[i], LAB_LABEL);
-        fit_text_c(cx + 4, 112, cy + 14, v[i], &FONT_M, EL[i]);
+        fit_text_c(cx + 4, 112, cy + 14, v[i], &FONT_M, i == 1u ? AMBER : EL[i]);   /* Earth lifted, to read on ink */
         cv_rect(cx + 8, cy + 42, 104, 3, EL[i]);
     }
     cv_blit(0, 120);

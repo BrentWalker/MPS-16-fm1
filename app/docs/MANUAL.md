@@ -51,12 +51,11 @@ pads, in the file's key: no slicing to do.
 | K1 START | Where in the song the 16 pads start: one slice a click |
 | K2 B PADS | What the B pads play: ROOT (bass), LEAD, 3RD or 5TH |
 | K3 C PADS | What the C pads do: BRIDGE (key changes), SUGGEST (4 chords that tend to follow the pad you played), OUTSIDE (4 notes off the scale, the bluest first), BORROW (4 chords from the parallel key) |
-| K4 PLAY | How the pads play: AS IS (the slice as recorded), CHORD (the slice as one held chord), STRUM, ARP, SLOPPY (as recorded, humanized), or rhythms: STABS, OFFBT, 3-3-2, SYNC |
+| K4 RHYTHM | How the pads play: AS IS (the slice as recorded), CHORD (the slice as one held chord), or rhythms: STABS, OFFBT, 3-3-2, SYNC. Strum, humanize, arp and voicing are on FX |
 | SELECT | MUTATE (below) |
 | ALGORITHM | The notes' length: left shorter (down to 10%, tight stabs), the middle as played, right longer (up to 450%, then LEGATO) |
 
-**Second jobs** (hold an OCT button and turn): **OCT- and K4**: more of the way they play (a wider strum, 1 to 3 arp
-octaves, more humanize). **OCT+ and K4**: the voicing (ROOT POS, INV 1 to 3, WIDE, RANDOM). **OCT- and SELECT**: which
+**Second jobs** (hold an OCT button and turn): **OCT- and SELECT**: which
 chords mutate. **OCT+ and SELECT**: a new MIX roll. OCT- and OCT+ move the octave only when you let go, so holding one
 for a second job never moves it.
 
@@ -146,8 +145,10 @@ last note, K2 clears them.
 
 ![FX](img/screen-fx.png)
 
-**FX**: the extras. K1 the arp's rate (with K4 PLAY on ARP), K2 a bass note under every chord, K3 the slice length
-(each slice x1/4 to x4 from its start), K4 the velocity curve (softer or harder).
+**FX**: two pages; FX again flips. **MIDI FX** first: K1 STRUM (up to 200 ms), K2 HUMANIZE (timing and velocity),
+K3 ARP (OFF, UP, DOWN, UP-DN, RAND), K4 VOICING (ROOT POS, INV 1 to 3, WIDE, RANDOM). **The extras** second: K1 the
+arp's rate, K2 a bass note under every chord, K3 the slice length (each slice x1/4 to x4 from its start), K4 the
+velocity curve (softer or harder), SELECT the arp's octaves (1 to 3).
 
 ## 8. MIDI, kits and the USB drive
 

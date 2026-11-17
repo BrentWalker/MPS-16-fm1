@@ -4,7 +4,7 @@ Free firmware for the M-VAVE FM-1 by BeatSmith, in the Earth Science family. A M
 
 MPS-16 ver FM1 is the hardware version of MPS-16 ver WEB, and groundwork for the MPS-16 plugin.
 
-**Status:** 0.23.1, test builds. Install it or try it in the browser: https://brentwalker.github.io/MPS-16-fm1/ (older versions for testing: /v/VERSION/install/). Manual: [app/docs/MANUAL.md](app/docs/MANUAL.md).
+**Status:** 0.24, test builds. Install it or try it in the browser: https://brentwalker.github.io/MPS-16-fm1/ (older versions for testing: /v/VERSION/install/). Manual: [app/docs/MANUAL.md](app/docs/MANUAL.md).
 
 ## Built on
 
