@@ -79,6 +79,8 @@ jobs:
           mkdir -p "$RUNNER_TEMP/v"
           if git clone -q --depth 1 -b gh-pages "https://github.com/${GITHUB_REPOSITORY}.git" "$RUNNER_TEMP/old"; then
             if [ -d "$RUNNER_TEMP/old/v" ]; then cp -r "$RUNNER_TEMP/old/v/." "$RUNNER_TEMP/v/"; fi
+            # MPS-16 ver WEB lives at web/ and is pushed on its own: keep it
+            if [ -d "$RUNNER_TEMP/old/web" ]; then cp -r "$RUNNER_TEMP/old/web" app/build/site/web; fi
           fi
           rm -rf "$RUNNER_TEMP/v/$VERSION"
           mkdir -p "$RUNNER_TEMP/v/$VERSION"
