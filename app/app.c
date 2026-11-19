@@ -45,8 +45,10 @@ typedef struct {
     uint8_t om_rsv;
     uint8_t ch[3];                       /* MIDI out channels, 0 .. 15: the A pads, the B pads, the C pads */
     uint8_t ch_rsv;
+    uint8_t om_spice[16];                /* SPICE (MODE): each A pad's own step, 0 plain, 1-4 7 9 11 13, 5-8 sus4 sus2 add9 6 */
 } settings_t;
-#define SET_OLD_SIZE (sizeof(settings_t) - 4u)   /* before the channels: still loaded, the channels then 1, 2, 3 */
+#define SET_V2_SIZE (sizeof(settings_t) - 16u)    /* before SPICE: still loaded, every pad plain */
+#define SET_OLD_SIZE (SET_V2_SIZE - 4u)   /* before the channels: still loaded, the channels then 1, 2, 3 */
 static settings_t set;
 static uint8_t set_dirty;
 
@@ -1279,8 +1281,18 @@ static int file_load(int32_t i)
  * start. Hold HOME for FM mode (everything else), tap HOME to come back, as ORCHID was. */
 static void text_cat(char *t, const char *add);
 static int in_key(uint32_t pc);
-enum { OM_EQUAL, OM_BARS, OM_2BARS, OM_HITS, OM_CHORDS, OM_N };
-static const char *const OM_NAME[OM_N] = {"EQUAL", "BARS", "2 BARS", "HITS", "CHORDS"};
+enum { OM_EQUAL, OM_BARS, OM_2BARS, OM_HITS, OM_CHORDS, OM_BEATS, OM_N };
+static const char *const OM_NAME[OM_N] = {"EQUAL", "BARS", "2 BARS", "TRANSIENT", "CHORDS", "BEATS"};
+/* CHOP, as on MPS-16 ver WEB: TRANSIENT, BEATS, BARS, CHORDS (EQUAL and 2 BARS stay only for settings saved before) */
+static const uint8_t CHOP_OM[4] = {OM_HITS, OM_BEATS, OM_BARS, OM_CHORDS};
+static uint8_t chop_step(uint8_t cur, int32_t d)
+{
+    int32_t k, at = 2;                   /* not in the list (EQUAL, 2 BARS): from BARS */
+    for (k = 0; k < 4; k++)
+        if (CHOP_OM[k] == cur)
+            at = k;
+    return CHOP_OM[clamp(at + d, 0, 3)];
+}
 static uint8_t om_root[MAXSL], om_qual[MAXSL];   /* CHORDS: each slice's chord (root, 0 major 1 minor) */
 static uint8_t om_pid[16];               /* CHORDS: each pad's chord as found (root << 1 | minor), 0xFF: not known */
 
@@ -1394,12 +1406,16 @@ static void mut_plan(void)
         ids[i] = (uint8_t)(root << 1 | minor);
         for (j = 0; j < i; j++)
             n += ids[j] == ids[i];
-        if (!mode)
+        if (i < 16u && set.om_spice[i]) {   /* SPICE: this pad's own step, by hand */
+            mode = set.om_spice[i] <= 4u ? MU_EXTEND : MU_COLOR;
+            step = set.om_spice[i] <= 4u ? set.om_spice[i] : set.om_spice[i] - 4u;
+        } else if (!mode)
             continue;
-        step = set.om_mlvl == 0u ? n : set.om_mlvl == 1u ? (n & 1u ? (n + 1u) / 2u : 0u) : n + 1u;
+        else
+            step = set.om_mlvl == 0u ? n : set.om_mlvl == 1u ? (n & 1u ? (n + 1u) / 2u : 0u) : n + 1u;
         if (!step)
             continue;
-        if (mode == MU_MIX) {            /* the roll: any mode, any step */
+        if (mode == MU_MIX && !(i < 16u && set.om_spice[i])) {   /* the roll: any mode, any step */
             uint32_t h = (i * 2654435761u) ^ (set.om_seed * 40503u) ^ (n * 97u);
             h ^= h >> 13;
             h *= 0x5bd1e995u;
@@ -1530,7 +1546,7 @@ static void orchid_fill_(void)
         chord_slices();
     else {
         sl_mode = set.om_slice != OM_HITS;
-        sl_grid = set.om_slice == OM_2BARS ? 5u : 4u;
+        sl_grid = set.om_slice == OM_2BARS ? 5u : set.om_slice == OM_BEATS ? 2u : 4u;
         slice_auto();
     }
     if (set.om_slen) {                   /* ORCHID's slice length: each slice x1/4 .. x4 from its start */
@@ -1585,14 +1601,18 @@ void app_init(void)
     pal[4] = RGB(0xFF, 0xFF, 0xFF);
     {
         int got = plat_store_load(OBJ_SETTINGS, &set, sizeof set);
-        first_boot = got != (int)sizeof set && got != (int)SET_OLD_SIZE;
+        first_boot = got != (int)sizeof set && got != (int)SET_V2_SIZE && got != (int)SET_OLD_SIZE;
+        if (got == (int)SET_V2_SIZE || got == (int)SET_OLD_SIZE) {
+            __builtin_memset(set.om_spice, 0, sizeof set.om_spice);
+            set_dirty = 1;
+        }
         if (got == (int)SET_OLD_SIZE) {  /* saved before the MIDI channels: kept, the channels their defaults */
             set.ch[0] = 0;
             set.ch[1] = 1;
             set.ch[2] = 2;
             set.ch_rsv = 0;
             set_dirty = 1;
-        } else if (got != (int)sizeof set)
+        } else if (got != (int)sizeof set && got != (int)SET_V2_SIZE)
             set.magic = 0;
     }
     if (set.ch[0] > 15u || set.ch[1] > 15u || set.ch[2] > 15u) {
@@ -1616,6 +1636,7 @@ void app_init(void)
         settings_defaults();
     if (set.mode >= MODE_N || set.om_f4 >= FK_N || set.om_play >= OP_N || set.om_shape > 5u || set.om_amt > 10u)
         settings_defaults();
+    set.om_mut = MU_OFF;                 /* auto MUTATE is off, as on the web: SPICE (MODE) does it by hand */
     om_apply();                          /* ORCHID first */
     if (nfiles)
         file_load(0);
@@ -1641,6 +1662,88 @@ static struct {
     int32_t file_cur;
     uint8_t redraw;
 } ui = {.pad = -1, .root_lit = -1, .lead_now = -1, .lead_next = -1};
+/* UNDO (ARP): one step back: the pads, their phrases and their SPICE as they were before the last drop, trim or SPICE.
+ * Tapped again it swaps back (a redo). One step only: the FM-1 has room for one copy of the kit. */
+static struct {
+    uint8_t have;
+    pad_t pad[NPADS + 1];
+    pnote_t uph[NPADS + 1][MAXPH];
+    uint8_t spice[16];
+} U;
+static void undo_snap(void)
+{
+    __builtin_memcpy(U.pad, K.pad, sizeof U.pad);
+    __builtin_memcpy(U.uph, ph, sizeof U.uph);
+    __builtin_memcpy(U.spice, set.om_spice, sizeof U.spice);
+    U.have = 1;
+}
+static void pad_title(const pad_t *p, char *t);
+static void undo_swap(void)
+{
+    static pad_t tp[NPADS + 1];
+    static uint8_t ts[16];
+    uint32_t i;
+    if (!U.have) {
+        app_say("UNDO", "NOTHING TO UNDO");
+        return;
+    }
+    players_stop();
+    __builtin_memcpy(tp, K.pad, sizeof tp);   /* the pads swap with the copy (the phrases a block at a time) */
+    __builtin_memcpy(K.pad, U.pad, sizeof tp);
+    __builtin_memcpy(U.pad, tp, sizeof tp);
+    for (i = 0; i <= NPADS; i++) {
+        pnote_t t[MAXPH];
+        __builtin_memcpy(t, ph[i], sizeof t);
+        __builtin_memcpy(ph[i], U.uph[i], sizeof t);
+        __builtin_memcpy(U.uph[i], t, sizeof t);
+    }
+    __builtin_memcpy(ts, set.om_spice, sizeof ts);
+    __builtin_memcpy(set.om_spice, U.spice, sizeof ts);
+    __builtin_memcpy(U.spice, ts, sizeof ts);
+    {
+        int sw = home_swap();
+        mut_plan();
+        home_back(sw);
+    }
+    set_dirty = 1;
+    app_say("UNDO", "TAP AGAIN: REDO");
+}
+/* SPICE (MODE): the A pad played last gets its next color, and locks */
+static void spice_pad(void)
+{
+    uint32_t i;
+    char t[16];
+    if (ui.pad < 0 || ui.pad >= 16 || pads[ui.pad].type == PAD_EMPTY) {
+        app_say("SPICE", "PLAY AN A PAD FIRST");
+        return;
+    }
+    i = (uint32_t)ui.pad;
+    undo_snap();
+    set.om_spice[i] = (uint8_t)((set.om_spice[i] + 1u) % 9u);
+    pads[i].lock = 1;
+    if (!set.om_spice[i] && set.om_mut == MU_OFF) {   /* plain again: its own name back */
+        uint32_t root = 0, minor = 0;
+        if (om_pid[i] != 0xFFu) {
+            root = om_pid[i] >> 1;
+            minor = om_pid[i] & 1u;
+        }
+        if (om_pid[i] != 0xFFu || pad_chord(i, &root, &minor)) {
+            pc_name(root, t);
+            if (minor)
+                text_cat(t, "m");
+            str_set(pads[i].title, t, sizeof pads[i].title);
+        }
+    }
+    {
+        int sw = home_swap();
+        mut_plan();
+        home_back(sw);
+    }
+    set_dirty = 1;
+    pad_title(&pads[i], t);
+    app_say("SPICE", set.om_spice[i] ? pads[i].title : "PLAIN");
+}
+
 
 static void text_cat(char *d, const char *s)
 {
@@ -2205,6 +2308,7 @@ static void input(void)
             if (ui.screen == SCR_LIB) {
                 char t[20];
                 ev_push(QE_PSTOP, i, 8);
+                undo_snap();
                 lib_make(lib_sel, i);
                 pads[i].lock = 1;
                 pad_title(&pads[i], t);
@@ -2213,6 +2317,7 @@ static void input(void)
             if (ui.screen == SCR_SLICE && nsl) {
                 char t[16], d[4] = {'P', 'A', 'D', 0};
                 ev_push(QE_PSTOP, i, 8);
+                undo_snap();
                 if (!slice_to(sel, i)) {
                     char n[8] = " ";
                     pads[i].lock = 1;
@@ -2377,12 +2482,17 @@ buttons:
                 ui.screen = song_n ? SCR_SLICE : SCR_FILES;
             if (ui.file_cur < 0 || (uint32_t)ui.file_cur >= nfiles)
                 ui.file_cur = cur_file < 0 ? 0 : cur_file;
-        } else if (i == B_SEQ && 0) {    /* MODE: free for now (K2 in SURFACE sets the B pads) */
+        } else if (i == B_SEQ) {         /* MODE: SPICE, the pad played last: 7, 9, 11, 13, sus4, sus2, add9, 6, plain */
+            spice_pad();
+        } else if (i == B_ARP) {         /* ARP: UNDO, the last drop, trim or SPICE (again: redo) */
+            undo_swap();
         } else if (i == B_ENV) {         /* TRIM: the pad played last (a white key there picks another) */
             if (ui.pad < 0 || pads[ui.pad].type == PAD_EMPTY)
                 app_say("TRIM", "PLAY AN A PAD FIRST");
-            else
+            else {
+                undo_snap();
                 ui.screen = SCR_TRIM;
+            }
         } else if (i == B_EDIT) {        /* KEY */
             ui.screen = SCR_KEY;
         } else if (i == B_FX) {          /* FX: again, the second page */
@@ -2405,10 +2515,7 @@ buttons:
         } else {
             static const char *const LABEL[NB] = {"FX", "SLICE", "TRIM", "LIB", "KEY", "SYS", "HOME", "SAVE",
                                                   "ARP", "MODE", "PLAY", "REC", "OCT-", "OCT+"};
-            if (i == B_ARP || i == B_SEQ)
-                app_say(LABEL[i], "FREE FOR NOW");
-            else
-                app_say(LABEL[i], "COMING SOON");
+            app_say(LABEL[i], "COMING SOON");
         }
         ui.redraw = 1;
     }
@@ -2427,12 +2534,12 @@ buttons:
         if ((es || k1 || k2 || k3 || k4 || ek) && (btn & (1u << B_OCTDN | 1u << B_OCTUP)))
             ui.oct_mod = 1;              /* OCT held as a shift: its release moves no octave */
         if (orchid && ui.screen == SCR_HOME) {   /* ORCHID's knobs */
-            if (ek) {                    /* PRESET: how the file is cut */
-                set.om_slice = (uint8_t)clamp(set.om_slice + ek, 0, OM_N - 1);
+            if (ek) {                    /* PRESET: CHOP, how the file is chopped */
+                set.om_slice = chop_step(set.om_slice, ek);
                 set.om_start = 0;
                 set_dirty = 1;
                 orchid_fill();
-                app_say("SLICE", OM_NAME[set.om_slice]);
+                app_say("CHOP", OM_NAME[set.om_slice]);
             }
             if (k1 && set.om_slice != OM_EQUAL) {   /* K1: where in the file the 16 start */
                 int32_t mx = nsl > 16u ? (int32_t)nsl - 16 : 0;
@@ -2459,19 +2566,13 @@ buttons:
                 om_apply();
                 set_dirty = 1;
             }
-            if (es) {                    /* SELECT: MUTATE; OCT- held: which repeats; OCT+ held: MIX's roll */
-                if (btn & 1u << B_OCTDN) {
-                    set.om_mlvl = (uint8_t)clamp(set.om_mlvl + es, 0, 2);
-                    app_say("MUTATE", MU_LVL[set.om_mlvl]);
-                } else if (btn & 1u << B_OCTUP) {
-                    set.om_seed = (uint8_t)(set.om_seed + 1u);
-                    app_say("MUTATE", "NEW ROLL");
-                } else {
-                    set.om_mut = (uint8_t)clamp(set.om_mut + es, 0, MU_N - 1);
-                    app_say("MUTATE", MU_NAME[set.om_mut]);
-                }
+            if (es) {                    /* SELECT: BPM (as the web's BPM knob) */
+                char b[8];
+                set.bpm = (uint8_t)clamp((int32_t)tempo + es, 40, 240);
+                tempo = set.bpm;
+                num_text(set.bpm, b, 0);
+                app_say("BPM", b);
                 set_dirty = 1;
-                orchid_fill();
             }
             if (ek || k1 || k2 || k3 || k4 || es)
                 ui.redraw = 1;
@@ -2503,8 +2604,8 @@ buttons:
                 sel = (uint32_t)clamp((int32_t)sel + es, 0, (int32_t)nsl - 1);
                 preview_slice();
             }
-            if (k1) {                    /* K1: the cut, the same as PRESET at home (one cut, two places to see it) */
-                set.om_slice = (uint8_t)clamp(set.om_slice + k1, 0, OM_N - 1);
+            if (k1) {                    /* K1: CHOP, the same as PRESET at home (one chop, two places to see it) */
+                set.om_slice = chop_step(set.om_slice, k1);
                 set.om_start = 0;
                 set_dirty = 1;
                 orchid_fill();
@@ -3218,8 +3319,8 @@ static void draw_slice(void)
     }
     cv_text(8, 42, &FONT_B, "A PAD: DROP IT  PLAY: HEAR", C_GRAY);
     {
-        static const char *const LBL[4] = {"CUT", "SENS", "START", "END"};
-        static const char *const LBLG[4] = {"CUT", "", "START", "END"};
+        static const char *const LBL[4] = {"CHOP", "SENS", "START", "END"};
+        static const char *const LBLG[4] = {"CHOP", "", "START", "END"};
         char v[4][12];
         int hits = set.om_slice == OM_HITS;
         str_set(v[0], OM_NAME[set.om_slice % OM_N], 12);

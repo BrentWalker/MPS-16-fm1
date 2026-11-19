@@ -9,7 +9,7 @@ bridge, and send it all out as MIDI.
 1. Install
 2. The pads: A, B and C
 3. Home
-4. MUTATE
+4. SPICE and UNDO
 5. The B and C pads
 6. Help: ANALYZE and GUIDE
 7. The tools: SLICE, TRIM, LIB, KEY, FX
@@ -47,42 +47,32 @@ pads, in the file's key: no slicing to do.
 
 | Control | Turn it to choose |
 |---|---|
-| PRESET | How the song is cut: EQUAL (16 equal parts), BARS, 2 BARS, HITS (each new hit), CHORDS (each chord change, its name on the pad) |
+| PRESET | CHOP, how the song is chopped into slices: TRANSIENT (each new hit), BEATS, BARS, CHORDS (each chord change, its name on the pad) |
 | K1 START | Where in the song the 16 pads start: one slice a click |
 | K2 B PADS | What the B pads play: ROOT (bass), LEAD, 3RD or 5TH |
 | K3 C PADS | What the C pads do: BRIDGE (key changes), SUGGEST (4 chords that tend to follow the pad you played), OUTSIDE (4 notes off the scale, the bluest first), BORROW (4 chords from the parallel key) |
 | K4 RHYTHM | How the pads play: AS IS (the slice as recorded), CHORD (the slice as one held chord), or rhythms: STABS, OFFBT, 3-3-2, SYNC. Strum, humanize, arp and voicing are on FX |
-| SELECT | MUTATE (below) |
+| SELECT | BPM, the tempo (shown at the top, with the octave when it isn't 0) |
 | ALGORITHM | The notes' length: left shorter (down to 10%, tight stabs), the middle as played, right longer (up to 450%, then LEGATO) |
 
-**Second jobs** (hold an OCT button and turn): **OCT- and SELECT**: which
-chords mutate. **OCT+ and SELECT**: a new MIX roll. OCT- and OCT+ move the octave only when you let go, so holding one
-for a second job never moves it.
+**Second jobs** (hold an OCT button and turn ALGORITHM): **OCT-**: the slices' length. **OCT+**: the velocity curve.
+OCT- and OCT+ move the octave only when you let go, so holding one for a second job never moves it.
 
 The screen shows how the song is cut and which slices are on the pads, the song as a ruler with that stretch marked,
 the 16 A pads with their chord names, the pad played last, and the four knobs.
 
 **Your pads**: a pad you trim, or drop a slice or a LIB chord on, is **locked**: it stays yours while the rest follow
-the song (when you turn PRESET or K1, or load a file). A small amber corner marks it. TRIM's PRESET frees it again.
+the song (when you turn PRESET or K1, or load a file). A small corner marks it. TRIM's PRESET frees it again.
 
-## 4. MUTATE
+## 4. SPICE and UNDO
 
-![MUTATE: EXTEND](img/screen-mutate.png)
+![SPICE: DM9](img/screen-mutate.png)
 
-A song repeats its chords, so its 16 pads do too. **Turn SELECT**: each repeat changes, one step further each time;
-the first time a chord comes it stays as the song has it. The pads show the new names.
+**SPICE (MODE)**: play an A pad, then press **MODE**. Each press gives that pad its next color: 7, 9, 11, 13, then sus4,
+sus2, add9, 6, then plain again. The pad shows the new name and locks.
 
-| MUTATE | The 2nd, 3rd, 4th time a chord comes |
-|---|---|
-| OFF | As the song has it |
-| EXTEND | Richer: 7, 9, 11, 13, in the key (DM7, A7, Bm7) |
-| COLOR | sus4, sus2, add9, 6 |
-| FLIP | Major and minor swap, then dim, then aug: out of the key on purpose |
-| SUB | One note moves: the relative chord (D to Bm), the mediant (D to F#m), then its 7th |
-| MIX | Any of them, any step; hold OCT+ and turn SELECT for a new roll |
-
-**Hold OCT- and turn SELECT**: which chords mutate: EACH REPEAT, EVERY OTHER repeat, or ALL CHORDS (the first time
-too).
+**UNDO (ARP)**: takes back the last drop (a slice or a LIB chord), trim or SPICE. Press it again to put it back (a
+redo). The FM-1 keeps one step.
 
 ## 5. The B and C pads
 
@@ -123,8 +113,8 @@ time. Turn SELECT for the next page; the buttons and pads a page talks about bli
 
 Each tool opens from home with its button, and **HOME** brings you back.
 
-**SLICE (SEL)**: the song as a waveform with its slices. SELECT picks a slice and plays it; K1 the cut (the same as
-PRESET at home); K2, with HITS, how sure a hit must be; K3 and K4 move the slice's start and end by 16ths. **An A pad
+**SLICE (SEL)**: the song as a waveform with its slices. SELECT picks a slice and plays it; K1 CHOP (the same as
+PRESET at home); K2, with TRANSIENT, how sure a hit must be; K3 and K4 move the slice's start and end by 16ths. **An A pad
 takes it** (and locks). SEL again opens **FILES**: SELECT picks the file, K1 a track, K2 turns it on or off.
 
 ![TRIM](img/screen-trim.png)
@@ -179,14 +169,15 @@ sound for now. MASTER is the volume.
 | SEL, ENV, LFO, EDIT, FX | The tools: SLICE, TRIM, LIB, KEY, FX |
 | GLO (SYS) | The MIDI page (channels, kit, tempo, USB drive). Held: GUIDE |
 | OCT- / OCT+ | The octave, when you let go. Held with a knob: its second job. Both tapped: ANALYZE |
-| PRESET | Home: how the song is cut. TRIM: lock. MIDI page: the kit |
+| PRESET | Home: CHOP. TRIM: lock. MIDI page: the kit |
 | ALGORITHM | The notes' length |
-| SELECT | Home: MUTATE. In the tools: pick |
+| SELECT | Home: BPM. In the tools: pick |
 | K1 to K4 | What the screen says |
 | SAVE | Keep the settings and the kit |
 | PLAY | All notes off. In SLICE or LIB, hear the pick. In KEY, find the file's key |
 | REC | Record MIDI coming in; again to stop and save it |
-| ARP, SEQ | Free for now |
+| ARP | UNDO (again: redo) |
+| SEQ (MODE) | SPICE the A pad played last |
 
 ## 10. Troubleshooting
 

@@ -6,7 +6,7 @@ wait 30
 expect mode 0
 import ../app/tests/midi/canon.mid canon.mid
 load 0
-turn PRESET 2
+turn PRESET -2
 wait 30
 # the first slice on pad 1 (HITS)
 tap SEL

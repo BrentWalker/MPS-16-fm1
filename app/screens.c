@@ -355,11 +355,35 @@ static void draw_orchid(void)
         w = text_w(&FONT_B, fn);
         cv_rect(4, 3, w + 12, 21, AIR_C);
         cv_text(10, 5, &FONT_B, fn, C_BLACK);
+        {                                /* the tempo and the octave, as the web shows them */
+            char bp[16];
+            int32_t bx = 4 + w + 12 + 6, kw;
+            num_text((int32_t)tempo, bp, 0);
+            if (set.octave) {
+                text_cat(bp, set.octave > 0 ? " +" : " -");
+                num_text(set.octave > 0 ? set.octave : -set.octave, bp + cs_len(bp), 0);
+            }
+            key_text(t);
+            kw = text_w(&FONT_B, t) + 14 + (set.fmove ? 30 : 0);
+            {
+                char full[24];
+                num_text((int32_t)tempo, full, 0);
+                text_cat(full, " BPM");
+                if (set.octave) {
+                    text_cat(full, set.octave > 0 ? " +" : " -");
+                    num_text(set.octave > 0 ? set.octave : -set.octave, full + cs_len(full), 0);
+                }
+                if (bx + text_w(&FONT_B, full) < 222 - kw)
+                    cv_text(bx, 5, &FONT_B, full, C_WHITE);
+                else if (bx + text_w(&FONT_B, bp) < 222 - kw)
+                    cv_text(bx, 5, &FONT_B, bp, C_WHITE);
+            }
+        }
         key_text(t);                     /* the key: Earth, outlined; a C pad's key change in Air beside it */
         w = text_w(&FONT_B, t);
         cv_rect(222 - w, 3, w + 14, 21, EARTH_C);
         cv_rect(224 - w, 5, w + 10, 17, LAB_BG);
-        cv_text(229 - w, 5, &FONT_B, t, EARTH_C);
+        cv_text(229 - w, 5, &FONT_B, t, AMBER);   /* Earth lifted, to read on ink */
         if (set.fmove) {
             char f[3] = {'C', (char)('0' + set.fmove), 0};
             int32_t fw = text_w(&FONT_B, f);

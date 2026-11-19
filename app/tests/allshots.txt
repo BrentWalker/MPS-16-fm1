@@ -5,13 +5,14 @@ tap HOME
 wait 30
 import ../app/tests/midi/canon.mid canon.mid
 load 0
-turn PRESET 3
+turn PRESET 1
 wait 2500
 key 5 down
 wait 60
 shot s02_surface.png
 key 5 up
-turn SELECT 1
+tap SEQ
+tap SEQ
 wait 2500
 shot s03_mutate.png
 key 20 down

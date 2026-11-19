@@ -9,7 +9,7 @@ typedef struct {
 } probe_t;
 
 static const probe_t PR_BTN[NB] = {
-    {"FX", "EXTRAS: ARP RATE, BASS NOTE, SLICE LENGTH, VELOCITY.", 0, 0},
+    {"FX", "MIDI FX: STRUM, HUMANIZE, ARP, VOICING. AGAIN: THE EXTRAS.", 0, 0},
     {"SLICE", "THE SONG'S SLICES: DROP ONE ON AN A PAD. AGAIN: FILES.", 0, 0},
     {"TRIM", "THE LAST PAD: START, END, TUNE, LEVEL, LOOP, LOCK.", 0, 0},
     {"LIB", "YOUR KEY'S CHORDS. AN A PAD TAKES ONE.", 0, 0},
@@ -17,18 +17,17 @@ static const probe_t PR_BTN[NB] = {
     {"SYS", "TAP: MIDI CHANNELS AND THE USB DRIVE. HOLD: GUIDE.", 0, 0},
     {"HOME", "BACK HOME, FROM ANYWHERE.", 0, 0},
     {"SAVE", "KEEPS YOUR PADS AND SETTINGS.", 0, 0},
-    {"ARP", "NOTHING YET: FREE FOR SOMETHING NEW.", 0, 0},
-    {"MODE", "NOTHING YET: K2 SETS THE B PADS.", 0, 0},
+    {"UNDO", "TAKES BACK THE LAST DROP, TRIM OR SPICE. AGAIN: REDO.", 0, 0},
+    {"SPICE", "THE LAST A PAD: 7, 9, 11, 13, SUS4, SUS2, ADD9, 6, PLAIN.", 0, 0},
     {"PLAY", "ALL NOTES OFF. IN SLICE OR LIB: HEAR IT.", 0, 0},
     {"REC", "RECORD MIDI IN. AGAIN: SAVE IT.", 0, 0},
     {"OCT-", "OCTAVE DOWN WHEN YOU LET GO. HOLD + KNOB: MORE. TAP BOTH: ANALYZE.", 0, 0},
     {"OCT+", "OCTAVE UP WHEN YOU LET GO. HOLD + KNOB: MORE. TAP BOTH: ANALYZE.", 0, 0},
 };
 static const probe_t PR_SURF[7] = {
-    {"MUTATE", "REPEATED CHORDS CHANGE: EXTEND, COLOR, FLIP, SUB, MIX.",
-     "WHICH CHORDS CHANGE", "A NEW MIX ROLL"},
+    {"BPM", "THE TEMPO.", 0, 0},
     {"NOTE LENGTH", "SHORT TO LONG, THEN LEGATO.", 0, 0},
-    {"SLICE", "HOW THE SONG IS CUT: EQUAL, BARS, HITS, CHORDS.", 0, 0},
+    {"CHOP", "HOW THE SONG IS CHOPPED: TRANSIENT, BEATS, BARS, CHORDS.", 0, 0},
     {"START", "WHERE IN THE SONG THE 16 PADS BEGIN.", 0, 0},
     {"B PADS", "WHAT THE 7 B PADS PLAY: ROOT, LEAD, 3RD, 5TH.", 0, 0},
     {"C PADS", "WHAT THE 4 C PADS DO: BRIDGE, SUGGEST, OUTSIDE, BORROW.", 0, 0},
@@ -46,8 +45,8 @@ static void probe_core_knob(uint32_t e, uint32_t scr, probe_t *o)
                                             {"HUMANIZE", "TIMING AND VELOCITY OFF BY A LITTLE."},
                                             {"BPM", "THE TEMPO."}};
     static const char *const SLICE_[5][2] = {{"SELECT", "PICKS A SLICE, AND PLAYS IT."},
-                                             {"CUT", "HOW THE SONG IS CUT, AS PRESET AT HOME."},
-                                             {"SENS", "HITS: HOW SURE A HIT MUST BE."},
+                                             {"CHOP", "HOW THE SONG IS CHOPPED, AS PRESET AT HOME."},
+                                             {"SENS", "TRANSIENT: HOW SURE A HIT MUST BE."},
                                              {"START", "TRIMS THE SLICE'S START."},
                                              {"END", "TRIMS THE SLICE'S END."}};
     static const char *const TRIM_[5][2] = {{"PLAY MODE", "ONE-SHOT, GATE OR LOOP."},

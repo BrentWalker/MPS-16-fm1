@@ -13,8 +13,8 @@ expect notes 163
 expect tracks 3
 expect bpm 92
 expect slices 8
-# PRESET to HITS: cut where notes land together
-turn PRESET 2
+# PRESET to TRANSIENT (CHOP: TRANSIENT, BEATS, BARS, CHORDS): cut where notes land together
+turn PRESET -2
 wait 30
 expect slices 24
 # SLICE: the slices of the file; a white key drops the selected one on its pad and plays it
@@ -73,10 +73,10 @@ shot home_phrase.png
 key 0 up
 wait 1200
 expect playing0 0
-# SLICE's K1, the cut (as PRESET): back to BARS, 8 slices
+# SLICE's K1, CHOP (as PRESET): back to BARS, 8 slices
 tap SEL
 wait 30
-turn K1 -2
+turn K1 2
 wait 30
 expect slices 8
 shot slice_grid.png
