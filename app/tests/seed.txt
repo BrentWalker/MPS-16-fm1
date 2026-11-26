@@ -127,7 +127,7 @@ shot seed-home.png
 wait 11000
 expect playing13 0
 # PICK NOTES from home, PLAY: a minor key
-tap EDIT
+tap SEQ
 wait 30
 key 4 down
 wait 30
@@ -193,7 +193,7 @@ expect screen 3
 turn K4 2
 wait 30
 expect strum0 2
-tap SEQ
+tap EDIT
 wait 30
 expect screen 3
 # hold a key: PRESET START, ALGO END of the window, for its group
@@ -264,7 +264,7 @@ expect screen 0
 # LOCK (HOME + SEQ) key 2, then the key changes: key 2 stays
 press HOME
 wait 30
-tap SEQ
+tap EDIT
 wait 30
 release HOME
 wait 30

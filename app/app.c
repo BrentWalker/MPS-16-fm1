@@ -4,7 +4,7 @@
  * As MPS-16 ver WEB's SEED. CHORD KEYS (white 1-8), PROGRESSION KEYS (white 9-16), NOTE KEYS (black 1-7), the C pads
  * (BASS, NO BASS, NO ROOT, TAP). A change goes to the group played last; hold a key: that key (SELECT, PRESET, ALGO:
  * its group: sound or MIDI 1-4, the window's START, END). The buttons as they're named: HOME (held: SHIFT), EDIT your
- * notes, scale, root, type; SEL the library; ARP the rhythm (SHIFT: UNDO); SEQ the window (SHIFT: LOCK); ENV the
+ * pad edit, the window (SHIFT: LOCK); SEQ your notes, scale, root, type; SEL the library; ARP the rhythm (SHIFT: UNDO); ENV the
  * notes' shape; LFO the groove; FX SOUND (held: SETUP; SHIFT: COACH); SAVE (held: LOAD); PLAY and REC the looper;
  * GLO STOP ALL; OCT- / OCT+ octave. MIDI over USB and Bluetooth, clock out and in.
  *
@@ -2249,18 +2249,18 @@ buttons:
                 ev_push(QE_PSTART, PREVIEW, 100);
             } else
                 loop_play();
-        } else if (i == B_EDIT) {        /* EDIT: what the keys hold: your notes, the scale, the root, the type */
+        } else if (i == B_SEQ) {         /* SEQ: what the keys hold: your notes, the scale, the root, the type */
             if (ui.screen == SCR_PICK)
                 ui.screen = SCR_HOME;
             else {
                 pick_enter();
-                app_say("EDIT", "PLAY NOTES YOU LIKE");
+                app_say("SEQ", "PLAY NOTES YOU LIKE");
             }
         } else if (i == B_SEL) {         /* LIB */
             ui.screen = ui.screen == SCR_LIB ? SCR_HOME : SCR_LIB;
-        } else if (i == B_SEQ || i == B_ENV || i == B_LFO) {   /* the key pages; SHIFT + SEQ: LOCK */
-            uint8_t pg = i == B_SEQ ? PG_SEQ : i == B_ENV ? PG_ENV : PG_LFO;
-            if (i == B_SEQ && shift()) {
+        } else if (i == B_EDIT || i == B_ENV || i == B_LFO) {   /* EDIT: pad edit (the window); SHIFT + EDIT: LOCK */
+            uint8_t pg = i == B_EDIT ? PG_SEQ : i == B_ENV ? PG_ENV : PG_LFO;
+            if (i == B_EDIT && shift()) {
                 if (ui.pad < 0 || pads[ui.pad].type == PAD_EMPTY)
                     app_say("LOCK", "PLAY A KEY FIRST");
                 else {
@@ -2473,7 +2473,7 @@ buttons:
             char t[12];
             if (ui.page == PG_SEQ) {
                 if (k1 || k2 || k3 || k4)
-                    app_say("SEQ", "PRESET: START. ALGO: END");
+                    app_say("EDIT", "PRESET: START. ALGO: END");
             } else if (r < 0) {          /* the note keys: HUMANIZE only */
                 if (k2 && ui.page == PG_ENV) {
                     set.nhum = (uint8_t)clamp(set.nhum + 5 * k2, 0, 50);
@@ -2686,7 +2686,7 @@ static void lights(void)
         if (ui.coach == CS_NOTES && !fd_n && blink)
             for (i = 0; i < NKEYS; i++)
                 dim |= 1u << i;
-        btn = 1u << B_EDIT;
+        btn = 1u << B_SEQ;
         if (fd_cnt && (ui.coach != CS_SCALE || blink))
             btn |= 1u << B_PLAY;
         plat_lights(btn | ui.btn, bright, 1u << B_GLO, dim, 1);
@@ -2742,9 +2742,9 @@ static void lights(void)
         btn |= 1u << B_REC;
     if (lp_run != LR_STOP)
         btn |= 1u << B_PLAY;
-    btn |= 1u << (ui.screen == SCR_LIB ? B_SEL : ui.screen == SCR_PAD ? (ui.page == PG_SEQ ? B_SEQ : ui.page == PG_ENV ? B_ENV : B_LFO)
+    btn |= 1u << (ui.screen == SCR_LIB ? B_SEL : ui.screen == SCR_PAD ? (ui.page == PG_SEQ ? B_EDIT : ui.page == PG_ENV ? B_ENV : B_LFO)
                   : ui.screen == SCR_SOUND ? B_FX
-                  : ui.screen == SCR_SETUP ? B_FX : ui.screen == SCR_LOOP ? B_REC : ui.screen == SCR_PICK ? B_EDIT
+                  : ui.screen == SCR_SETUP ? B_FX : ui.screen == SCR_LOOP ? B_REC : ui.screen == SCR_PICK ? B_SEQ
                   : B_HOME);
     plat_lights(btn | ui.btn, bright, 1u << B_GLO, dim, 1);
     plat_lights_mid(0, mid);
@@ -3016,7 +3016,7 @@ static void draw_pick_top(void)
     uint32_t i;
     int32_t x = 6;
     lab_begin();
-    top_bar("PICK NOTES", WATER_C);
+    top_bar("SEQ: YOUR NOTES", WATER_C);
     if (!fd_n) {
         text_c(44, &FONT_M, "PLAY NOTES", C_WHITE);
         text_c(72, &FONT_B, "ANY KEYS, AS MANY AS YOU LIKE", LAB_LABEL);
@@ -3254,7 +3254,7 @@ static void draw_pad(void)               /* EDIT: the group played last (or the 
     static const char *const LBE[4] = {"K1 LENGTH", "K2 HUMAN", "K3 VELOCITY", "K4 STRUM"};
     static const char *const LBL_[4] = {"K1 SWING", "K2 SPEED", "K3 INVERT", "K4"};
     static const char *const LB2[3] = {"SELECT SOUND", "PRESET START", "ALGO END"};
-    static const char *const PGN[3] = {"SEQ ", "ENV ", "LFO "};
+    static const char *const PGN[3] = {"EDIT ", "ENV ", "LFO "};
     const char *const *LBL = ui.page == PG_LFO ? LBL_ : LBE;
     uint32_t k;
     lab_begin();

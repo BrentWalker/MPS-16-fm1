@@ -13,10 +13,10 @@ This is an early test build by BeatSmith.
 2. [The first start: COACH](#2-the-first-start-coach)
 3. [The keys](#3-the-keys)
 4. [Home](#4-home)
-5. [EDIT: your notes, the key, the type](#5-edit-your-notes-the-key-the-type)
+5. [SEQ: your notes, the key, the type](#5-seq-your-notes-the-key-the-type)
 6. [LIB](#6-lib)
 7. [Hold a key: SELECT, PRESET, ALGO](#7-hold-a-key-select-preset-algo)
-8. [ARP, SEQ, ENV, LFO and LOCK](#8-arp-seq-env-lfo-and-lock)
+8. [EDIT, ARP, ENV, LFO and LOCK](#8-edit-arp-env-lfo-and-lock)
 9. [LOOP, UNDO, SAVE and LOAD](#9-loop-undo-save-and-load)
 10. [SOUND, MIDI and SETUP](#10-sound-midi-and-setup)
 11. [All the controls](#11-all-the-controls)
@@ -87,10 +87,10 @@ The buttons are named for what they do:
 | Button | Does |
 |---|---|
 | HOME | Home. Held: SHIFT |
-| EDIT | What the keys hold: your notes, the scale, the root, the chord type |
+| EDIT | Pad edit: the window, START and END, with the notes and playhead. SHIFT + EDIT: LOCK |
+| SEQ | What the keys hold: your notes, the scale, the root, the chord type |
 | SEL | LIB: chords and progressions to put on keys |
 | ARP | The RHYTHM of the group played last, one step a tap. SHIFT + ARP: UNDO |
-| SEQ | The window: START and END. SHIFT + SEQ: LOCK |
 | ENV | The notes' shape: LENGTH, HUMANIZE, VELOCITY, STRUM |
 | LFO | The groove: SWING, SPEED, INVERSION |
 | FX | SOUND. Held: SETUP. SHIFT + FX: COACH |
@@ -110,11 +110,11 @@ same value. LOCKed keys are left out of group changes.
 
 ![NO BASS](img/seed-home-nobass.png)
 
-## 5. EDIT: your notes, the key, the type
+## 5. SEQ: your notes, the key, the type
 
-![EDIT](img/seed-pick.png)
+![SEQ](img/seed-pick.png)
 
-Press **EDIT**. Every key is now a note, like a normal keyboard. Play the notes you like: each one you play is added,
+Press **SEQ**. Every key is now a note, like a normal keyboard. Play the notes you like: each one you play is added,
 and playing it again takes it out. The scales that hold all of them are listed below, best first (the first note
 you played as the root). Turn **K1** to choose one and press **PLAY**: the keys are rebuilt in that key.
 
@@ -125,7 +125,7 @@ you played as the root). Turn **K1** to choose one and press **PLAY**: the keys 
 | K3 | The key's root |
 | K4 | TYPE: TRIADS, 7THS, 9THS, SUS2, SUS4, ADD9 |
 
-EDIT again (or HOME) goes back.
+SEQ again (or HOME) goes back.
 
 ## 6. LIB
 
@@ -162,17 +162,17 @@ This is not note LENGTH (ENV K1), which is how long each note lasts.
 
 Parked for now, to be placed again: the key's root (set in PICK NOTES meanwhile), INVERSION and SWING.
 
-## 8. ARP, SEQ, ENV, LFO and LOCK
+## 8. EDIT, ARP, ENV, LFO and LOCK
 
-![SEQ](img/seed-padedit.png)
+![EDIT](img/seed-padedit.png)
 
 These shape how the keys play. Each change goes to the group played last, all set to the same value; hold a key
-while you turn a K knob and it goes to that key alone. The top of SEQ, ENV and LFO shows the notes of the key played
+while you turn a K knob and it goes to that key alone. The top of EDIT, ENV and LFO shows the notes of the key played
 last with the playhead, brown the lowest note, white the notes sounding now. Press the same button again for home.
 
 **ARP** steps the RHYTHM, no screen: HOLD, STABS, OFFBEAT, 3-3-2, SYNC, ARP UP, ARP DOWN, ARP UP-DN, ARP RANDOM.
 
-**SEQ** is the window: turn PRESET for START and ALGO for END here without holding a key (section 7).
+**EDIT** is pad edit, the window: turn PRESET for START and ALGO for END here without holding a key (section 7).
 
 **ENV**, the notes' shape:
 
@@ -197,7 +197,7 @@ The **note keys** sound while you hold them, so only HUMANIZE (ENV K2) applies t
 
 ![Note keys](img/seed-noteedit.png)
 
-**SHIFT + SEQ** is **LOCK**: it locks the key you played last, so it stays exactly as it is when the key, type or
+**SHIFT + EDIT** is **LOCK**: it locks the key you played last, so it stays exactly as it is when the key, type or
 bass mode changes, and group changes leave it out. Again unlocks it. A small corner marks a locked key.
 
 ## 9. LOOP, UNDO, SAVE and LOAD
@@ -259,15 +259,15 @@ MIDI goes out over **USB** and **Bluetooth** (the FM-1's TRS jack is MIDI in onl
 | Note keys (black 1 to 7) | The notes of the key, lit by the chord you played |
 | C pads (last 4 black keys) | BASS, NO BASS, NO ROOT (the group, or the key held), TAP |
 | HOME | Home. Held: SHIFT. In COACH: skip |
-| EDIT | Your notes, the scale (K1), the root (K3), the chord type (K4) |
+| EDIT | Pad edit: the window, PRESET START, ALGO END. HOME + EDIT: LOCK |
 | SEL | LIB |
 | ENV | The notes' shape: LENGTH, HUMANIZE, VELOCITY, STRUM |
 | LFO | The groove: SWING, SPEED, INVERSION |
 | FX | SOUND: every group's sound or MIDI channel. Held: SETUP. HOME + FX: COACH |
 | GLO | STOP ALL, always dim lit |
-| PLAY | The loop: armed, the intro and recording; playing, stop; stopped, play. SHIFT: clear the keys. In EDIT: use the scale. In LIB: hear it |
+| PLAY | The loop: armed, the intro and recording; playing, stop; stopped, play. SHIFT: clear the keys. In SEQ: use the scale. In LIB: hear it |
 | ARP | RHYTHM, a step a tap. HOME + ARP: UNDO (in LOOP: the last layer off) |
-| SEQ | The window: PRESET START, ALGO END. HOME + SEQ: LOCK |
+| SEQ | Your notes, the scale (K1), the root (K3), the chord type (K4) |
 | REC | LOOP: open it armed, recording on and off. HOME + REC: clear |
 | SAVE | Save. Held: LOAD |
-| OCT- / OCT+ | Octave: of the key you hold, else the group played last. In EDIT: the keyboard |
+| OCT- / OCT+ | Octave: of the key you hold, else the group played last. In SEQ: the keyboard |
