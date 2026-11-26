@@ -6,8 +6,8 @@ The first 7 black keys (B pads) play the notes of the key, lit by the chord you 
 (C pads) are BASS, NO BASS, NO ROOT and LATCH. COACH, a step screen, walks you through it with the keys and buttons
 it means lit. Everything goes out over USB MIDI.
 
-From 0.30 the FM1 version is SEED only. The earlier MIDI phrase sampler (0.25 and before) is tagged
-`v0.25-sampler` and stays on the site under /v/.
+From 0.30 the FM1 version is SEED only. The earlier MIDI phrase sampler (0.25 and before) is on the
+`sampler-0.25` branch and stays on the site under /v/.
 
 **Status:** 0.30, test builds. Install it or try it in the browser: https://brentwalker.github.io/MPS-16-fm1/ (older versions for testing: /v/VERSION/install/). Manual: [app/docs/MANUAL.md](app/docs/MANUAL.md).
 
