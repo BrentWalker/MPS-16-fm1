@@ -202,13 +202,13 @@ wait 60
 turn PRESET 4
 wait 30
 expect st1 >3
-expect st5 0
+expect st5 >3
 expect st9 0
 turn ALGO -32
 wait 30
 expect sl1 <384
 expect sl1 >200
-expect sl0 0
+expect sl0 <384
 wait 400
 shot seed-padedit.png
 key 2 up
@@ -342,8 +342,7 @@ wait 30
 turn PRESET 32
 wait 60
 expect st8 >100
-expect st9 >100
-expect screen 0
+expect screen 3
 shot seed-window.png
 key 14 up
 wait 60

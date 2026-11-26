@@ -2382,8 +2382,7 @@ buttons:
                 static uint32_t at_k, at_a;
                 uint32_t now2 = plat_ms(), dtk = now2 - (ek ? at_k : at_a);
                 int32_t full_r = seq_len(r), stp = full_r / 300 > 1 ? full_r / 300 : 1, d = ek ? ek : ea;
-                int in_edit = ui.screen == SCR_PAD && ui.page == PG_SEQ;
-                uint32_t g = pad_grp(r), m = in_edit ? (hp ? hp : 1u << r) : grp_pads(g) | hp;   /* EDIT: the selected key */
+                uint32_t g = pad_grp(r), m = grp_pads(g) | hp;
                 int hold_chord = pads[r].type == PAD_CHORD && (pfx[r].plays == RH_HOLD);
                 char t[16];
                 if (shift())
@@ -2414,15 +2413,15 @@ buttons:
                             cp[j].wl = (float)pwin_len(j);
                         }
                     sec_text(pwin_len(r), r, t);
-                    if (in_edit) {               /* EDIT: the key's own name */
-                        char kl[32];
-                        key_label(r, kl);
-                        text_cat(kl, ek ? ": START" : ": END");
-                        app_say(kl, t);
-                    } else
-                        edit_say(ek ? "START" : "END", t);
+                    edit_say(ek ? "START" : "END", t);
                 }
                 set_dirty = 1;
+                if (ui.screen != SCR_PAD || ui.page != PG_SEQ) {   /* the window shows while the key is held */
+                    if (!ui.peek)
+                        ui.peek = (uint8_t)(ui.screen + 1u), ui.peek_pg = ui.page;
+                    ui.screen = SCR_PAD;
+                    ui.page = PG_SEQ;
+                }
             } else if ((ek || ea) && !hp)
                 app_say(ek ? "START" : "END", hn ? "NOTE KEYS: n/a" : "HOLD A CHORD OR PROGRESSION KEY");
             else if (es && !hp && !hn)
