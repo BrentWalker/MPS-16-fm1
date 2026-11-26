@@ -53,7 +53,7 @@ the step, it moves on by itself:
 ## 3. The keys
 
 - **CHORD KEYS**: white keys 1 to 8, your key's chords (1 to 7, then the first one an octave up).
-- **PROGRESSION KEYS**: white keys 9 to 16, progressions of four bars each. A tap plays one once, holding it loops it.
+- **PROGRESSION KEYS**: white keys 9 to 16, progressions of four bars each. A tap plays it once, START to END, even if you let go; tapping again restarts it. SYS stops it. The LOOP recorder does the looping.
   One progression plays at a time: start another and the first stops.
 - **NOTE KEYS**: the first 7 black keys. The notes of your key, from the root up, sounding while you hold them.
 - **C pads**: the last 4 black keys. **BASS**, **NO BASS**, **NO ROOT** and **TAP**.
@@ -90,8 +90,8 @@ the BPM too.
 | K4 | Free for now |
 | OCT- / OCT+ | Octave: of the key you hold, else of the group you played last |
 | Hold a key + SELECT | The group's sound, or MIDI 1-4 |
-| Hold a key + PRESET | The group's window START |
-| Hold a key + ALGO | The group's window LENGTH |
+| Hold a key + PRESET | The group's window START line |
+| Hold a key + ALGO | The group's window END line |
 | HOME, held | SHIFT |
 
 ## The one rule
@@ -126,12 +126,21 @@ that key's whole group.
 | Hold a key and turn | Does |
 |---|---|
 | SELECT | The group's output: a sound (WARM, KEYS, ORGAN, STRINGS, PLUCK, BASS, BELL, LEAD, PAD, BRASS), or MIDI 1, 2, 3 or 4. A sound plays on the FM-1 with no MIDI; MIDI is silent on the FM-1 and goes out on that channel |
-| PRESET | START: where the group's window begins, 1/32 of a beat a click (HOME held: a 16th) |
-| ALGO | LENGTH: how long the window runs before it goes round again, the same steps |
+| PRESET | START: the line where the window begins |
+| ALGO | END: the line where it ends |
 
-The window shows while you turn and closes when you let go: the START and END lines, dark outside. Places read
-BAR.BEAT.32ND. A progression skips into its bars; a chord key on a rhythm or an arp skips into its pattern. A chord
-on HOLD and the note keys have no window (n/a). This is not note LENGTH (home K3), which is how long each note lasts.
+The lines move smoothly, in tiny steps that grow the faster you turn (hold HOME for the finest). They go anywhere,
+notes there or not, up to a quarter of the sequence past either edge, and the notes never move: what's outside the
+lines is dark and doesn't play. The window shows while you turn and closes when you let go, with its length in
+seconds.
+
+- **Progression keys**: a tap plays START to END once.
+- **Chord keys on a rhythm or an arp**: START to END goes round while you hold the key, and stops when you let go.
+- **Chord keys on HOLD (plain or strummed)**: sound until you let go. START before the chord gives a gap before it
+  sounds; END doesn't apply.
+- **Note keys**: a piano, no window.
+
+This is not note LENGTH (home K3), which is how long each note lasts.
 
 ![The window](img/seed-window.png)
 
@@ -221,7 +230,7 @@ MIDI goes out over **USB** and **Bluetooth** (the FM-1's TRS jack is MIDI in onl
 | Control | Does |
 |---|---|
 | Chord keys (white 1 to 8) | Chords. In LIB, take the pick. In REC, pick the key |
-| Progression keys (white 9 to 16) | Progressions, one at a time. A tap plays it once, held it loops |
+| Progression keys (white 9 to 16) | Progressions, one at a time. A tap plays START to END once |
 | Note keys (black 1 to 7) | The notes of the key, lit by the chord you played |
 | C pads (last 4 black keys) | BASS, NO BASS, NO ROOT (the group, or the key held), TAP |
 | HOME | Home. Held: SHIFT. In COACH: skip |

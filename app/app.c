@@ -275,7 +275,8 @@ typedef struct {
     uint8_t plays, human, speed, vel;    /* speed: SPEED_PCT[]; vel 0: as you play it, else that velocity */
     int8_t len, inv, oct, rsv;
     uint8_t strum, swing, bm, rsv2;      /* strum: 5 ms steps (0 off); swing: 50 .. 75 %; bm: BASS, NO BASS, NO ROOT */
-    uint16_t st, sl;                     /* the window: START (ticks in), its LENGTH (ticks; 0: to the end, a bar) */
+    int16_t st, sl;                      /* the window: START, END (ticks; END 0: the sequence's end). Up to a quarter
+                                          * of the sequence past either edge, silent there */
 } pfx_t;
 static const uint16_t SPEED_PCT[7] = {50, 67, 75, 100, 133, 150, 200};
 static PLAT_POOL pad_t pads[NPADS + 1];
@@ -811,13 +812,15 @@ static void pl_release(uint32_t i)
             pl[i].snd[k] = 0;
         }
 }
-static uint32_t pwin_len(uint32_t i)     /* a pad's window: its LENGTH, or from START to its end (a chord: a bar) */
+static int32_t seq_len(uint32_t i)       /* a key's sequence: a progression's bars, a chord's bar */
 {
-    const pfx_t *f = &pfx[i];
-    uint32_t full = pads[i].type == PAD_PROG ? pads[i].len : 4u * PPQ;
-    if (f->sl)
-        return f->sl;
-    return full > f->st + 12u ? full - f->st : 12u;
+    return pads[i].type == PAD_PROG ? (int32_t)pads[i].len : (int32_t)(4u * PPQ);
+}
+static int32_t win_end(uint32_t i) { return pfx[i].sl ? pfx[i].sl : seq_len(i); }
+static uint32_t pwin_len(uint32_t i)     /* a key's window: START to END */
+{
+    int32_t l = win_end(i) - pfx[i].st;
+    return l > 12 ? (uint32_t)l : 12u;
 }
 static void phrase_tick(uint32_t n)
 {
@@ -871,13 +874,9 @@ static void phrase_tick(uint32_t n)
             }
         }
         P->pos = b;
-        if (P->pos >= we) {
+        if (P->pos >= we) {              /* START to END once: no loop (the LOOP recorder loops) */
             pl_release(i);
-            if (i < NPADS && (pad_held[i] || pad_latched[i]) && we > 0.0f) {
-                P->pos -= we;
-                P->looped = 1;
-            } else
-                P->on = 0;
+            P->on = 0;
         }
     }
 }
@@ -932,6 +931,8 @@ static void cp_start(uint32_t i, uint32_t vel)
         c->vel[k] = (uint8_t)(f->human ? human_vel(vel, f->human) : vel);
         c->sounded[k] = 0;
         c->at[k] = k * ss + (f->human ? cs_rnd() % (f->human * 13u + 1u) : 0u);
+        if (f->st < 0)                   /* START before the chord: a gap before it sounds */
+            c->at[k] += (uint32_t)((float)(-f->st) * SR * 60.0f / ((float)tempo * (float)PPQ) / c->spd);
     }
     c->t = c->next = c->idx = c->off = 0;
     c->u = c->left = 0.0f;
@@ -965,7 +966,7 @@ static void cp_fire(cplay_t *c, float t0, float t1)   /* the hits in [t0, t1), p
     uint32_t j = t0 > step ? (uint32_t)(t0 / step) - 1u : 0u, k, li = (uint32_t)(c->len + 5);
     for (;; j++) {
         float tj = grid_t(j, step, c->swing);
-        if (tj >= t1)
+        if (tj >= t1 || tj >= (float)(4u * PPQ))   /* past the bar: the window's silent extra */
             break;
         if (tj < t0)
             continue;
@@ -1551,7 +1552,7 @@ static void undo_swap(void)              /* one step back; again: forward */
 
 /* ------------------------------------------------------ SAVE and LOAD --- */
 /* the session: the settings; every pad's source, its PAD EDIT and (LOCKed or recorded) its notes */
-#define SESS_MAGIC 0x34534553u           /* "SES4" */
+#define SESS_MAGIC 0x35534553u           /* "SES5" */
 typedef struct {
     uint32_t magic;
     desc_t d[NPADS];
@@ -1855,6 +1856,18 @@ static void loop_play(void)              /* PLAY: stop it; armed, the intro and 
         app_say("LOOP", "EMPTY: REC, THEN PLAY");
 }
 
+static void sec_text(uint32_t tk, int32_t i, char *t)   /* ticks as seconds at the BPM and the key's speed: "2.40 S" */
+{
+    float sp = (float)SPEED_PCT[pfx[i].speed % 7u] / 100.0f;
+    uint32_t cs = (uint32_t)((float)tk * 6000.0f / ((float)tempo * (float)PPQ) / sp + 0.5f), l;   /* hundredths */
+    num_text((int32_t)(cs / 100u), t, 0);
+    l = cs_len(t);
+    t[l] = '.';
+    t[l + 1u] = (char)('0' + cs / 10u % 10u);
+    t[l + 2u] = (char)('0' + cs % 10u);
+    t[l + 3u] = 0;
+    text_cat(t, " S");
+}
 /* SELECT's list for a group: a sound, or MIDI 1-4 (silent on the FM-1, out on that channel) */
 static void sel_name(uint32_t v, char *t)
 {
@@ -2315,8 +2328,8 @@ buttons:
                 ui.co_pick = (uint8_t)clamp(ui.co_pick + k1, CO_OFF, CO_ALWAYS);
             es = k1 = k2 = k3 = k4 = ek = ea = 0;
         }
-        /* SELECT, PRESET, ALGO: only with a key held. SELECT: the group's sound or MIDI channel. PRESET: START,
-         * ALGO: LENGTH of the window the group plays (1/32 of a beat a click; HOME held: a 16th) */
+        /* SELECT, PRESET, ALGO: only with a key held. SELECT: the group's sound or MIDI channel. PRESET: the START
+         * line, ALGO: the END line of the window the group plays, smooth (HOME held: the finest) */
         if ((es || ek || ea) && ui.screen != SCR_PICK) {
             uint32_t hp = held_pads(), hn = held_notes(), j, r = 0;
             if (hp)
@@ -2324,30 +2337,50 @@ buttons:
                     r++;
             if (es && (hp || hn))
                 sel_step(hp ? (r < 8u ? 0u : 1u) : 2u, es);
-            if ((ek || ea) && hp) {
-                int32_t stp = shift() ? 24 : 3;
+            if ((ek || ea) && hp) {      /* the window's lines, smooth: tiny steps, bigger the faster you turn */
+                static uint32_t at_k, at_a;
+                uint32_t now2 = plat_ms(), dtk = now2 - (ek ? at_k : at_a);
+                int32_t full_r = seq_len(r), stp = full_r / 300 > 1 ? full_r / 300 : 1, d = ek ? ek : ea;
                 uint32_t g = pad_grp(r), m = grp_pads(g) | hp;
-                int32_t ref_st = (int32_t)pfx[r].st + ek * stp, ref_l = (int32_t)pwin_len(r) + ea * stp;
+                int hold_chord = pads[r].type == PAD_CHORD && (pfx[r].plays == RH_HOLD);
                 char t[16];
-                for (j = 0; j < NPADS; j++)
-                    if ((m >> j & 1u) && pads[j].type != PAD_EMPTY && pad_grp(j) == g) {
-                        int32_t full = pads[j].type == PAD_PROG ? (int32_t)pads[j].len : (int32_t)(4u * PPQ);
-                        if (ek)
-                            pfx[j].st = (uint16_t)clamp(ref_st, 0, full - 12);
-                        if (ea)
-                            pfx[j].sl = (uint16_t)clamp(ref_l, 12, pads[j].type == PAD_PROG ? 2 * full : 16 * (int32_t)PPQ);
-                        cp[j].st = (float)pfx[j].st;
-                        cp[j].wl = (float)pwin_len(j);
-                    }
-                pos_text(ek ? pfx[r].st : pwin_len(r), t, ek != 0);
-                edit_say(ek ? "START" : "LENGTH", t);
+                if (shift())
+                    stp = 1;
+                else if (dtk < 40u)
+                    stp *= 6;
+                else if (dtk < 110u)
+                    stp *= 3;
+                if (ek)
+                    at_k = now2;
+                else
+                    at_a = now2;
+                if (ea && hold_chord)
+                    app_say("END", "n/a: A HELD CHORD PLAYS TILL YOU LET GO");
+                else {
+                    int32_t ref_st = pfx[r].st + d * stp, ref_en = win_end(r) + d * stp;
+                    for (j = 0; j < NPADS; j++)
+                        if ((m >> j & 1u) && pads[j].type != PAD_EMPTY && pad_grp(j) == g) {
+                            int32_t full = seq_len(j), q = full / 4;
+                            int hc = pads[j].type == PAD_CHORD && pfx[j].plays == RH_HOLD;
+                            if (ek)              /* START: a quarter before it .. the END */
+                                pfx[j].st = (int16_t)clamp(ref_st, -q, hc ? 0 : win_end(j) - 12);
+                            if (ea && !hc) {     /* END: the START .. a quarter after it */
+                                int32_t e = clamp(ref_en, pfx[j].st + 12, full + q);
+                                pfx[j].sl = (int16_t)(e == full ? 0 : e);
+                            }
+                            cp[j].st = (float)pfx[j].st;
+                            cp[j].wl = (float)pwin_len(j);
+                        }
+                    sec_text(pwin_len(r), r, t);
+                    edit_say(ek ? "START" : "END", t);
+                }
                 set_dirty = 1;
                 if (ui.screen != SCR_PAD) {   /* the window shows while the key is held */
                     ui.peek = (uint8_t)(ui.screen + 1u);
                     ui.screen = SCR_PAD;
                 }
             } else if ((ek || ea) && !hp)
-                app_say(ek ? "START" : "LENGTH", hn ? "NOTE KEYS: n/a" : "HOLD A CHORD OR PROGRESSION KEY");
+                app_say(ek ? "START" : "END", hn ? "NOTE KEYS: n/a" : "HOLD A CHORD OR PROGRESSION KEY");
             else if (es && !hp && !hn)
                 app_say("SOUND", "HOLD A KEY AND TURN SELECT");
             es = ek = ea = 0;
@@ -3042,8 +3075,6 @@ static void draw_roll(uint32_t i, int32_t x0, int32_t y0, int32_t w, int32_t h)
         }
         for (k = 0; k < cn; k++)
             v[k] += 12 * f->oct;
-        if ((float)(f->st + pwin_len(i)) > W && f->plays != RH_HOLD)
-            W = (float)(f->st + pwin_len(i));
         if (RH_ARP(f->plays) && cn) {
             uint32_t dir = f->plays - RH_ARPUP;
             float step = 48.0f, t = 0.0f;
@@ -3077,53 +3108,57 @@ static void draw_roll(uint32_t i, int32_t x0, int32_t y0, int32_t w, int32_t h)
             }
         if (cp[i].on && f->plays != RH_HOLD)
             head = cp[i].u + cp[i].st;
-        else if (cp[i].on) {
-            float bar = 4.0f * 60.0f / (float)tempo * SR / spd;
-            float t = (float)cp[i].t;
-            head = (t - (float)(int32_t)(t / bar) * bar) / bar * W;
-        }
+        else if (cp[i].on)               /* held: from the START line, then it stays at the bar's end */
+            head = fm_minf((float)f->st + (float)cp[i].t * (float)tempo * (float)PPQ * spd / (60.0f * SR), W - 1.0f);
     } else
         return;
-    cv_rect(x0, y0, w, h, ES_SLATE);
-    if (p->type == PAD_PROG || f->plays != RH_HOLD) {   /* the window: dark outside, START and END lines */
-        float a = (float)f->st, e = fm_minf((float)(f->st + pwin_len(i)), W);
-        int32_t xa = x0 + (int32_t)(a / W * (float)w), xe = x0 + (int32_t)(e / W * (float)w);
-        if (xa > x0)
+    {
+        /* the view: the sequence, and the lines wherever they are (a quarter past either edge at most) */
+        int hc = p->type == PAD_CHORD && f->plays == RH_HOLD;
+        float D0 = fm_minf(0.0f, (float)f->st), D1 = hc ? W : fm_maxf(W, (float)win_end(i)), DW = D1 - D0;
+        float a = (float)f->st, e = hc ? W : (float)win_end(i);
+#define RX(t) (x0 + (int32_t)(((t) - D0) / DW * (float)w))
+        int32_t xa = RX(a), xe = RX(e);
+        cv_rect(x0, y0, w, h, ES_SLATE);
+        cv_rect(RX(0.0f), y0 + h - 2, RX(W) - RX(0.0f), 2, ES_PURPLE);   /* the sequence itself */
+        if (xa > x0)                     /* outside the window: dark, silent */
             cv_rect(x0, y0, xa - x0, h, ES_INK);
         if (xe < x0 + w)
             cv_rect(xe, y0, x0 + w - xe, h, ES_INK);
+        for (k = 1; k < bars; k++)
+            cv_rect(RX(W * (float)k / (float)bars), y0, 1, h, ES_PURPLE);
         cv_rect(xa, y0, 2, h, AIR_C);
-        cv_rect(xe > x0 + 1 ? xe - 2 : xe, y0, 2, h, AIR_C);
+        if (!hc)
+            cv_rect(xe > x0 + 1 ? xe - 2 : xe, y0, 2, h, AIR_C);
+        if (!n || W <= 0.0f)
+            return;
+        for (k = 0; k < n; k++) {
+            if ((uint32_t)pi[k] < lo)
+                lo = (uint32_t)pi[k];
+            if ((uint32_t)pi[k] > hi)
+                hi = (uint32_t)pi[k];
+        }
+        rh = (h - 4) / (int32_t)(hi - lo + 1u);
+        if (rh > 8)
+            rh = 8;
+        if (rh < 1)
+            rh = 1;
+        for (k = 0; k < n; k++) {
+            int32_t x = RX(st[k]), xw = (int32_t)(du[k] / DW * (float)w);
+            int32_t y = y0 + h - 4 - ((int32_t)((uint32_t)pi[k] - lo) + 1) * rh;
+            int on = head >= st[k] && head < st[k] + du[k], out = st[k] < a || st[k] >= e;
+            if (x >= x0 + w)
+                continue;
+            if (xw < 2)
+                xw = 2;
+            if (x + xw > x0 + w)
+                xw = x0 + w - x;
+            cv_rect(x, y, xw, rh > 2 ? rh - 1 : rh, out ? ES_PURPLE : (uint32_t)pi[k] == lo ? EARTH_C : on ? C_WHITE : WATER_C);
+        }
+        if (head >= D0 && head < D1)
+            cv_rect(RX(head), y0, 2, h, FIRE_C);
+#undef RX
     }
-    for (k = 1; k < bars; k++)
-        cv_rect(x0 + w * (int32_t)k / (int32_t)bars, y0, 1, h, ES_PURPLE);
-    if (!n || W <= 0.0f)
-        return;
-    for (k = 0; k < n; k++) {
-        if ((uint32_t)pi[k] < lo)
-            lo = (uint32_t)pi[k];
-        if ((uint32_t)pi[k] > hi)
-            hi = (uint32_t)pi[k];
-    }
-    rh = (h - 4) / (int32_t)(hi - lo + 1u);
-    if (rh > 8)
-        rh = 8;
-    if (rh < 1)
-        rh = 1;
-    for (k = 0; k < n; k++) {
-        int32_t x = x0 + (int32_t)(st[k] / W * (float)w), xw = (int32_t)(du[k] / W * (float)w);
-        int32_t y = y0 + h - 2 - ((int32_t)((uint32_t)pi[k] - lo) + 1) * rh;
-        int on = head >= st[k] && head < st[k] + du[k];
-        if (x >= x0 + w)
-            continue;
-        if (xw < 2)
-            xw = 2;
-        if (x + xw > x0 + w)
-            xw = x0 + w - x;
-        cv_rect(x, y, xw, rh > 2 ? rh - 1 : rh, (uint32_t)pi[k] == lo ? EARTH_C : on ? C_WHITE : WATER_C);
-    }
-    if (head >= 0.0f)
-        cv_rect(x0 + (int32_t)(head / W * (float)w), y0, 2, h, FIRE_C);
 }
 static void draw_pad(void)               /* EDIT: the group played last (or the keys held), as the web's pad edit */
 {
@@ -3131,7 +3166,7 @@ static void draw_pad(void)               /* EDIT: the group played last (or the 
     uint32_t h = held_pads();
     char t[32], v[4][12], w[3][12];
     static const char *const LBL[4] = {"K1 RHYTHM", "K2 STRUM", "K3 SPEED", "K4 HUMAN"};
-    static const char *const LB2[3] = {"SELECT SOUND", "PRESET START", "ALGO LENGTH"};
+    static const char *const LB2[3] = {"SELECT SOUND", "PRESET START", "ALGO END"};
     uint32_t k;
     lab_begin();
     if (h)
@@ -3192,13 +3227,15 @@ static void draw_pad(void)               /* EDIT: the group played last (or the 
             str_set(v[3], "OFF", sizeof v[3]);
         bottom_bar(8, LBL, v);
         sel_name(set.snd[r < 8 ? 0 : 1], w[0]);
-        if (pads[r].type == PAD_CHORD && f->plays == RH_HOLD) {
-            str_set(w[1], "n/a", sizeof w[1]);
-            str_set(w[2], "n/a", sizeof w[2]);
-        } else {
-            pos_text(f->st, w[1], 1);
-            pos_text(pwin_len((uint32_t)r), w[2], 0);
-        }
+        if (f->st < 0) {                 /* START: the gap before (-), or how far in */
+            w[1][0] = '-';
+            sec_text((uint32_t)(-f->st), r, w[1] + 1);
+        } else
+            sec_text((uint32_t)f->st, r, w[1]);
+        if (pads[r].type == PAD_CHORD && f->plays == RH_HOLD)
+            str_set(w[2], "TILL LET GO", sizeof w[2]);
+        else
+            sec_text((uint32_t)win_end((uint32_t)r), r, w[2]);
         cv_rect(0, 52, 240, 1, ES_SLATE);
         for (k = 0; k < 3u; k++) {
             int32_t cx = (int32_t)k * 80;
@@ -3206,7 +3243,12 @@ static void draw_pad(void)               /* EDIT: the group played last (or the 
             cv_text(cx + (80 - text_w(&FONT_XS, LB2[k])) / 2, 56, &FONT_XS, LB2[k], LAB_LABEL);
             cv_text(cx + 1 + (78 - text_w(ft, w[k])) / 2, 72, ft, w[k], C_WHITE);
         }
-        text_c(98, &FONT_XS, "HOLD A KEY + SELECT, PRESET, ALGO: ITS GROUP", LAB_LABEL);
+        str_set(t, "WINDOW ", sizeof t);
+        if (pads[r].type == PAD_CHORD && f->plays == RH_HOLD)
+            text_cat(t, "TILL YOU LET GO");
+        else
+            sec_text(pwin_len((uint32_t)r), r, t + cs_len(t));
+        text_c(98, &FONT_XS, t, AIR_C);
     }
     cv_blit(0, 120);
 }

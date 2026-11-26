@@ -184,13 +184,14 @@ key 2 down
 wait 60
 turn PRESET 4
 wait 30
-expect st1 12
-expect st5 12
+expect st1 >3
+expect st5 >3
 expect st9 0
 turn ALGO -32
 wait 30
-expect sl1 276
-expect sl0 276
+expect sl1 <384
+expect sl1 >200
+expect sl0 <384
 wait 400
 shot seed-padedit.png
 key 2 up
@@ -284,12 +285,27 @@ wait 60
 expect midi_ch 2
 key 1 up
 wait 100
+# START before the sequence: a gap; one shot: a progression stops at its END
+key 2 down
+wait 30
+turn PRESET -60
+wait 30
+key 2 up
+wait 30
+expect st1 <0
+key 2 down
+wait 30
+turn PRESET 200
+wait 30
+key 2 up
+wait 30
+expect st1 0
 # at home, a held progression key and PRESET: the window shows, then home again
 key 14 down
 wait 30
 turn PRESET 32
 wait 60
-expect st8 96
+expect st8 >100
 expect screen 3
 shot seed-window.png
 key 14 up
