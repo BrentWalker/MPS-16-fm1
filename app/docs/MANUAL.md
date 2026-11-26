@@ -15,10 +15,11 @@ This is an early test build by BeatSmith.
 4. [Home](#4-home)
 5. [PICK NOTES](#5-pick-notes)
 6. [LIB](#6-lib)
-7. [EDIT and LOCK](#7-edit-and-lock)
-8. [LOOP, UNDO, SAVE and LOAD](#8-loop-undo-save-and-load)
-9. [SOUND, MIDI and SETUP](#9-sound-midi-and-setup)
-10. [All the controls](#10-all-the-controls)
+7. [Hold a key: SELECT, PRESET, ALGO](#7-hold-a-key-select-preset-algo)
+8. [EDIT and LOCK](#8-edit-and-lock)
+9. [LOOP, UNDO, SAVE and LOAD](#9-loop-undo-save-and-load)
+10. [SOUND, MIDI and SETUP](#10-sound-midi-and-setup)
+11. [All the controls](#11-all-the-controls)
 
 ## 1. Install
 
@@ -30,7 +31,7 @@ same code, with sound.
 
 ![COACH asks first](img/seed-choose.png)
 
-The first time SEED starts, it asks whether to show its steps. Turn **SELECT** to choose **NO, NOT NOW**, **THIS FIRST
+The first time SEED starts, it asks whether to show its steps. Turn **K1** to choose **NO, NOT NOW**, **THIS FIRST
 TIME** or **EVERY START**, then press **PLAY**. You can change it later on the SYS page (K4).
 
 ![Step 1: pick your notes](img/seed-step1.png)
@@ -39,7 +40,7 @@ COACH is six short steps. Each one says what to do, and the keys and buttons it 
 the step, it moves on by itself:
 
 1. **PICK YOUR NOTES**: play a few notes you like, on any keys.
-2. **PICK A SCALE**: turn SELECT to a scale that fits, press PLAY.
+2. **PICK A SCALE**: turn K1 to a scale that fits, press PLAY.
 3. **PLAY THE PADS**: the white keys blink. Play a few.
 4. **PLAY THE BASS**: the bright black key is the bass of the chord you just played.
 5. **SHAPE IT**: turn K2 for 7ths and 9ths, K3 for how the pads play.
@@ -83,12 +84,14 @@ the BPM too.
 
 | Control | Does |
 |---|---|
-| PRESET | The key's root |
 | K1 | The scale (major, minor and the modes) |
 | K2 | TYPE: TRIADS, 7THS, 9THS, SUS2, SUS4, ADD9 |
 | K3 | LENGTH: 1/32, 1/16, 1/8, 1/4, 1/2, AS IS, 1 BAR, 2 BARS, 4 BARS, LEGATO. The group played last, or hold a key for that key |
-| K4, SELECT, ALGORITHM | Free for now |
+| K4 | Free for now |
 | OCT- / OCT+ | Octave: of the key you hold, else of the group you played last |
+| Hold a key + SELECT | The group's sound, or MIDI 1-4 |
+| Hold a key + PRESET | The group's window START |
+| Hold a key + ALGO | The group's window LENGTH |
 | HOME, held | SHIFT |
 
 ## The one rule
@@ -105,17 +108,36 @@ same value. LOCKed keys are left out of group changes.
 
 Press **EDIT**. Every key is now a note, like a normal keyboard. Play the notes you like: each one you play is added,
 and playing it again takes it out. The scales that hold all of them are listed below, best first (the first note
-you played as the root). Turn **SELECT** to choose one and press **PLAY**: the pads are rebuilt in that key. **K1**
-clears your notes. EDIT again (or HOME) goes back without changing anything.
+you played as the root). Turn **K1** to choose one and press **PLAY**: the keys are rebuilt in that key. **K2**
+starts again. This is where the key's root is set now. EDIT again (or HOME) goes back without changing anything.
 
 ## 6. LIB
 
 ![LIB](img/seed-lib.png)
 
-Press **SEL**. **K1** picks what's listed: TRIADS, 7THS, 9THS, SUS2, SUS4, ADD9 or PROGRESSIONS. Turn **SELECT** to
+Press **SEL**. **K1** picks what's listed: TRIADS, 7THS, 9THS, SUS2, SUS4, ADD9 or PROGRESSIONS. Turn **K2** to
 choose one, **PLAY** to hear it, and a **white key** puts it on that pad. It follows the key when you change it.
 
-## 7. EDIT and LOCK
+## 7. Hold a key: SELECT, PRESET, ALGO
+
+SELECT, PRESET and ALGO do one thing each, on every screen, and only while you **hold a key**. The change goes to
+that key's whole group.
+
+| Hold a key and turn | Does |
+|---|---|
+| SELECT | The group's output: a sound (WARM, KEYS, ORGAN, STRINGS, PLUCK, BASS, BELL, LEAD, PAD, BRASS), or MIDI 1, 2, 3 or 4. A sound plays on the FM-1 with no MIDI; MIDI is silent on the FM-1 and goes out on that channel |
+| PRESET | START: where the group's window begins, 1/32 of a beat a click (HOME held: a 16th) |
+| ALGO | LENGTH: how long the window runs before it goes round again, the same steps |
+
+The window shows while you turn and closes when you let go: the START and END lines, dark outside. Places read
+BAR.BEAT.32ND. A progression skips into its bars; a chord key on a rhythm or an arp skips into its pattern. A chord
+on HOLD and the note keys have no window (n/a). This is not note LENGTH (home K3), which is how long each note lasts.
+
+![The window](img/seed-window.png)
+
+Parked for now, to be placed again: the key's root (set in PICK NOTES meanwhile), INVERSION and SWING.
+
+## 8. EDIT and LOCK
 
 ![EDIT](img/seed-padedit.png)
 
@@ -132,9 +154,6 @@ The knobs, most used first:
 | K2 | STRUM: the chord's notes one after another, OFF to 200 ms |
 | K3 | SPEED, 50% to 200% |
 | K4 | HUMANIZE: each note a little off in time and velocity, like a player |
-| SELECT | LENGTH, the same as home K3: 1/32 to 4 BARS, AS IS, LEGATO |
-| ALGORITHM | SWING: the off-beats late, STRAIGHT to 75% |
-| PRESET | INVERSION, -3 to +3 (chord keys) |
 
 ![Progression keys](img/seed-progedit.png)
 
@@ -146,7 +165,7 @@ move their octave, FX picks their sound.
 **LFO** is **LOCK**: it locks the key you played last, so it stays exactly as it is when the key, type or bass mode
 changes, and group changes leave it out. LFO again unlocks it. A small corner marks a locked key.
 
-## 8. LOOP, UNDO, SAVE and LOAD
+## 9. LOOP, UNDO, SAVE and LOAD
 
 ![LOOP](img/seed-loop.png)
 
@@ -175,41 +194,29 @@ for SETUP, and **HOME + SYS** for COACH.
 **ARP** outside the loop window is **UNDO**: one step back (a LIB drop, clearing the keys, a LOAD). ARP again goes
 forward.
 
-**SHIFT** is **HOME held**. **SHIFT + PLAY** clears every key that isn't locked. Turn PRESET to bring the kit back,
-or ARP to undo.
+**SHIFT** is **HOME held**. **SHIFT + PLAY** clears every key that isn't locked. ARP undoes it.
 
 **SAVE** keeps the keys, their EDIT settings, the loop and the settings. **Hold SAVE** to LOAD them back.
 
-## 9. SOUND, MIDI and SETUP
+## 10. SOUND, MIDI and SETUP
 
 ![SOUND](img/seed-sound.png)
 
-**FX** opens SOUND. Each of the four groups plays its own FM-1 sound: K1 the chord keys, K2 the progression keys, K3 the note
-keys, K4 the keyboard. Eight sounds: WARM, KEYS, ORGAN, STRINGS, PLUCK, BASS, BELL, LEAD. **SELECT** sets OUT:
+**FX** opens SOUND, the overview of every group's output: K1 the chord keys, K2 the progression keys, K3 the note
+keys, K4 the keyboard (PICK NOTES and LIB). Each is either a sound on the FM-1 (no MIDI), or MIDI 1 to 4 (silent on
+the FM-1). Hold a key and turn SELECT for the same anywhere.
 
-- SOUND AND MIDI: the FM-1 plays and MIDI goes out
-- SOUND ONLY: no MIDI out
-- MIDI ONLY: the FM-1 stays quiet and drives your synths (REC's count-in click still sounds)
+Ten sounds: WARM, KEYS, ORGAN, STRINGS, PLUCK, BASS, BELL, LEAD, PAD, BRASS.
 
-MIDI coming in plays the sound of its channel (1 to 4), and channels above 4 play the keyboard's.
-
-MIDI goes out over **USB** and **Bluetooth** (the FM-1's TRS jack is MIDI in only), on four fixed channels:
-
-| Channel | What |
-|---|---|
-| 1 | Chord keys |
-| 2 | Progression keys |
-| 3 | note keys |
-| 4 | The keyboard: PICK NOTES and LIB previews |
-
-Set your synths to listen on those. SETUP shows the map too. **PLAY** sends all notes off on every channel.
+MIDI goes out over **USB** and **Bluetooth** (the FM-1's TRS jack is MIDI in only). MIDI coming in on channels 1 to
+4 plays that group's sound; above 4, the keyboard's. **SYS** sends all notes off on every channel.
 
 ![SETUP](img/seed-setup.png)
 
 **Hold SYS** for SETUP: K1 Bluetooth MIDI on or off, K2 MIDI clock out (24 a beat, at the BPM), K3 MIDI clock in
 (the BPM follows it while it comes), K4 the steps (OFF, FIRST, ALWAYS). **HOME + SYS** for the steps.
 
-## 10. All the controls
+## 11. All the controls
 
 | Control | Does |
 |---|---|
@@ -222,7 +229,7 @@ Set your synths to listen on those. SETUP shows the map too. **PLAY** sends all 
 | SEL | LIB |
 | ENV | EDIT: the group played last, or the key held |
 | LFO | LOCK |
-| FX | SOUND: each group's sound, and OUT (sound, MIDI, or both) |
+| FX | SOUND: every group's sound or MIDI channel |
 | SYS (GLO) | STOP ALL, always dim lit. Held: SETUP. HOME + SYS: COACH |
 | PLAY | The loop: armed, the intro and recording; playing, stop; stopped, play. SHIFT: clear the keys. In PICK NOTES: use the scale. In LIB: hear it |
 | ARP | UNDO. In LOOP: the last layer off |
