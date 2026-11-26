@@ -250,6 +250,36 @@ wait 60
 expect midi_ch 2
 key 1 up
 wait 100
+# OCT: held pad 2 (chord), held pad 9 (progression), a held B pad, nothing held (the keyboard)
+key 2 down
+wait 60
+tap OCT+
+wait 30
+key 2 up
+wait 30
+expect padoct1 1
+key 14 down
+wait 60
+tap OCT-
+wait 30
+key 14 up
+wait 30
+expect padoct8 -1
+key 1 down
+wait 30
+tap OCT+
+wait 30
+key 1 up
+wait 30
+expect boct 1
+expect octave 0
+tap OCT+
+wait 30
+expect octave 1
+tap OCT-
+wait 30
+tap PLAY
+wait 60
 # one progression at a time: pad 10 stops pad 9
 key 14 down
 wait 200

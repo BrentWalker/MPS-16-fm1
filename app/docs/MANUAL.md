@@ -86,7 +86,7 @@ each chord's bottom note and the bass line. NO ROOT drops the root too, as long 
 | K4 | HUMANIZE, for every pad: a little timing and velocity, like a player |
 | SELECT | BPM |
 | ALGORITHM | LENGTH, for every pad: left shorter, right longer, all the way right LEGATO |
-| OCT- / OCT+ | The keyboard's octave (the B pads and PICK NOTES) |
+| OCT- / OCT+ | The octave of what you hold: hold a chord or a progression and it moves that pad, hold a B pad and it moves the B pads, hold nothing and it moves the keyboard (PICK NOTES) |
 | HOME, held | SHIFT |
 
 A chord pad plays while you hold it. A progression plays once when you tap it, loops while you hold it past the end,
@@ -209,4 +209,4 @@ Set your synths to listen on those. SETUP shows the map too. **PLAY** sends all 
 | SEQ | LATCH |
 | REC | Record into a pad |
 | SAVE | Save. Held: LOAD |
-| OCT- / OCT+ | The keyboard's octave |
+| OCT- / OCT+ | Octave: of the pad you hold, the B pads if you hold one, else the keyboard |

@@ -40,7 +40,8 @@ typedef struct {
     uint8_t clk_out, clk_in;             /* MIDI clock: sent at the BPM; followed when it comes in */
     uint8_t out;                         /* OUT_* */
     uint8_t snd[NGRP];                   /* each group's sound: SOUNDS[] */
-    uint8_t rsv[3];
+    int8_t boct;                         /* the B pads' octave, -2 .. 2 */
+    uint8_t rsv[2];
 } settings_t;
 static settings_t set;
 static uint8_t set_dirty;
@@ -1082,7 +1083,7 @@ static void notes_on(uint32_t k, const uint8_t *notes, uint32_t n, uint32_t vel,
     h->n = 0;
     h->ch = (uint8_t)ch;
     for (i = 0; i < n && i < MAXN; i++) {
-        int32_t m = clamp((int32_t)notes[i] + 12 * set.octave, 0, 127);
+        int32_t m = clamp((int32_t)notes[i] + 12 * (ch == CH_BPADS ? set.boct : set.octave), 0, 127);
         h->note[h->n++] = (uint8_t)m;
         ev_push_g(QE_ON, (uint32_t)m, vel, ch % NGRP);
         midi_note(1, ch, (uint32_t)m, vel);
@@ -1775,16 +1776,58 @@ buttons:
     for (i = 0; i < NB; i++) {
         uint32_t bit = 1u << i;
         int down = (btn & bit) && !(ui.btn & bit), up = !(btn & bit) && (ui.btn & bit);
-        if (i == B_OCTDN || i == B_OCTUP) {   /* the keyboard's octave */
+        if (i == B_OCTDN || i == B_OCTUP) {   /* the octave of what you hold: A pads, B pads; else the keyboard's */
             if (down) {
-                int32_t o = clamp(set.octave + (i == B_OCTUP ? 1 : -1), -2, 2);
-                char t[16] = "KEYS ";
-                if (o != set.octave) {
-                    set.octave = (int8_t)o;
-                    set_dirty = 1;
+                int32_t d = i == B_OCTUP ? 1 : -1, o = 0;
+                uint32_t j, ka = 0, kb = 0;
+                char t[24];
+                if (ui.screen != SCR_PICK) {
+                    for (j = 0; j < NPADS; j++)
+                        if ((ui.keys >> WK[j] & 1u) && pads[j].type != PAD_EMPTY)
+                            ka |= 1u << j;
+                    for (j = 0; j < 7u; j++)
+                        if (ui.keys >> BK[j] & 1u)
+                            kb |= 1u << j;
                 }
-                num_text(o, t + 5, 1);
+                for (j = 0; j < NPADS; j++)
+                    if (ka >> j & 1u) {  /* a held pad: its octave, heard at once */
+                        pfx[j].oct = (int8_t)clamp(pfx[j].oct + d, -2, 2);
+                        o = pfx[j].oct;
+                        if (pads[j].type == PAD_PROG)
+                            pl[j].oct = pfx[j].oct;
+                        else
+                            pad_start(j, 100u);
+                        set_dirty = 1;
+                    }
+                if (kb) {                /* the B pads' octave; the held ones sound again there */
+                    set.boct = (int8_t)clamp(set.boct + d, -2, 2);
+                    o = set.boct;
+                    set_dirty = 1;
+                    for (j = 0; j < 7u; j++)
+                        if (kb >> j & 1u) {
+                            uint8_t m = (uint8_t)clamp(deg_pitch((int32_t)j), 0, 127);
+                            notes_off(BK[j]);
+                            notes_on(BK[j], &m, 1, 100u, CH_BPADS);
+                        }
+                }
+                if (!ka && !kb) {
+                    o = clamp(set.octave + d, -2, 2);
+                    if (o != set.octave) {
+                        set.octave = (int8_t)o;
+                        set_dirty = 1;
+                    }
+                }
+                str_set(t, ka && kb ? "PADS " : ka ? (ka & (ka - 1u) ? "PADS " : "PAD ") : kb ? "B PADS " : "KEYS ",
+                        sizeof t);
+                if (ka && !(ka & (ka - 1u)) && !kb) {
+                    for (j = 0; !(ka >> j & 1u); j++)
+                        ;
+                    num_text((int32_t)j + 1, t + 4, 0);
+                    text_cat(t, " ");
+                }
+                num_text(o, t + cs_len(t), 1);
                 app_say("OCTAVE", t);
+                ui.redraw = 1;
             }
             continue;
         }
@@ -2871,7 +2914,7 @@ void app_init(void)
     {
         int got = plat_store_load(OBJ_SETTINGS, &set, sizeof set);
         if (got != (int)sizeof set || set.magic != SET_MAGIC || set.root > 11u || set.scale >= NSCALES ||
-            set.octave < -2 || set.octave > 2 || set.type >= NCTYPES || set.plays >= PL_N || set.bassm >= BM_N ||
+            set.octave < -2 || set.octave > 2 || set.boct < -2 || set.boct > 2 || set.type >= NCTYPES || set.plays >= PL_N || set.bassm >= BM_N ||
             set.human > 50u || set.len < -5 || set.len > 5 || set.bpm < 40u || set.bpm > 240u || set.coach >= CO_N ||
             set.out >= OUT_N || set.snd[0] >= NSOUNDS || set.snd[1] >= NSOUNDS || set.snd[2] >= NSOUNDS ||
             set.snd[3] >= NSOUNDS)
@@ -3018,6 +3061,10 @@ int app_expect(const char *what, int *got)
         *got = pfx[atoi(what + 5) % NPADS].swing;
     else if (!strncmp(what, "arp", 3))
         *got = pfx[atoi(what + 3) % NPADS].arp;
+    else if (!strcmp(what, "boct"))
+        *got = set.boct;
+    else if (!strncmp(what, "padoct", 6))
+        *got = pfx[atoi(what + 6) % NPADS].oct;
     else if (!strcmp(what, "pepage"))
         *got = ui.pe_page;
     else if (!strcmp(what, "out"))
