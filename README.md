@@ -2,7 +2,7 @@
 
 Free firmware for the M-VAVE FM-1 by BeatSmith, in the Earth Science family. SEED is MPS-16's chord builder: play a
 few notes you like, pick a scale that fits, and the 16 white keys (A pads) hold that key's chords and progressions.
-The first 7 black keys (B pads) play the notes of the key, lit by the chord you played (the bass bright). The last 4
+The first 7 black keys (NOTE KEYS) play the notes of the key, lit by the chord you played (the bass bright). The last 4
 (C pads) are BASS, NO BASS, NO ROOT and TAP. COACH, a step screen, walks you through it with the keys and buttons
 it means lit. Everything goes out over USB MIDI.
 

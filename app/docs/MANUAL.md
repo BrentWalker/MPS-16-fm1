@@ -11,11 +11,11 @@ This is an early test build by BeatSmith.
 
 1. [Install](#1-install)
 2. [The first start: COACH](#2-the-first-start-coach)
-3. [The keys: A, B and C pads](#3-the-keys-a-b-and-c-pads)
+3. [The keys](#3-the-keys)
 4. [Home](#4-home)
 5. [PICK NOTES](#5-pick-notes)
 6. [LIB](#6-lib)
-7. [PAD EDIT and LOCK](#7-pad-edit-and-lock)
+7. [EDIT and LOCK](#7-edit-and-lock)
 8. [REC, UNDO, SAVE and LOAD](#8-rec-undo-save-and-load)
 9. [SOUND, MIDI and SETUP](#9-sound-midi-and-setup)
 10. [All the controls](#10-all-the-controls)
@@ -47,16 +47,17 @@ the step, it moves on by itself:
 
 **HOME** skips the steps. **Hold SYS** to start them again any time.
 
-![Step 4: the B pads show the chord](img/seed-step4.png)
+![Step 4: the note keys show the chord](img/seed-step4.png)
 
-## 3. The keys: A, B and C pads
+## 3. The keys
 
-- **A pads**: the 16 white keys. Pads 1 to 8 are your key's chords (1 to 7, then the first one an octave up). Pads 9
-  to 16 are progressions, four bars each. One progression plays at a time: start another and the first stops.
-- **B pads**: the first 7 black keys. The notes of your key, from the root up.
+- **CHORD KEYS**: white keys 1 to 8, your key's chords (1 to 7, then the first one an octave up).
+- **PROGRESSION KEYS**: white keys 9 to 16, progressions of four bars each. A tap plays one once, holding it loops it.
+  One progression plays at a time: start another and the first stops.
+- **NOTE KEYS**: the first 7 black keys. The notes of your key, from the root up, sounding while you hold them.
 - **C pads**: the last 4 black keys. **BASS**, **NO BASS**, **NO ROOT** and **TAP**.
 
-The B pads' lights show the chord you played last, so you always know what to play along:
+The note keys' lights show the chord you played last, so you always know what to play along:
 
 | Light | Means |
 |---|---|
@@ -69,9 +70,12 @@ The screen shows the same thing in the Earth Science colours, as MPS-16 ver WEB 
 blue the chord, an outline for a note that was taken out.
 
 **BASS, NO BASS, NO ROOT**: BASS plays the chords as they are, and the progressions with a bass line. NO BASS drops
-each chord's bottom note and the bass line. NO ROOT drops the root too, as long as two notes stay.
+each chord's bottom note and the bass line. NO ROOT drops the root too, as long as two notes stay. Like every change,
+it goes to the group you played last (all the chord keys, or all the progression keys); **hold a key** while you tap
+it and it goes to that key alone.
 
-**TAP**: tap it on the beat a few times and the BPM follows. Its light flashes on the beat.
+**TAP**: tap it on the beat a few times and the BPM follows. Its light flashes on the beat. MIDI clock coming in sets
+the BPM too.
 
 ## 4. Home
 
@@ -82,16 +86,15 @@ each chord's bottom note and the bass line. NO ROOT drops the root too, as long 
 | PRESET | The key's root |
 | K1 | The scale (major, minor and the modes) |
 | K2 | TYPE: TRIADS, 7THS, 9THS, SUS2, SUS4, ADD9 |
-| K3 | PLAYS, for every pad: CHORD, STRUM, ARP, STABS |
-| K4 | HUMANIZE, for every pad: a little timing and velocity, like a player |
-| SELECT | BPM |
-| ALGORITHM | LENGTH, for every pad: left shorter, right longer, all the way right LEGATO |
-| OCT- / OCT+ | The octave of what you hold: hold a chord or a progression and it moves that pad, hold a B pad and it moves the B pads, hold nothing and it moves the keyboard (PICK NOTES) |
+| K3, K4, SELECT, ALGORITHM | Free for now |
+| OCT- / OCT+ | Octave: of the key you hold, else of the group you played last |
 | HOME, held | SHIFT |
 
-A chord pad plays while you hold it. A progression plays once when you tap it, loops while you hold it past the end,
-and stops when you let go after it looped. **SEQ** is **LATCH**: with it on, pads keep playing after you let go, and
-tapping a playing pad stops it.
+## The one rule
+
+Every change goes to the **group you played last**: all the chord keys, all the progression keys, or the note keys.
+**Hold a key** while you make the change and it goes to that key alone. A group change sets every key in it to the
+same value. LOCKed keys are left out of group changes.
 
 ![NO BASS](img/seed-home-nobass.png)
 
@@ -111,47 +114,43 @@ clears your notes. EDIT again (or HOME) goes back without changing anything.
 Press **SEL**. **K1** picks what's listed: TRIADS, 7THS, 9THS, SUS2, SUS4, ADD9 or PROGRESSIONS. Turn **SELECT** to
 choose one, **PLAY** to hear it, and a **white key** puts it on that pad. It follows the key when you change it.
 
-## 7. PAD EDIT and LOCK
+## 7. EDIT and LOCK
 
-![PAD EDIT](img/seed-padedit.png)
+![EDIT](img/seed-padedit.png)
 
-**ENV** opens PAD EDIT for the pad you played last, as the web's pad edit window. The top shows the pad's notes and a
-playhead crosses them while it plays: a progression's four bars, or one bar of how a chord plays (CHORD, STRUM, ARP or
-STABS). Brown is the lowest note, white the notes sounding now. Play any pad and the screen follows it.
+**ENV** opens EDIT for the group you played last; ENV again goes home. The title says what the knobs change: CHORD
+KEYS, PROGRESSION KEYS, NOTE KEYS, or the one key you hold. The top shows the notes of the key played last, and a
+playhead crosses them while it plays: a progression's four bars, or one bar of how a chord plays. Brown is the lowest
+note, white the notes sounding now.
 
-**PLAY** page:
+The knobs, most used first:
 
-| Control | Does |
+| Control | Chord and progression keys |
 |---|---|
-| PRESET | PLAYS: CHORD, STRUM, ARP, STABS |
-| K1 | SPEED, 50% to 200% |
-| K2 | LENGTH |
-| K3 | INVERSION, -3 to +3 |
-| K4 | The pad's octave, -2 to +2 |
+| K1 | RHYTHM: HOLD, STABS, OFFBEAT, 3-3-2, SYNC, ARP UP, ARP DOWN, ARP UP-DN, ARP RANDOM |
+| K2 | STRUM: the chord's notes one after another, OFF to 200 ms |
+| K3 | SPEED, 50% to 200% |
+| K4 | HUMANIZE: each note a little off in time and velocity, like a player |
+| SELECT | LENGTH: shorter, AS IS, longer, all the way LEGATO |
+| ALGORITHM | SWING: the off-beats late, STRAIGHT to 75% |
+| PRESET | INVERSION, -3 to +3 (chord keys) |
 
-![MIDI FX](img/seed-midifx.png)
+![Progression keys](img/seed-progedit.png)
 
-**ENV** again: the **MIDI FX** page, the web's MIDI FX strip:
+The **note keys** sound while you hold them, so only HUMANIZE (K4) applies to them; the rest shows n/a. OCT- and OCT+
+move their octave, FX picks their sound.
 
-| Control | Does |
-|---|---|
-| K1 | STRUM: the chord's notes one after another, OFF to 200 ms (STRUM plays: 35 ms when OFF) |
-| K2 | HUMANIZE: each note a little off in time and velocity, like a player |
-| K3 | SWING: the off-beats late, STRAIGHT to 75% |
-| K4 | ARP: UP, DOWN, UP-DOWN, RANDOM (for ARP plays) |
-| SELECT | VELOCITY: as you play it, or a fixed one |
+![Note keys](img/seed-noteedit.png)
 
-**ENV** a third time goes home. **Hold HOME** while you turn a knob and it sets every pad at once (the web's ALL PADS).
-
-**LFO** is **LOCK**: it locks the pad you played last, so it stays exactly as it is when the key, type or bass mode
-changes. LFO again unlocks it. A small corner marks a locked pad.
+**LFO** is **LOCK**: it locks the key you played last, so it stays exactly as it is when the key, type or bass mode
+changes, and group changes leave it out. LFO again unlocks it. A small corner marks a locked key.
 
 ## 8. REC, UNDO, SAVE and LOAD
 
 ![REC](img/seed-rec.png)
 
-**REC**: the A pads blink. Tap the pad to record into, then a bar of clicks counts you in. Play the B pads, the chord
-pads or MIDI in, and press REC again to stop. The take is rounded to whole bars and goes on that pad. REC before the
+**REC**: the white keys blink. Tap the key to record into, then a bar of clicks counts you in. Play the note keys, the chord
+keys or MIDI in, and press REC again to stop. The take is rounded to whole bars and goes on that pad. REC before the
 count ends cancels.
 
 **ARP** is **UNDO**: one step back (a LIB drop, a take, clearing the pads, a LOAD). ARP again goes forward.
@@ -159,14 +158,14 @@ count ends cancels.
 **SHIFT + PLAY** (hold HOME, press PLAY) clears every pad that isn't locked. Turn PRESET to bring the kit back, or
 ARP to undo.
 
-**SAVE** keeps the pads, their PAD EDIT and the settings. **Hold SAVE** to LOAD them back.
+**SAVE** keeps the pads, their EDIT settings and the settings. **Hold SAVE** to LOAD them back.
 
 ## 9. SOUND, MIDI and SETUP
 
 ![SOUND](img/seed-sound.png)
 
-**FX** opens SOUND. Each of the four groups plays its own FM-1 sound: K1 pads 1 to 8, K2 pads 9 to 16, K3 the B pads,
-K4 the keyboard. Eight sounds: WARM, KEYS, ORGAN, STRINGS, PLUCK, BASS, BELL, LEAD. **SELECT** sets OUT:
+**FX** opens SOUND. Each of the four groups plays its own FM-1 sound: K1 the chord keys, K2 the progression keys, K3 the note
+keys, K4 the keyboard. Eight sounds: WARM, KEYS, ORGAN, STRINGS, PLUCK, BASS, BELL, LEAD. **SELECT** sets OUT:
 
 - SOUND AND MIDI: the FM-1 plays and MIDI goes out
 - SOUND ONLY: no MIDI out
@@ -178,9 +177,9 @@ MIDI goes out over **USB** and **Bluetooth** (the FM-1's TRS jack is MIDI in onl
 
 | Channel | What |
 |---|---|
-| 1 | Pads 1 to 8 (chords) |
-| 2 | Pads 9 to 16 (progressions) |
-| 3 | B pads |
+| 1 | Chord keys |
+| 2 | Progression keys |
+| 3 | note keys |
 | 4 | The keyboard: PICK NOTES and LIB previews |
 
 Set your synths to listen on those. SETUP shows the map too. **PLAY** sends all notes off on every channel.
@@ -194,19 +193,20 @@ Set your synths to listen on those. SETUP shows the map too. **PLAY** sends all 
 
 | Control | Does |
 |---|---|
-| A pads (white keys) | Chords (1 to 8) and progressions (9 to 16). In LIB, take the pick. In REC, pick the pad |
-| B pads (black keys 1 to 7) | The notes of the key, lit by the chord you played |
-| C pads (last 4 black keys) | BASS, NO BASS, NO ROOT, TAP |
+| Chord keys (white 1 to 8) | Chords. In LIB, take the pick. In REC, pick the key |
+| Progression keys (white 9 to 16) | Progressions, one at a time. A tap plays it once, held it loops |
+| Note keys (black 1 to 7) | The notes of the key, lit by the chord you played |
+| C pads (last 4 black keys) | BASS, NO BASS, NO ROOT (the group, or the key held), TAP |
 | HOME | Home. Held: SHIFT. In COACH: skip |
 | EDIT | PICK NOTES |
 | SEL | LIB |
-| ENV | PAD EDIT, again: MIDI FX, again: home |
+| ENV | EDIT: the group played last, or the key held |
 | LFO | LOCK |
 | FX | SOUND: each group's sound, and OUT (sound, MIDI, or both) |
 | SYS (GLO) | Tap: SETUP. Hold: COACH |
-| PLAY | STOP ALL, always dim lit: every pad stops, all notes off on every channel. SHIFT: clear the pads. In PICK NOTES: use the scale. In LIB: hear it |
+| PLAY | STOP ALL, always dim lit: everything stops, all notes off on every channel. SHIFT: clear the keys. In PICK NOTES: use the scale. In LIB: hear it |
 | ARP | UNDO |
-| SEQ | LATCH |
-| REC | Record into a pad |
+| SEQ | Free for now |
+| REC | Record into a key |
 | SAVE | Save. Held: LOAD |
-| OCT- / OCT+ | Octave: of the pad you hold, the B pads if you hold one, else the keyboard |
+| OCT- / OCT+ | Octave: of the key you hold, else the group played last. In PICK NOTES: the keyboard |

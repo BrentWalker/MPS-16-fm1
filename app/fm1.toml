@@ -17,7 +17,7 @@ licence = "LicenseRef-MPS16-TBD"   # the app code's licence: to be chosen (fm1-b
 credits = "Built on fm1-base by Charles Vestal and felucca-bsp by Leo Kuroshita."
 # firmware.json, for firmware hubs (docs/FIRMWARE-JSON.md): the build writes it from these and the keys above
 author = "Brent Walker (BeatSmith)"
-description = "SEED, the chord builder of MPS-16 in the Earth Science family. Play a few notes you like, pick a scale that fits, and the 16 white keys hold its chords and progressions; the black keys play the notes of the key and light up the bass of each chord; BASS, NO BASS, NO ROOT and TAP on the last four; pad edit, lock, latch, undo, record, save, and MIDI out over USB and Bluetooth with clock. COACH walks you through it with the keys and buttons it means lit. Early development."
+description = "SEED, the chord builder of MPS-16 in the Earth Science family. Play a few notes you like, pick a scale that fits, and the 16 white keys hold its chords and progressions; the black keys play the notes of the key and light up the bass of each chord; BASS, NO BASS, NO ROOT and TAP on the last four; edit (the whole group, or hold a key for one), lock, undo, record, save, and MIDI out over USB and Bluetooth with clock. COACH walks you through it with the keys and buttons it means lit. Early development."
 tags = ["chords", "midi"]
 install = "https://brentwalker.github.io/MPS-16-fm1/install/"
 site = "https://brentwalker.github.io/MPS-16-fm1/"
