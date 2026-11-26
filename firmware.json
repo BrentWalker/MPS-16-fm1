@@ -5,15 +5,16 @@
   "author": "Brent Walker (BeatSmith)",
   "license": "LicenseRef-MPS16-TBD",
   "tagline": "SEED, an MPS-16 function for the M-VAVE FM-1: chords and progressions from any notes you play",
-  "description": "SEED, the chord builder of MPS-16 in the Earth Science family. Play a few notes you like, pick a scale that fits, and the 16 white keys hold its chords and progressions; the black keys play the notes of the key and light up the bass of each chord; BASS, NO BASS, NO ROOT and LATCH on the last four. COACH walks you through it with the keys and buttons it means lit. Early development.",
+  "description": "SEED, the chord builder of MPS-16 in the Earth Science family. Play a few notes you like, pick a scale that fits, and the 16 white keys hold its chords and progressions; the black keys play the notes of the key and light up the bass of each chord; BASS, NO BASS, NO ROOT and TAP on the last four; pad edit, lock, latch, undo, record, save, and MIDI out over USB and Bluetooth with clock. COACH walks you through it with the keys and buttons it means lit. Early development.",
   "tags": ["chords", "midi"],
   "install": "https://brentwalker.github.io/MPS-16-fm1/install/",
   "site": "https://brentwalker.github.io/MPS-16-fm1/",
   "source": "https://github.com/BrentWalker/MPS-16-fm1",
+  "screenshot": "app/docs/img/seed-home.png",
   "hardware": {
     "models": ["FM-1"],
     "flash": ["856014", "B36014"],
-    "features": ["usb-audio-in", "usb-audio-out", "velocity", "pressure", "screen-reader"]
+    "features": ["bluetooth-midi", "usb-audio-in", "usb-audio-out", "velocity", "pressure", "screen-reader"]
   },
   "credits": "Built on fm1-base by Charles Vestal and felucca-bsp by Leo Kuroshita."
 }

@@ -10,10 +10,12 @@
 #define APP_SPLASH_RGB RGB(124, 93, 72)    /* Earth */
 #define APP_BLOCK 256u                     /* frames per audio block: 5.8 ms at 44.1 kHz */
 #define APP_TOUCH                          /* velocity from the keys (lib/touch.h) */
+#define APP_BLE_AT_BOOT (seed_ble_on())     /* Bluetooth MIDI at power-on: as SETUP left it */
+int seed_ble_on(void);
 
 /* the store: the app's objects and their flash offsets (the panel calibration is the platform's) */
-enum { OBJ_SETTINGS, OBJ_PANEL, OBJ_NOBJ };
-#define APP_STORE_MAP {0xFC000u, 0xDC000u}
+enum { OBJ_SETTINGS, OBJ_PANEL, OBJ_BLE, OBJ_SESS, OBJ_NOTES, OBJ_NOBJ };
+#define APP_STORE_MAP {0xFC000u, 0xDC000u, 0xDE000u, 0xD8000u, 0xDA000u}
 
 /* the contract: the platform calls these */
 void app_init(void);

@@ -103,10 +103,8 @@ wait 60
 expect type 1
 expect bassm 0
 expect padn0 4
-# a progression: tap plays it, LATCH keeps it going
-key 25 down
-wait 50
-key 25 up
+# a progression: tap plays it, LATCH (SEQ) keeps it going
+tap SEQ
 wait 50
 key 23 down
 wait 60
@@ -122,9 +120,8 @@ key 23 up
 wait 100
 expect playing13 0
 # LATCH off
-key 25 down
+tap SEQ
 wait 30
-key 25 up
 expect latch 0
 # PICK NOTES from home, PLAY: a minor key
 tap EDIT
@@ -144,8 +141,8 @@ tap PLAY
 wait 60
 expect root 9
 expect scale 0
-# LIB: a progression onto pad 1, kept
-tap LFO
+# LIB: a chord onto pad 1
+tap SEL
 wait 30
 turn SELECT 8
 wait 30
@@ -153,13 +150,113 @@ shot seed-lib.png
 key 0 down
 wait 60
 key 0 up
-expect lock0 1
+expect src0 1
 tap HOME
 wait 30
-# SYS: the MIDI page
+
+# TAP tempo: the 4th C pad, 4 taps 500 ms apart: 120 BPM
+key 25 down
+wait 20
+key 25 up
+wait 480
+key 25 down
+wait 20
+key 25 up
+wait 480
+key 25 down
+wait 20
+key 25 up
+wait 480
+key 25 down
+wait 20
+key 25 up
+wait 100
+expect bpm >117
+expect bpm <123
+# PAD EDIT (ENV): pad 2's inversion
+key 2 down
+wait 60
+key 2 up
+wait 100
+tap ENV
+wait 30
+expect screen 3
+turn K4 1
+wait 30
+expect inv1 1
+shot seed-padedit.png
+tap ENV
+wait 30
+# LOCK (LFO) pad 2, then the key changes: pad 2 stays
+tap LFO
+wait 30
+expect lock1 1
+# UNDO (ARP) after SHIFT + PLAY clears the pads
+press HOME
+wait 30
+tap PLAY
+wait 30
+release HOME
+wait 30
+expect padtype5 0
+expect padtype1 1
+tap ARP
+wait 30
+expect padtype5 1
+# MIDI (FX): progressions on channel 2 by default, pad 3 on its own channel 5
+tap FX
+wait 30
+expect secch1 1
+key 4 down
+wait 30
+key 4 up
+turn SELECT 5
+wait 30
+expect ovr2 4
+shot seed-midi.png
+key 4 down
+wait 60
+expect midi_ch 4
+key 4 up
+wait 100
+tap FX
+wait 30
+# REC into pad 16: count in, a B pad, REC stops
+tap REC
+wait 30
+key 26 down
+wait 30
+key 26 up
+expect rec 2
+wait 2800
+expect rec 3
+key 1 down
+wait 300
+key 1 up
+wait 600
+tap REC
+wait 60
+expect rec 0
+expect src15 3
+expect padn15 1
+shot seed-rec.png
+# SETUP (SYS)
 tap GLO
 wait 30
-shot seed-sys.png
+expect screen 5
+turn K1 -1
+wait 30
+expect ble 0
+shot seed-setup.png
 tap GLO
 wait 30
-expect screen 0
+# SAVE, change, LOAD
+tap SAVE
+wait 60
+turn K2 1
+wait 30
+press SAVE
+wait 900
+release SAVE
+wait 60
+expect src15 3

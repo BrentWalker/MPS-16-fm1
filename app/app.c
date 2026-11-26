@@ -1,59 +1,71 @@
 /* SEED: MPS-16's chord builder, as firmware for the M-VAVE FM-1. Built on fm1-base.
  * Copyright (C) 2026 BeatSmith Media (BeatSmith). Licence of this file: to be chosen (see README).
  *
- * The 16 white keys (A pads) are your key's chords: 1-8 the chords, 9-16 progressions. The first 7 black keys
- * (B pads) are the notes of the key, and their lights show the chord you played: bright the bass, mid the rest of
- * the chord, dim the key. The last 4 black keys (C pads) are BASS, NO BASS, NO ROOT and LATCH. PICK NOTES (EDIT)
- * turns any keys you play into a key; COACH walks you through it, the buttons and keys it means lit.
+ * As MPS-16 ver WEB's SEED, one job a button. The 16 white keys (A pads): 1-8 your key's chords, 9-16 progressions.
+ * The first 7 black keys (B pads): the notes of the key, lit by the chord you played (the bass bright). The last 4
+ * (C pads): BASS, NO BASS, NO ROOT, TAP. HOME (held: SHIFT), EDIT pick notes, SEL the library, ENV pad edit, LFO
+ * LOCK, FX MIDI, SYS setup (held: COACH), PLAY stop (SHIFT: clear the pads), ARP UNDO, SEQ LATCH, REC, SAVE (held:
+ * LOAD), OCT- / OCT+ the keyboard's octave. MIDI out over USB and Bluetooth, five sections on their own channels,
+ * any pad on its own, MIDI clock out and in.
  *
  * Part of the unity build (device/unity.c, host/plat_host.c), after the platform: gfx.c and announce.c are in
  * scope. */
 #include "fastmath.h"
 
 /* ================================================================ settings === */
-#define SET_MAGIC 0x31444553u            /* "SED1" */
+#define SET_MAGIC 0x32444553u            /* "SED2" */
 enum { BM_BASS, BM_NOBASS, BM_NOROOT, BM_N };
-enum { PL_CHORD, PL_STABS, PL_ARP, PL_N };
+enum { PL_CHORD, PL_STRUM, PL_ARP, PL_STABS, PL_N };
 enum { CO_OFF, CO_FIRST, CO_ALWAYS, CO_N };
+/* the MIDI sections, as the web's: pads 1-8, pads 9-16, the B pads, the keys in PICK NOTES, LIB's previews */
+enum { MS_CHORDS, MS_PROGS, MS_BPADS, MS_PICK, MS_LIB, MS_N };
+#define CH_OFF 16u                       /* a channel: 0 .. 15, or off (no MIDI out) */
+#define CH_NONE 0xFFu                    /* a pad's own channel: none, its section's */
+#define NOVR 23u                         /* own channels: the 16 A pads, the 7 B pads */
 typedef struct {
     uint32_t magic;
     uint8_t root;                        /* 0 = C .. 11 = B */
     uint8_t scale;                       /* SCALES[] */
-    int8_t octave;                       /* -2 .. +2 */
-    uint8_t type;                        /* the chords: TRIADS, 7THS, 9THS, SUS2, SUS4, ADD9 */
-    uint8_t plays;                       /* how the pads play: PL_* */
+    int8_t octave;                       /* the keyboard's (B pads, PICK NOTES): -2 .. +2 */
+    uint8_t type;                        /* the kit's chords: TRIADS, 7THS, 9THS, SUS2, SUS4, ADD9 */
+    uint8_t plays, human;                /* the last "all pads" (home K3, K4): new pads start so */
+    int8_t len;
     uint8_t bassm;                       /* BASS, NO BASS, NO ROOT: BM_* */
-    uint8_t human;                       /* humanize, % (0 .. 50): time and velocity */
-    uint8_t strum;                       /* strum, 2 ms steps (0 .. 50) */
-    int8_t len;                          /* the notes' length, -5 .. 5 (0: as written) */
     uint8_t bpm;                         /* 40 .. 240 */
-    uint8_t arprate;                     /* ARP_RATE[] */
     uint8_t latch;                       /* LATCH: pads keep playing after you let go */
-    uint8_t ch[3];                       /* MIDI out channels, 0 .. 15: the A pads, the B pads, (the C pads: none) */
-    uint8_t coach;                       /* COACH: CO_OFF, CO_FIRST (the first start), CO_ALWAYS (every start) */
-    uint8_t coach_seen;                  /* the steps have been through once */
-    uint8_t coach_set;                   /* the choice has been made */
-    uint8_t rsv[2];
+    uint8_t coach, coach_seen, coach_set;   /* COACH: CO_*, been through once, the choice made */
+    uint8_t ble;                         /* Bluetooth MIDI on */
+    uint8_t clk_out, clk_in;             /* MIDI clock: sent at the BPM; followed when it comes in */
+    uint8_t ch[MS_N];                    /* each section's channel, 0 .. 15 or CH_OFF */
+    uint8_t ovr[NOVR];                   /* a pad's own channel, or CH_NONE */
+    uint8_t rsv[3];
 } settings_t;
 static settings_t set;
 static uint8_t set_dirty;
 
 static void settings_defaults(void)
 {
+    uint32_t i;
     __builtin_memset(&set, 0, sizeof set);
     set.magic = SET_MAGIC;
     set.root = 0;                        /* C major */
     set.scale = 1;
     set.type = 1;                        /* 7ths */
     set.plays = PL_CHORD;
-    set.bassm = BM_BASS;
     set.human = 10;
+    set.bassm = BM_BASS;
     set.bpm = 90;
-    set.arprate = 1;                     /* 1/8 */
-    set.ch[0] = 0;
-    set.ch[1] = 1;
-    set.ch[2] = 2;
     set.coach = CO_FIRST;
+    set.ble = 1;
+    set.clk_out = 1;
+    set.clk_in = 1;
+    set.ch[MS_CHORDS] = 0;               /* chords on 1, progressions on 2: two synths if you like */
+    set.ch[MS_PROGS] = 1;
+    set.ch[MS_BPADS] = 2;
+    set.ch[MS_PICK] = 3;
+    set.ch[MS_LIB] = 3;
+    for (i = 0; i < NOVR; i++)
+        set.ovr[i] = CH_NONE;
 }
 
 /* ================================================================== theory === */
@@ -89,7 +101,7 @@ static const quality_t QUAL[] = {
 static const char *const CTYPE_NAME[NCTYPES] = {"TRIADS", "7THS", "9THS", "SUS2", "SUS4", "ADD9"};
 static const uint8_t CTYPE[NCTYPES][5] = {{0, 2, 4, 0xFF, 0xFF}, {0, 2, 4, 6, 0xFF}, {0, 2, 4, 6, 8},
                                           {0, 1, 4, 0xFF, 0xFF}, {0, 3, 4, 0xFF, 0xFF}, {0, 2, 4, 8, 0xFF}};
-static const char *const PLAYS_NAME[PL_N] = {"CHORD", "STABS", "ARP"};
+static const char *const PLAYS_NAME[PL_N] = {"CHORD", "STRUM", "ARP", "STABS"};
 static const char *const BM_NAME[BM_N] = {"BASS", "NO BASS", "NO ROOT"};
 static const char *const CO_NAME[CO_N] = {"OFF", "FIRST TIME", "EVERY START"};
 /* ten four-bar progressions, as scale degrees: pads 9-16 are the first eight */
@@ -209,10 +221,11 @@ static void roman_of(uint32_t d, char *o, uint8_t *dim)
     }
 }
 
+
 /* ===================================================================== pads === */
 #define NPADS 16u
 #define MAXN 6u
-#define MAXPH 96u                        /* notes in a progression pad */
+#define MAXPH 96u                        /* notes in a progression or a recorded pad */
 #define PREVIEW NPADS                    /* the extra slot LIB plays its pick from */
 enum { PAD_EMPTY, PAD_CHORD, PAD_PROG };
 typedef struct {
@@ -220,22 +233,42 @@ typedef struct {
     uint8_t p, v;
 } pnote_t;
 typedef struct {
-    uint8_t type, n, lock, deg;          /* lock: a LIB pick dropped here, kept when the key changes */
-    uint8_t note[MAXN];                  /* a chord's notes, low to high (as they sound) */
-    uint8_t root_pc, bass_p, dim, pn;    /* bass_p: the chord's written bass (its lowest note before NO BASS) */
-    uint8_t bm;                          /* the bass mode it was built in */
-    uint8_t bars;                        /* a progression's bars */
-    uint8_t bar_deg[4];                  /* and the degree of each */
+    uint8_t type, n, deg, root_pc;
+    uint8_t note[MAXN];                  /* a chord's notes, low to high */
+    uint8_t bass_p, dim, pn, bm;         /* bass_p: the written bass (before NO BASS); bm: the bass mode built in */
+    uint8_t bars, bar_deg[4];            /* a progression's bars and their degrees */
     uint16_t len;                        /* a progression's length, 96ths */
-    char qual[10];                       /* "m7b5" */
-    char nm[MAXN][4];                    /* each note spelled in the key */
-    char roman[6];                       /* "ii" */
-    char title[16];                      /* a progression: "I V vi IV" */
+    char qual[10];
+    char nm[MAXN][4];
+    char roman[6];
+    char title[16];
 } pad_t;
+/* where a pad came from: rebuilt from this when the key, type or bass mode changes (LOCK: never) */
+enum { SRC_KIT, SRC_LIBC, SRC_LIBP, SRC_REC, SRC_EMPTY };
+typedef struct {
+    uint8_t src, a, t, lock;             /* a: the degree (a chord) or the progression; t: the chord type */
+} desc_t;
+/* PAD EDIT, each pad's own: how it plays, SPEED, HUMANIZE, LENGTH, INVERSION, VELOCITY, its octave */
+typedef struct {
+    uint8_t plays, human, speed, vel;    /* speed: SPEED_PCT[]; vel 0: as you play it, else that velocity */
+    int8_t len, inv, oct, rsv;
+} pfx_t;
+static const uint16_t SPEED_PCT[7] = {50, 67, 75, 100, 133, 150, 200};
 static pad_t pads[NPADS + 1];
 static pnote_t ph[NPADS + 1][MAXPH];
+static desc_t desc[NPADS];
+static pfx_t pfx[NPADS + 1];
 
-static void name_chord(pad_t *p, uint32_t mask)   /* the quality from the intervals above the root */
+static void pfx_default(pfx_t *f)
+{
+    __builtin_memset(f, 0, sizeof *f);
+    f->plays = set.plays;
+    f->human = set.human;
+    f->len = set.len;
+    f->speed = 3;
+}
+
+static void name_chord(pad_t *p, uint32_t mask)
 {
     uint32_t i;
     for (i = 0; i < NQUAL; i++)
@@ -245,19 +278,17 @@ static void name_chord(pad_t *p, uint32_t mask)   /* the quality from the interv
         }
     str_set(p->qual, (mask & 1u << 3) ? ((mask & 1u << 6) ? "dim+" : "m+") : "+", sizeof p->qual);
 }
-
-/* degree d's chord of type t, low to high, as MIDI notes into v: how many */
-static uint32_t chord_of(uint32_t d, uint32_t t, int32_t *v)
+static uint32_t chord_of(uint32_t d, uint32_t t, int32_t *v)   /* degree d's chord of type t, low to high */
 {
     uint32_t k, n = 0;
     for (k = 0; k < 5u && CTYPE[t][k] != 0xFF; k++)
         v[n++] = deg_pitch((int32_t)(d + CTYPE[t][k]));
-    for (k = 1; k < n; k++)              /* low to high */
+    for (k = 1; k < n; k++)
         if (v[k] <= v[k - 1])
             v[k] += 12 * ((v[k - 1] - v[k]) / 12 + 1);
     return n;
 }
-/* the bass mode on a chord's notes: NO BASS drops the bottom note, NO ROOT the root too (two notes stay at least) */
+/* NO BASS drops the bottom note, NO ROOT the root too (two notes stay at least) */
 static uint32_t chord_bm(int32_t *v, uint32_t n, uint32_t root_pc, uint32_t bm)
 {
     uint32_t i, k = 0;
@@ -279,8 +310,6 @@ static uint32_t chord_bm(int32_t *v, uint32_t n, uint32_t root_pc, uint32_t bm)
     }
     return k;
 }
-
-/* the inversion of v closest to the previous chord's middle: chords that move as little as they can */
 static void nearest(int32_t *v, uint32_t n, float prev)
 {
     int32_t best[6], w[6];
@@ -317,7 +346,6 @@ static void nearest(int32_t *v, uint32_t n, float prev)
     for (i = 0; i < n; i++)
         v[i] = best[i];
 }
-
 static void ph_note(uint32_t dst, int32_t p, uint32_t s, uint32_t d, uint32_t v)
 {
     pad_t *P = &pads[dst];
@@ -330,13 +358,12 @@ static void ph_note(uint32_t dst, int32_t p, uint32_t s, uint32_t d, uint32_t v)
     }
 }
 
-/* degree d's chord into pad slot dst (d 7: the first an octave up) */
-static void chord_into(pad_t *p, uint32_t d)
+static void chord_into(pad_t *p, uint32_t d, uint32_t t)   /* degree d's chord of type t (d 7: an octave up) */
 {
     int32_t v[6];
     uint32_t k, n, mask = 0, rp = deg_pc((int32_t)d);
     __builtin_memset(p, 0, sizeof *p);
-    n = chord_of(d, set.type, v);
+    n = chord_of(d, t, v);
     p->bass_p = (uint8_t)v[0];
     for (k = 0; k < n; k++)
         mask |= 1u << (((uint32_t)v[k] + 12u - rp) % 12u);
@@ -349,31 +376,30 @@ static void chord_into(pad_t *p, uint32_t d)
     for (k = 0; k < n; k++) {
         uint32_t step = 0, j;
         p->note[k] = (uint8_t)v[k];
-        for (j = 0; j < 5u && CTYPE[set.type][j] != 0xFF; j++)   /* its letter: the type's step it came from */
-            if (deg_pc((int32_t)(d + CTYPE[set.type][j])) == (uint32_t)(v[k] % 12))
-                step = CTYPE[set.type][j];
+        for (j = 0; j < 5u && CTYPE[t][j] != 0xFF; j++)
+            if (deg_pc((int32_t)(d + CTYPE[t][j])) == (uint32_t)(v[k] % 12))
+                step = CTYPE[t][j];
         spell((uint32_t)v[k] % 12u, tonic_letter() + d + step, p->nm[k]);
     }
     name_chord(p, mask);
     roman_of(d % 7u, p->roman, &p->dim);
 }
-static void make_chord(uint32_t d, uint32_t dst) { chord_into(&pads[dst], d); }
-static void chord_label(uint32_t d, char *t)   /* "Am7" */
+static void chord_label(uint32_t d, uint32_t t, char *o)   /* "Am7" */
 {
     pad_t tmp;
     char r[4];
-    chord_into(&tmp, d);
+    chord_into(&tmp, d, t);
     spell(tmp.root_pc, tonic_letter() + d, r);
-    str_set(t, r, 24);
-    text_cat(t, tmp.qual);
+    str_set(o, r, 24);
+    text_cat(o, tmp.qual);
 }
 
-/* progression r into pad slot dst: four bars, a chord a bar, played as the pads play, the bass line by the bass mode */
-static void make_prog(uint32_t r, uint32_t dst)
+/* progression r into slot dst: four bars, a chord a bar, played as the pad plays, the bass line by the bass mode */
+static void prog_into(uint32_t dst, uint32_t r, uint32_t type, uint32_t plays)
 {
     pad_t *p = &pads[dst];
     const uint8_t *seq = PROGS[r % NPROGS];
-    uint32_t t = set.type == 2u ? 1u : set.type, bar, bl = PPQ * 4u, n, k;
+    uint32_t t = type == 2u ? 1u : type, bar, bl = PPQ * 4u, n, k;
     float prev = (float)base_note() + 5.0f;
     int32_t v[6];
     __builtin_memset(p, 0, sizeof *p);
@@ -389,19 +415,14 @@ static void make_prog(uint32_t r, uint32_t dst)
         uint8_t dim;
         p->bar_deg[bar] = (uint8_t)d;
         n = chord_of(d, t, v);
-        if (set.bassm == BM_NOROOT)      /* the root out of the chord (the bass is out already) */
-            n = chord_bm(v, n, rp, BM_NOROOT) + 0u;
+        if (set.bassm == BM_NOROOT)
+            n = chord_bm(v, n, rp, BM_NOROOT);
         nearest(v, n, prev);
         prev = 0.0f;
         for (k = 0; k < n; k++)
             prev += (float)v[k];
         prev /= (float)n;
-        if (set.plays == PL_CHORD) {    /* held a bar */
-            for (k = 0; k < n; k++)
-                ph_note(dst, v[k], o, bl - 10u, 96);
-            if (set.bassm == BM_BASS)
-                ph_note(dst, bass, o, bl - 10u, 104);
-        } else if (set.plays == PL_STABS) {   /* 1, the and of 2, 4; the bass on 1 and 3 */
+        if (plays == PL_STABS) {         /* 1, the and of 2, 4; the bass on 1 and 3 */
             static const uint16_t S[3] = {0, 144, 288}, D[3] = {72, 48, 72};
             static const uint8_t V[3] = {108, 86, 96};
             uint32_t j;
@@ -412,12 +433,19 @@ static void make_prog(uint32_t r, uint32_t dst)
                 ph_note(dst, bass, o, 58, 112);
                 ph_note(dst, bass, o + 192u, 72, 100);
             }
-        } else {                         /* arp 8ths, the bass held */
+        } else if (plays == PL_ARP) {    /* arp 8ths, the bass held */
             uint32_t j;
             for (j = 0; j < 8u; j++)
                 ph_note(dst, v[j % n] + (j >= n ? 12 : 0), o + j * 48u, 43, j % 2u ? 82 : 100);
             if (set.bassm == BM_BASS)
                 ph_note(dst, bass, o, bl - 10u, 100);
+        } else {                         /* held a bar (STRUM: a 16th apart, low to high) */
+            for (k = 0; k < n; k++) {
+                uint32_t sk = plays == PL_STRUM ? k * 12u : 0u;
+                ph_note(dst, v[k], o + sk, bl - 10u - sk, 96);
+            }
+            if (set.bassm == BM_BASS)
+                ph_note(dst, bass, o, bl - 10u, 104);
         }
         roman_of(d, rn, &dim);
         if (bar)
@@ -426,27 +454,48 @@ static void make_prog(uint32_t r, uint32_t dst)
     }
 }
 
-/* the kit: pads 1-7 the chords on degrees 1-7, 8 the first an octave up, 9-16 progressions 1-8 (a LIB pick stays) */
+/* pad i made again from where it came from (a LOCKed or recorded pad stays as it is) */
+static void pad_make(uint32_t i)
+{
+    desc_t *d = &desc[i];
+    if (d->lock || d->src == SRC_REC)
+        return;
+    if (d->src == SRC_EMPTY)
+        __builtin_memset(&pads[i], 0, sizeof pads[i]);
+    else if (d->src == SRC_KIT)
+        i < 8u ? chord_into(&pads[i], i, set.type) : prog_into(i, i - 8u, set.type, pfx[i].plays);
+    else if (d->src == SRC_LIBC)
+        chord_into(&pads[i], d->a, d->t);
+    else
+        prog_into(i, d->a, d->t, pfx[i].plays);
+}
 static void kit_build(void)
 {
     uint32_t i;
-    for (i = 0; i < 8u; i++)
-        if (!pads[i].lock)
-            make_chord(i, i);
-    for (i = 0; i < 8u; i++)
-        if (!pads[8u + i].lock)
-            make_prog(i, 8u + i);
+    for (i = 0; i < NPADS; i++)
+        pad_make(i);
+}
+static void kit_fresh(void)              /* every pad the kit's, settings as the last "all pads" */
+{
+    uint32_t i;
+    for (i = 0; i < NPADS; i++) {
+        desc[i].src = SRC_KIT;
+        desc[i].a = (uint8_t)i;
+        desc[i].t = set.type;
+        desc[i].lock = 0;
+        pfx_default(&pfx[i]);
+    }
+    pfx_default(&pfx[PREVIEW]);
+    kit_build();
 }
 
 /* ================================================================== synth === */
-/* a small polyphonic voice: two detuned saws through two one-pole low-passes, an envelope per voice. The main loop
- * asks for notes through a ring of events; the audio interrupt owns the voices. */
 #define NVOICES 12u
 #define SR 44100.0f
 typedef struct {
-    int8_t note;                         /* -1 free */
+    int8_t note;
     uint8_t gate;
-    uint8_t stage;                       /* 0 off, 1 attack, 2 decay/sustain, 3 release */
+    uint8_t stage;
     float env, vel, p1, p2, inc, lp1, lp2;
     uint32_t age;
 } voice_t;
@@ -468,7 +517,6 @@ static void ev_push(uint32_t type, uint32_t a, uint32_t b)
     BARRIER();
     q_w = w + 1u;
 }
-
 static void voice_on(uint32_t note, uint32_t vel)
 {
     uint32_t i, best = 0, oldest = 0xFFFFFFFFu;
@@ -502,32 +550,84 @@ static void voice_off(uint32_t note)
 }
 
 static volatile uint32_t tempo = 90;
+static volatile uint32_t clock_smp;      /* the audio clock, in samples */
 
-static void midi_in(void)                /* audio interrupt: MIDI in plays the synth (a sound module) */
+/* MIDI out, over USB and Bluetooth: ch CH_OFF sends nothing (the FM-1's own sound still plays) */
+static uint32_t midi_to(void) { return TO_USB | (set.ble ? TO_BLE : 0u); }
+static uint8_t ch_last;
+static void midi_note(uint32_t on, uint32_t ch, uint32_t m, uint32_t v)
+{
+    if (ch >= CH_OFF)
+        return;
+    ch_last = (uint8_t)ch;
+    plat_midi_send((on ? 0x09u | (0x90u | ch) << 8 | m << 16 | v << 24 : 0x08u | (0x80u | ch) << 8 | m << 16),
+                   midi_to());
+}
+static void out_on(uint32_t m, uint32_t v, uint32_t ch)
+{
+    voice_on(m, v);
+    midi_note(1, ch, m, v);
+}
+static void out_off(uint32_t m, uint32_t ch)
+{
+    voice_off(m);
+    midi_note(0, ch, m, 0);
+}
+static uint32_t pad_ch(uint32_t i)       /* an A pad's channel: its own, else its section's */
+{
+    if (i >= NPADS)
+        return set.ch[MS_LIB];
+    return set.ovr[i] != CH_NONE ? set.ovr[i] : set.ch[i < 8u ? MS_CHORDS : MS_PROGS];
+}
+
+/* REC: what you play, from the main loop and from MIDI in, with the audio clock */
+#define RECMAX 256u
+typedef struct {
+    uint32_t t;
+    uint8_t on, p, v, pad;
+} recev_t;
+static recev_t rec_ev[RECMAX];
+static volatile uint32_t rec_n;
+static volatile uint8_t rec_on;
+static void rec_push(uint32_t on, uint32_t p, uint32_t v)
+{
+    uint32_t n = rec_n;
+    if (!rec_on || n >= RECMAX)
+        return;
+    rec_ev[n].t = clock_smp;
+    rec_ev[n].on = (uint8_t)on;
+    rec_ev[n].p = (uint8_t)p;
+    rec_ev[n].v = (uint8_t)v;
+    BARRIER();
+    rec_n = n + 1u;
+}
+
+/* MIDI clock: in (the BPM follows it), out (24 a beat, at the BPM) */
+static volatile uint32_t clk_last, clk_avg, clk_seen;
+static void midi_in(void)                /* audio interrupt: MIDI in plays the synth and is recorded */
 {
     uint32_t pkt;
     int port;
     while (plat_midi_in(&pkt, &port)) {
         uint32_t st = (pkt >> 8) & 0xFFu, d1 = (pkt >> 16) & 0x7Fu, d2 = pkt >> 24, hi = st & 0xF0u;
-        if (hi == 0x90u && d2)
+        if (st == 0xF8u) {
+            if (set.clk_in) {
+                uint32_t d = clock_smp - clk_last;
+                if (clk_last && d > 20u && d < 22050u)
+                    clk_avg = clk_avg ? (clk_avg * 7u + d * 16u) / 8u : d * 16u;   /* 16ths of a sample, smoothed */
+                clk_last = clock_smp;
+                clk_seen = clock_smp ? clock_smp : 1u;
+            }
+            continue;
+        }
+        if (hi == 0x90u && d2) {
             voice_on(d1, d2);
-        else if (hi == 0x80u || hi == 0x90u)
+            rec_push(1, d1, d2);
+        } else if (hi == 0x80u || hi == 0x90u) {
             voice_off(d1);
+            rec_push(0, d1, 0);
+        }
     }
-}
-
-/* the A pads' notes out: the synth and MIDI channel A */
-static uint8_t ch_a_on, ch_last;
-static void out_on(uint32_t m, uint32_t v)
-{
-    voice_on(m, v);
-    ch_a_on = ch_last = set.ch[0] & 15u;
-    plat_midi_send(0x09u | (0x90u | ch_a_on) << 8 | m << 16 | v << 24, TO_USB);
-}
-static void out_off(uint32_t m)
-{
-    voice_off(m);
-    plat_midi_send(0x08u | (0x80u | ch_a_on) << 8 | m << 16, TO_USB);
 }
 
 static const uint16_t LEN_PCT[11] = {10, 25, 40, 55, 75, 100, 140, 200, 300, 450, 0};
@@ -539,47 +639,43 @@ static uint32_t cs_rnd(void)
     cs_rng = cs_rng * 1664525u + 1013904223u;
     return cs_rng >> 8;
 }
-static uint32_t human_vel(uint32_t v)    /* humanize: velocity off by a little, like a player */
+static uint32_t human_vel(uint32_t v, uint32_t h)   /* humanize: velocity off by a little, like a player */
 {
-    int32_t h = set.human, r = (int32_t)(cs_rnd() % 201u) - 100;
-    return (uint32_t)clamp((int32_t)v + (int32_t)v * h * r / 25000, 1, 127);
+    int32_t r = (int32_t)(cs_rnd() % 201u) - 100;
+    return (uint32_t)clamp((int32_t)v + (int32_t)v * (int32_t)h * r / 25000, 1, 127);
 }
 
-/* held and LATCH: a pad's key held, or latched on (the main loop writes them, the audio interrupt reads them) */
 static volatile uint8_t pad_held[NPADS + 1], pad_latched[NPADS + 1];
 
-/* progression players: one per pad and one for LIB's preview. A tap plays it once; held past the end it loops
- * (until let go); latched it loops until tapped again */
+/* progression players: a tap plays it once; held past the end it loops; latched it loops till tapped again */
 typedef struct {
-    uint8_t on, looped;
+    uint8_t on, looped, vel, ch;
     int8_t oct;
     float pos;
-    uint8_t vel;
-    uint8_t snd[MAXPH];                  /* the note sounding for phrase note k, + 1; 0 none */
-    uint16_t endt[MAXPH];                /* and when it stops */
+    uint8_t snd[MAXPH];
+    uint16_t endt[MAXPH];
 } player_t;
 static player_t pl[NPADS + 1];
-
 static void pl_release(uint32_t i)
 {
     uint32_t k;
     for (k = 0; k < MAXPH; k++)
         if (pl[i].snd[k]) {
-            out_off(pl[i].snd[k] - 1u);
+            out_off(pl[i].snd[k] - 1u, pl[i].ch);
             pl[i].snd[k] = 0;
         }
 }
-
 static void phrase_tick(uint32_t n)
 {
-    float dt = (float)n * (float)tempo * 96.0f / (60.0f * SR);
     uint32_t i, k;
     for (i = 0; i <= NPADS; i++) {
         player_t *P = &pl[i];
-        float a, b, we;
         const pad_t *pd = &pads[i];
+        const pfx_t *f = &pfx[i];
+        float a, b, we, dt;
         if (!P->on)
             continue;
+        dt = (float)n * (float)tempo * 96.0f / (60.0f * SR) * (float)SPEED_PCT[f->speed % 7u] / 100.0f;
         we = (float)pd->len;
         a = P->pos;
         b = a + dt;
@@ -589,17 +685,19 @@ static void phrase_tick(uint32_t n)
             int starts = s >= a && s < b && s < we;
             if (starts) {
                 uint32_t m = (uint32_t)clamp((int32_t)x->p + 12 * P->oct, 0, 127);
-                uint32_t v = (uint32_t)x->v * P->vel / 100u, d = x->d, li = (uint32_t)(set.len + 5);
-                if (set.human)
-                    v = human_vel(v ? v : 1u);
+                uint32_t v = (uint32_t)x->v * P->vel / 100u, d = x->d, li = (uint32_t)(f->len + 5);
+                if (f->vel)
+                    v = (uint32_t)x->v * f->vel / 100u;
+                if (f->human)
+                    v = human_vel(v ? v : 1u, f->human);
                 if (P->snd[k])
-                    out_off(P->snd[k] - 1u);
-                out_on(m, v ? v : 1u);
+                    out_off(P->snd[k] - 1u, P->ch);
+                out_on(m, clamp((int32_t)v, 1, 127), P->ch);
                 P->snd[k] = (uint8_t)(m + 1u);
-                if (set.len && li < 11u) {   /* ALGORITHM: the notes' length */
+                if (f->len && li < 11u) {
                     if (LEN_PCT[li])
                         d = d * LEN_PCT[li] / 100u;
-                    else {               /* LEGATO: on to the next note's start */
+                    else {
                         uint32_t j, nx = (uint32_t)we;
                         for (j = 0; j < pd->pn && j < MAXPH; j++)
                             if (ph[i][j].s > x->s && ph[i][j].s < nx)
@@ -613,7 +711,7 @@ static void phrase_tick(uint32_t n)
                 e = fm_minf((float)P->endt[k], we);
             }
             if (P->snd[k] && e < b && !(starts && e >= b)) {
-                out_off(P->snd[k] - 1u);
+                out_off(P->snd[k] - 1u, P->ch);
                 P->snd[k] = 0;
             }
         }
@@ -621,7 +719,7 @@ static void phrase_tick(uint32_t n)
         if (P->pos >= we) {
             pl_release(i);
             if (i < NPADS && (pad_held[i] || pad_latched[i]) && we > 0.0f) {
-                P->pos -= we;            /* again from the start, on the beat */
+                P->pos -= we;
                 P->looped = 1;
             } else
                 P->on = 0;
@@ -629,32 +727,30 @@ static void phrase_tick(uint32_t n)
     }
 }
 
-/* chord players: a chord pad while its key is held (or latched), as the pads play: CHORD (held, strummed),
- * STABS (on 1, the and of 2 and 4, again each bar), ARP (the notes in turn) */
+/* chord players: CHORD (held), STRUM (low to high), ARP (in turn), STABS (1, the and of 2, 4, each bar) */
 #define MAXC 8u
 typedef struct {
-    uint8_t on, n, cur, mode;            /* cur: the arp's note sounding + 1, 0 none */
+    uint8_t on, n, cur, mode, ch, human;
     uint8_t note[MAXC], vel[MAXC], sounded[MAXC];
-    uint32_t at[MAXC];                   /* each note's start, samples from the press */
-    uint32_t t, next, idx, off;
+    uint32_t at[MAXC];
+    uint32_t t, next, idx, off, gate;
+    float spd;
+    int8_t len;
 } cplay_t;
 static cplay_t cp[NPADS];
 static uint8_t cbuf[NPADS][MAXC], cbuf_n[NPADS];
-static const float ARP_RATE[6] = {1.0f, 0.5f, 0.3333333f, 0.25f, 0.1666667f, 0.125f};   /* of a beat */
-static const char *const ARP_RATE_NAME[6] = {"1/4", "1/8", "1/8T", "1/16", "1/16T", "1/32"};
-#define STAB_PAT 0x1041u                 /* sixteenths 0, 6, 12: 1, the and of 2, 4 */
-
+#define STAB_PAT 0x1041u
 static void cp_stop(uint32_t i)
 {
     cplay_t *c = &cp[i];
     uint32_t k;
     if (c->cur) {
-        out_off(c->cur - 1u);
+        out_off(c->cur - 1u, c->ch);
         c->cur = 0;
     }
     for (k = 0; k < c->n; k++)
         if (c->sounded[k]) {
-            out_off(c->note[k]);
+            out_off(c->note[k], c->ch);
             c->sounded[k] = 0;
         }
     c->on = 0;
@@ -662,15 +758,23 @@ static void cp_stop(uint32_t i)
 static void cp_start(uint32_t i, uint32_t vel)
 {
     cplay_t *c = &cp[i];
-    uint32_t k, ss = (uint32_t)set.strum * 2u * 441u / 10u;   /* 2 ms steps, in samples */
+    const pfx_t *f = &pfx[i];
+    uint32_t k, ss;
     cp_stop(i);
+    c->spd = (float)SPEED_PCT[f->speed % 7u] / 100.0f;
+    ss = f->plays == PL_STRUM ? (uint32_t)(0.035f * SR / c->spd) : 0u;   /* STRUM: 35 ms a note at 100% */
     c->n = cbuf_n[i] < MAXC ? cbuf_n[i] : (uint8_t)MAXC;
-    c->mode = set.plays;
+    c->mode = f->plays;
+    c->ch = (uint8_t)pad_ch(i);
+    c->human = f->human;
+    c->len = f->len;
+    if (f->vel)
+        vel = f->vel;
     for (k = 0; k < c->n; k++) {
         c->note[k] = cbuf[i][k];
-        c->vel[k] = (uint8_t)human_vel(vel);
+        c->vel[k] = (uint8_t)(f->human ? human_vel(vel, f->human) : vel);
         c->sounded[k] = 0;
-        c->at[k] = k * ss + (set.human ? cs_rnd() % (set.human * 13u + 1u) : 0u);   /* up to ~15 ms late */
+        c->at[k] = k * ss + (f->human ? cs_rnd() % (f->human * 13u + 1u) : 0u);
     }
     c->t = c->next = c->idx = c->off = 0;
     c->cur = 0;
@@ -684,41 +788,39 @@ static void chord_tick(uint32_t n)
         if (!c->on)
             continue;
         if (c->mode == PL_STABS && c->n) {
-            uint32_t step = (uint32_t)(15.0f * SR / (float)tempo);
+            uint32_t step = (uint32_t)(15.0f * SR / (float)tempo / c->spd);
             if (!step)
                 step = 1u;
             if (c->off && c->off < c->t + n) {
                 for (k = 0; k < c->n; k++)
                     if (c->sounded[k]) {
-                        out_off(c->note[k]);
+                        out_off(c->note[k], c->ch);
                         c->sounded[k] = 0;
                     }
                 c->off = 0;
             }
             while (c->next < c->t + n) {
                 if (STAB_PAT >> (c->idx % 16u) & 1u) {
+                    uint32_t li = (uint32_t)(c->len + 5), g = step * 3u / 2u;
                     for (k = 0; k < c->n; k++) {
                         if (c->sounded[k])
-                            out_off(c->note[k]);
-                        out_on(c->note[k], human_vel(c->vel[0]));
+                            out_off(c->note[k], c->ch);
+                        out_on(c->note[k], c->human ? human_vel(c->vel[0], c->human) : c->vel[0], c->ch);
                         c->sounded[k] = 1;
                     }
-                    {
-                        uint32_t li = (uint32_t)(set.len + 5), g = step * 3u / 2u;
-                        if (li < 11u)
-                            g = LEN_PCT[li] ? g * LEN_PCT[li] / 100u : step * 5u;
-                        c->off = c->next + (g ? g : 1u);
-                    }
+                    if (li < 11u)
+                        g = LEN_PCT[li] ? g * LEN_PCT[li] / 100u : step * 5u;
+                    c->off = c->next + (g ? g : 1u);
                 }
                 c->idx++;
                 c->next += step;
             }
         } else if (c->mode == PL_ARP && c->n) {
             while (c->next < c->t + n) {
-                uint32_t step = (uint32_t)(60.0f * SR / (float)tempo * ARP_RATE[set.arprate % 6u]);
+                uint32_t step = (uint32_t)(30.0f * SR / (float)tempo / c->spd);   /* 8ths at 100% */
                 if (c->cur)
-                    out_off(c->cur - 1u);
-                out_on(c->note[c->idx % c->n], human_vel(c->vel[0]));
+                    out_off(c->cur - 1u, c->ch);
+                out_on(c->note[c->idx % c->n], c->human ? human_vel(c->vel[0], c->human) : c->vel[0], c->ch);
                 c->cur = (uint8_t)(c->note[c->idx % c->n] + 1u);
                 c->idx++;
                 c->next += step ? step : 1u;
@@ -726,7 +828,7 @@ static void chord_tick(uint32_t n)
         } else {
             for (k = 0; k < c->n; k++)
                 if (!c->sounded[k] && c->at[k] < c->t + n) {
-                    out_on(c->note[k], c->vel[k]);
+                    out_on(c->note[k], c->vel[k], c->ch);
                     c->sounded[k] = 1;
                 }
         }
@@ -734,6 +836,7 @@ static void chord_tick(uint32_t n)
     }
 }
 
+static uint32_t clk_acc;                 /* MIDI clock out: samples toward the next tick, in 24ths of a beat x 16 */
 void app_render(int32_t *lr, uint32_t n, uint32_t master_q12)
 {
     uint32_t i, v;
@@ -754,7 +857,8 @@ void app_render(int32_t *lr, uint32_t n, uint32_t master_q12)
             pl_release(a);
             pl[a].on = type == QE_PSTART;
             pl[a].looped = 0;
-            pl[a].oct = (int8_t)set.octave;
+            pl[a].oct = (int8_t)pfx[a].oct;
+            pl[a].ch = (uint8_t)pad_ch(a);
             pl[a].vel = (uint8_t)(b ? b * 100u / 127u + 20u : 100u);
             pl[a].pos = 0.0f;
         }
@@ -763,6 +867,15 @@ void app_render(int32_t *lr, uint32_t n, uint32_t master_q12)
     phrase_tick(n);
     chord_tick(n);
     midi_in();
+    if (set.clk_out) {                   /* 24 a beat */
+        uint32_t per = (uint32_t)(SR * 60.0f * 16.0f / (24.0f * (float)tempo));
+        clk_acc += n * 16u;
+        while (clk_acc >= per) {
+            clk_acc -= per;
+            plat_midi_send(0x0Fu | 0xF8u << 8, midi_to());
+        }
+    }
+    clock_smp += n;
     if (n > APP_BLOCK)
         n = APP_BLOCK;
     for (i = 0; i < n; i++)
@@ -855,12 +968,13 @@ static void notes_on(uint32_t k, const uint8_t *notes, uint32_t n, uint32_t vel,
     uint32_t i;
     held_t *h = &held[k];
     h->n = 0;
-    h->ch = ch_last = (uint8_t)(ch & 15u);
+    h->ch = (uint8_t)ch;
     for (i = 0; i < n && i < MAXN; i++) {
         int32_t m = clamp((int32_t)notes[i] + 12 * set.octave, 0, 127);
         h->note[h->n++] = (uint8_t)m;
         ev_push(QE_ON, (uint32_t)m, vel);
-        plat_midi_send(0x09u | (0x90u | h->ch) << 8 | (uint32_t)m << 16 | vel << 24, TO_USB);
+        midi_note(1, ch, (uint32_t)m, vel);
+        rec_push(1, (uint32_t)m, vel);
     }
 }
 static void notes_off(uint32_t k)
@@ -869,11 +983,11 @@ static void notes_off(uint32_t k)
     held_t *h = &held[k];
     for (i = 0; i < h->n; i++) {
         ev_push(QE_OFF, h->note[i], 0);
-        plat_midi_send(0x08u | (0x80u | h->ch) << 8 | (uint32_t)h->note[i] << 16, TO_USB);
+        midi_note(0, h->ch, h->note[i], 0);
+        rec_push(0, h->note[i], 0);
     }
     h->n = 0;
 }
-
 static void pad_stop(uint32_t i)
 {
     pad_latched[i] = 0;
@@ -891,45 +1005,82 @@ static void players_stop(void)
     for (k = 0; k < NKEYS; k++)
         notes_off(k);
 }
-
-/* a pad's sound: a chord into its player (octave applied), a progression started */
+static void all_notes_off(void)          /* PLAY: everything off, and every channel told so */
+{
+    uint32_t c;
+    players_stop();
+    for (c = 0; c < 16u; c++)
+        plat_midi_send(0x0Bu | (0xB0u | c) << 8 | 123u << 16, midi_to());
+}
+/* a pad's sound: a chord (its inversion and octave) into its player, a progression started */
 static void pad_start(uint32_t i, uint32_t vel)
 {
     const pad_t *p = &pads[i];
+    const pfx_t *f = &pfx[i];
     if (p->type == PAD_CHORD) {
-        uint32_t k;
-        for (k = 0; k < p->n && k < MAXC; k++)
-            cbuf[i][k] = (uint8_t)clamp((int32_t)p->note[k] + 12 * set.octave, 0, 127);
-        cbuf_n[i] = (uint8_t)(p->n < MAXC ? p->n : MAXC);
+        int32_t v[MAXC];
+        uint32_t k, n = p->n < MAXC ? p->n : MAXC;
+        int32_t inv = f->inv;
+        for (k = 0; k < n; k++)
+            v[k] = p->note[k];
+        while (inv > 0 && n > 1u) {      /* up: the bottom note an octave up */
+            int32_t lo = v[0] + 12;
+            for (k = 0; k + 1u < n; k++)
+                v[k] = v[k + 1u];
+            v[n - 1u] = lo;
+            inv--;
+        }
+        while (inv < 0 && n > 1u) {      /* down: the top note an octave down */
+            int32_t hi = v[n - 1u] - 12;
+            for (k = n - 1u; k > 0; k--)
+                v[k] = v[k - 1u];
+            v[0] = hi;
+            inv++;
+        }
+        for (k = 0; k < n; k++) {
+            cbuf[i][k] = (uint8_t)clamp(v[k] + 12 * f->oct, 0, 127);
+            rec_push(1, cbuf[i][k], f->vel ? f->vel : vel);
+        }
+        cbuf_n[i] = (uint8_t)n;
         ev_push(QE_CSTART, i, vel);
     } else if (p->type == PAD_PROG)
         ev_push(QE_PSTART, i, vel);
 }
+static void pad_release_rec(uint32_t i)   /* REC: a chord pad let go */
+{
+    uint32_t k;
+    if (pads[i].type == PAD_CHORD)
+        for (k = 0; k < cbuf_n[i]; k++)
+            rec_push(0, cbuf[i][k], 0);
+}
 
 /* ======================================================================= UI === */
-enum { SCR_HOME, SCR_PICK, SCR_LIB, SCR_FX, SCR_MIDI };
-/* COACH: the steps; done by doing them (the screen moves on by itself) */
+enum { SCR_HOME, SCR_PICK, SCR_LIB, SCR_PAD, SCR_MIDI, SCR_SETUP };
 enum { CS_NONE, CS_CHOOSE, CS_NOTES, CS_SCALE, CS_PADS, CS_BASS, CS_SHAPE, CS_CPADS, CS_DONE };
+enum { RS_OFF, RS_PICK, RS_COUNT, RS_REC };
 static struct {
     char msg[2][24];
     uint32_t msg_until;
     uint32_t keys, btn;
     int32_t pad;                         /* the A pad played last (-1 none yet) */
-    uint8_t screen, redraw, oct_mod;
-    uint32_t sys_at, home_at;            /* SYS / HOME went down then (0 up, all ones: held) */
-    uint8_t coach, co_count, co_pick;    /* COACH: the step (CS_*), a count toward it, the choice shown */
-    uint32_t co_at;                      /* when the step began */
-    uint32_t boot_at;
-} ui = {.pad = -1};
-static uint8_t first_boot;
+    uint8_t screen, redraw;
+    uint32_t sys_at, home_at, save_at;   /* SYS / HOME / SAVE went down then (0 up, all ones: held) */
+    uint8_t shift_used;                  /* HOME held and used as SHIFT: its release goes nowhere */
+    uint8_t coach, co_count, co_pick;
+    uint32_t co_at, boot_at;
+    uint8_t rs, rpad;                    /* REC: the state, the pad it records into */
+    uint32_t r_t0, r_click;              /* REC: the take's start (samples), the next click (samples) */
+    int32_t m_sel;                       /* MIDI: the pad or key picked for its own channel (0-15 A, 16-22 B), -1 */
+    uint32_t tap[4];                     /* TAP: the last taps */
+    uint8_t tap_n;
+    uint8_t lib_t, lib_sel;              /* LIB: the type shown (NCTYPES: the progressions), the pick */
+} ui = {.pad = -1, .m_sel = -1, .lib_t = 1};
+static uint32_t btn_now;                 /* the buttons held this frame */
+static int shift(void) { return (int)(btn_now >> B_HOME & 1u); }   /* HOME held: SHIFT */
 
-/* PICK NOTES: the notes you played, in order, and the keys that hold them all, best first */
 #define FD_MAX 12u
 static uint8_t fd_seq[FD_MAX], fd_n, fd_list[12u * NSCALES], fd_cnt, fd_sel;
 static uint16_t fd_pcs;
-/* LIB: the pick: 0-6 the chords, 7-16 the progressions */
-static uint8_t lib_sel;
-#define LIB_N (7u + NPROGS)
 
 void app_say(const char *a, const char *b)
 {
@@ -946,6 +1097,114 @@ void app_say(const char *a, const char *b)
     }
 }
 
+/* ----------------------------------------------------------------- UNDO --- */
+static struct {
+    uint8_t have;
+    pad_t pad[NPADS];
+    pnote_t uph[NPADS][MAXPH];
+    desc_t d[NPADS];
+    pfx_t f[NPADS];
+} U;
+static void undo_snap(void)
+{
+    __builtin_memcpy(U.pad, pads, sizeof U.pad);
+    __builtin_memcpy(U.uph, ph, sizeof U.uph);
+    __builtin_memcpy(U.d, desc, sizeof U.d);
+    __builtin_memcpy(U.f, pfx, sizeof U.f);
+    U.have = 1;
+}
+static void undo_swap(void)              /* one step back; again: forward */
+{
+    uint32_t i, k;
+    if (!U.have) {
+        app_say("UNDO", "NOTHING TO UNDO");
+        return;
+    }
+    players_stop();
+    for (i = 0; i < NPADS; i++) {
+        pad_t tp = pads[i];
+        desc_t td = desc[i];
+        pfx_t tf = pfx[i];
+        pads[i] = U.pad[i];
+        U.pad[i] = tp;
+        desc[i] = U.d[i];
+        U.d[i] = td;
+        pfx[i] = U.f[i];
+        U.f[i] = tf;
+        for (k = 0; k < MAXPH; k++) {
+            pnote_t t = ph[i][k];
+            ph[i][k] = U.uph[i][k];
+            U.uph[i][k] = t;
+        }
+    }
+    app_say("UNDO", "AGAIN: REDO");
+}
+
+/* ------------------------------------------------------ SAVE and LOAD --- */
+/* the session: the settings; every pad's source, its PAD EDIT and (LOCKed or recorded) its notes */
+#define SESS_MAGIC 0x31534553u           /* "SES1" */
+typedef struct {
+    uint32_t magic;
+    desc_t d[NPADS];
+    pfx_t f[NPADS];
+    uint16_t kept;                       /* bit i: pad i's notes are in the record (LOCKed or recorded) */
+    uint16_t rsv;
+    pad_t p[NPADS];                      /* (only the kept ones matter) */
+} sess_t;
+static sess_t SS;
+#define NOTES_MAX (PLAT_STORE_MAX / sizeof(pnote_t))
+static pnote_t note_buf[NOTES_MAX];
+static int session_save(void)
+{
+    uint32_t i, k, nn = 0;
+    __builtin_memset(&SS, 0, sizeof SS);
+    SS.magic = SESS_MAGIC;
+    for (i = 0; i < NPADS; i++) {
+        SS.d[i] = desc[i];
+        SS.f[i] = pfx[i];
+        if (desc[i].lock || desc[i].src == SRC_REC) {
+            SS.kept |= (uint16_t)(1u << i);
+            SS.p[i] = pads[i];
+            for (k = 0; k < pads[i].pn && pads[i].type == PAD_PROG; k++) {
+                if (nn >= NOTES_MAX)
+                    return -2;
+                note_buf[nn++] = ph[i][k];
+            }
+        }
+    }
+    if (plat_store_save(OBJ_SETTINGS, &set, sizeof set) || plat_store_save(OBJ_SESS, &SS, sizeof SS) ||
+        plat_store_save(OBJ_NOTES, note_buf, nn ? nn * sizeof(pnote_t) : sizeof(pnote_t)))
+        return -1;
+    set_dirty = 0;
+    return 0;
+}
+static int session_load(void)
+{
+    uint32_t i, k, nn = 0;
+    int got = plat_store_load(OBJ_SESS, &SS, sizeof SS), gn;
+    if (got != (int)sizeof SS || SS.magic != SESS_MAGIC)
+        return -1;
+    gn = plat_store_load(OBJ_NOTES, note_buf, sizeof note_buf);
+    if (gn < 0)
+        gn = 0;
+    for (i = 0; i < NPADS; i++)
+        if (SS.d[i].src > SRC_EMPTY || SS.d[i].t >= NCTYPES || SS.f[i].plays >= PL_N || SS.f[i].speed > 6u)
+            return -1;
+    for (i = 0; i < NPADS; i++) {
+        desc[i] = SS.d[i];
+        pfx[i] = SS.f[i];
+        if (SS.kept >> i & 1u) {
+            pads[i] = SS.p[i];
+            if (pads[i].type == PAD_PROG)
+                for (k = 0; k < pads[i].pn && k < MAXPH; k++)
+                    ph[i][k] = nn < (uint32_t)gn / sizeof(pnote_t) ? note_buf[nn++] : (pnote_t){0, 1, 60, 1};
+        }
+    }
+    kit_build();
+    return 0;
+}
+
+/* ------------------------------------------------------------ PICK NOTES --- */
 static uint16_t scale_mask(uint32_t root, uint32_t scale)
 {
     uint32_t j;
@@ -956,7 +1215,6 @@ static uint16_t scale_mask(uint32_t root, uint32_t scale)
 }
 static int32_t fd_score(uint32_t root, uint32_t scale)
 {
-    /* the first note played as the tonic, then any note played, then major and minor before the modes */
     return (fd_n && root == fd_seq[0] ? 40 : 0) + ((fd_pcs >> root) & 1u ? 20 : 0) +
            (scale <= 1u ? 10 : scale <= 5u ? 5 : 0);
 }
@@ -981,7 +1239,7 @@ static void fd_rank(void)
         fd_list[j] = x;
     }
 }
-static void fd_toggle(uint32_t pc)       /* a note in, or out again */
+static void fd_toggle(uint32_t pc)
 {
     uint32_t i, j;
     if ((fd_pcs >> pc) & 1u) {
@@ -1004,11 +1262,11 @@ static void pick_enter(void)
     fd_rank();
     ui.screen = SCR_PICK;
 }
-static void rekey(void)                  /* the key changed: the kit again (a LIB pick stays) */
+static void rekey(void)                  /* the key, type or bass mode changed: the pads made again */
 {
     uint32_t i;
     for (i = 0; i < NPADS; i++)
-        if (!pads[i].lock && (pl[i].on || cp[i].on))
+        if (!desc[i].lock && desc[i].src != SRC_REC && (pl[i].on || cp[i].on))
             pad_stop(i);
     kit_build();
     set_dirty = 1;
@@ -1032,7 +1290,7 @@ static void pick_use(void)
 /* the chord shown and lit: the A pad played last, a progression's bar under its playhead */
 typedef struct {
     uint8_t ok, bass, root, bass_on, root_on;
-    uint16_t pcs;                        /* every note of the chord as written */
+    uint16_t pcs;
 } cur_t;
 static cur_t cur_chord(void)
 {
@@ -1047,7 +1305,6 @@ static cur_t cur_chord(void)
         c.root = p->root_pc;
         c.bass = (uint8_t)(p->bass_p % 12u);
         c.bass_on = p->bm == BM_BASS;
-        c.root_on = 0;
         for (k = 0; k < p->n; k++) {
             c.pcs |= (uint16_t)(1u << (p->note[k] % 12u));
             c.root_on |= p->note[k] % 12u == p->root_pc;
@@ -1055,12 +1312,12 @@ static cur_t cur_chord(void)
         c.pcs |= (uint16_t)(1u << c.bass);
         if (c.bass == c.root && c.bass_on)
             c.root_on = 1;
-    } else if (p->type == PAD_PROG) {
-        uint32_t bar = pl[ui.pad].on ? (uint32_t)(pl[ui.pad].pos / (float)(PPQ * 4u)) : 0u, d, k;
+    } else if (p->type == PAD_PROG && p->bars) {
+        uint32_t bar = pl[ui.pad].on ? (uint32_t)(pl[ui.pad].pos / (float)(PPQ * 4u)) : 0u, d, k, n;
         int32_t v[6];
-        uint32_t t = set.type == 2u ? 1u : set.type, n;
+        uint32_t t = desc[ui.pad].src == SRC_LIBP ? desc[ui.pad].t : set.type;
         d = p->bar_deg[bar < p->bars ? bar : 0u];
-        n = chord_of(d, t, v);
+        n = chord_of(d, t == 2u ? 1u : t, v);
         c.ok = 1;
         c.root = c.bass = (uint8_t)deg_pc((int32_t)d);
         c.bass_on = p->bm == BM_BASS;
@@ -1079,7 +1336,7 @@ static void coach_go(uint32_t step)
     ui.co_at = plat_ms();
     if (step == CS_NOTES)
         pick_enter();
-    if (step == CS_PADS || step == CS_BASS || step == CS_SHAPE || step == CS_CPADS || step == CS_DONE)
+    if (step >= CS_PADS)
         ui.screen = SCR_HOME;
     ui.redraw = 1;
 }
@@ -1093,7 +1350,6 @@ static void coach_end(void)
     ui.coach = CS_NONE;
     ui.redraw = 1;
 }
-/* something happened: the step done moves the coach on. ev: what */
 enum { CE_NOTE, CE_KEYSET, CE_APAD, CE_BPAD, CE_SHAPE, CE_CPAD };
 static void coach_event(uint32_t ev)
 {
@@ -1141,24 +1397,168 @@ static const char *coach_text(uint32_t s)
                                     "THE WHITE KEYS: 8 CHORDS, THEN 8 PROGRESSIONS. PLAY A FEW.",
                                     "THE BRIGHT BLACK KEY IS THE BASS OF YOUR CHORD. PLAY ALONG.",
                                     "TURN K2 FOR 7THS AND 9THS, K3 FOR HOW THE PADS PLAY.",
-                                    "THE LAST 4 BLACK KEYS: BASS, NO BASS, NO ROOT, LATCH. TRY ONE.",
+                                    "THE LAST 4 BLACK KEYS: BASS, NO BASS, NO ROOT, TAP. TRY ONE.",
                                     "THAT'S SEED. HOLD SYS ANY TIME FOR THESE STEPS."};
     return T[s % 9u];
 }
 
+/* ------------------------------------------------------------------ REC --- */
+static uint32_t bpb_smp(void) { return (uint32_t)(SR * 60.0f / (float)tempo); }   /* a beat, in samples */
+static void rec_arm(void)
+{
+    players_stop();
+    ui.rs = RS_PICK;
+    app_say("REC", "TAP A PAD TO RECORD INTO");
+}
+static void rec_pick(uint32_t i)         /* the pad: a bar's count-in, then recording */
+{
+    if (desc[i].lock) {
+        app_say("LOCKED", "PICK ANOTHER PAD");
+        return;
+    }
+    ui.rpad = (uint8_t)i;
+    ui.rs = RS_COUNT;
+    ui.r_t0 = clock_smp + 4u * bpb_smp() + 2000u;
+    ui.r_click = clock_smp + 2000u;
+    rec_n = 0;
+    rec_on = 1;
+    app_say("REC", "COUNT IN");
+}
+static void rec_stop(void)               /* the take onto the pad: rounded to whole bars */
+{
+    uint32_t now = clock_smp, i, j, n = rec_n, bar = 4u * bpb_smp(), bars, len;
+    pad_t *p;
+    rec_on = 0;
+    if (ui.rs != RS_REC) {
+        ui.rs = RS_OFF;
+        app_say("REC", "CANCELLED");
+        return;
+    }
+    ui.rs = RS_OFF;
+    bars = (now - ui.r_t0 + bar / 2u) / bar;
+    if (bars < 1u)
+        bars = 1u;
+    if (bars > 8u)
+        bars = 8u;
+    len = bars * 4u * PPQ;
+    undo_snap();
+    p = &pads[ui.rpad];
+    __builtin_memset(p, 0, sizeof *p);
+    p->type = PAD_PROG;
+    p->len = (uint16_t)len;
+    str_set(p->title, "RECORDED", sizeof p->title);
+    for (i = 0; i < n && p->pn < MAXPH; i++) {
+        const recev_t *e = &rec_ev[i];
+        uint32_t s, d = 0;
+        int32_t dt;
+        if (!e->on)
+            continue;
+        dt = (int32_t)(e->t - ui.r_t0);
+        if (dt < -(int32_t)(bpb_smp() / 4u))
+            continue;                    /* well before the 1 */
+        s = dt < 0 ? 0u : (uint32_t)((float)dt / (float)bpb_smp() * (float)PPQ);
+        if (s >= len)
+            continue;
+        for (j = i + 1u; j < n; j++)     /* its note off */
+            if (!rec_ev[j].on && rec_ev[j].p == e->p) {
+                d = (uint32_t)((float)(rec_ev[j].t - e->t) / (float)bpb_smp() * (float)PPQ);
+                break;
+            }
+        if (j == n)
+            d = (uint32_t)((float)(now - e->t) / (float)bpb_smp() * (float)PPQ);
+        if (d < 4u)
+            d = 4u;
+        if (s + d > len)
+            d = len - s;
+        ph[ui.rpad][p->pn].s = (uint16_t)s;
+        ph[ui.rpad][p->pn].d = (uint16_t)d;
+        ph[ui.rpad][p->pn].p = e->p;
+        ph[ui.rpad][p->pn].v = e->v;
+        p->pn++;
+    }
+    if (!p->pn) {
+        undo_swap();
+        app_say("REC", "NOTHING WAS PLAYED");
+        return;
+    }
+    desc[ui.rpad].src = SRC_REC;
+    pfx_default(&pfx[ui.rpad]);
+    pfx[ui.rpad].plays = PL_CHORD;
+    pfx[ui.rpad].len = 0;
+    pfx[ui.rpad].human = 0;
+    ui.pad = ui.rpad;
+    {
+        char t[24] = "PAD ", b[16];
+        num_text(ui.rpad + 1, t + 4, 0);
+        num_text((int32_t)bars, b, 0);
+        text_cat(b, bars == 1u ? " BAR RECORDED" : " BARS RECORDED");
+        app_say(t, b);
+    }
+}
+static void rec_tick(void)               /* the count-in's clicks, then the take starts */
+{
+    if (ui.rs == RS_COUNT) {
+        uint32_t now = clock_smp;
+        if ((int32_t)(now - ui.r_click) >= 0 && (int32_t)(ui.r_t0 - now) > 0) {
+            uint32_t first = (ui.r_t0 - ui.r_click) / bpb_smp() == 3u;
+            ev_push(QE_ON, first ? 96u : 84u, 90);
+            ev_push(QE_OFF, first ? 96u : 84u, 0);
+            ui.r_click += bpb_smp();
+        }
+        if ((int32_t)(now - ui.r_t0) >= 0) {
+            ui.rs = RS_REC;
+            app_say("REC", "PLAYING IN: REC AGAIN STOPS");
+        }
+    }
+}
+
 /* ================================================================== input === */
+static void all_pads(void (*fn)(uint32_t))   /* home's "all pads" knobs */
+{
+    uint32_t i;
+    for (i = 0; i < NPADS; i++)
+        if (desc[i].src != SRC_REC)
+            fn(i);
+}
+static int32_t all_d;
+static void ap_plays(uint32_t i) { pfx[i].plays = set.plays; (void)all_d; }
+static void ap_human(uint32_t i) { pfx[i].human = set.human; }
+static void ap_len(uint32_t i) { pfx[i].len = set.len; }
+static void ap_oct(uint32_t i) { pfx[i].oct = (int8_t)clamp(pfx[i].oct + all_d, -2, 2); }
+static const char *ch_name(uint32_t c, char *t)   /* "CH 3", "OFF", "SECTION" */
+{
+    if (c == CH_NONE)
+        str_set(t, "SECTION", 12);
+    else if (c >= CH_OFF)
+        str_set(t, "OFF", 12);
+    else {
+        str_set(t, "CH ", 12);
+        num_text((int32_t)c + 1, t + 3, 0);
+    }
+    return t;
+}
+static uint32_t ch_step(uint32_t c, int32_t d, int own)   /* 0 .. 15, OFF (and NONE first, for a pad's own) */
+{
+    int32_t v = c == CH_NONE ? -1 : (int32_t)c;
+    v = clamp(v + d, own ? -1 : 0, (int32_t)CH_OFF);
+    return v < 0 ? CH_NONE : (uint32_t)v;
+}
+
 static void input(void)
 {
-    uint32_t keys, btn = plat_buttons(), i;
-    int32_t e;
+    uint32_t keys, btn = plat_buttons(), i, now = plat_ms();
+    btn_now = btn;
     touch_poll();
     keys = touch_keys();
 
-    if (ui.coach == CS_DONE && ((keys & ~ui.keys) || plat_ms() - ui.co_at > 4000u))
+    if (ui.coach == CS_DONE && ((keys & ~ui.keys) || now - ui.co_at > 4000u))
         coach_end();
+    rec_tick();
+    if ((btn >> B_HOME & 1u) && ((keys & ~ui.keys) || (btn & ~ui.btn & ~(1u << B_HOME))))
+        ui.shift_used = 1;               /* HOME held with something else: SHIFT */
 
     if (ui.coach == CS_CHOOSE)
-        goto buttons;                    /* the choice first: the keys wait */
+        goto buttons;
     if (ui.screen == SCR_PICK) {         /* PICK NOTES: every key a note, from F3; played again: out */
         uint32_t k;
         for (k = 0; k < NKEYS; k++) {
@@ -1166,7 +1566,7 @@ static void input(void)
             if ((keys & bit) && !(ui.keys & bit)) {
                 uint8_t m = (uint8_t)clamp(53 + (int32_t)k, 0, 127);
                 uint32_t vel = touch_vel(k);
-                notes_on(k, &m, 1, vel ? vel : 100u, set.ch[1]);
+                notes_on(k, &m, 1, vel ? vel : 100u, set.ch[MS_PICK]);
                 fd_toggle(m % 12u);
                 coach_event(CE_NOTE);
                 ui.redraw = 1;
@@ -1175,24 +1575,35 @@ static void input(void)
         }
         goto buttons;
     }
-    /* the A pads: a chord while held (or latched), a progression once (held: again and again) */
+    /* the A pads */
     for (i = 0; i < 16u; i++) {
         uint32_t k = WK[i], bit = 1u << k;
         if ((keys & bit) && !(ui.keys & bit)) {
             uint32_t vel = touch_vel(k);
+            if (ui.rs == RS_PICK) {      /* REC: the pad to record into */
+                rec_pick(i);
+                ui.redraw = 1;
+                continue;
+            }
+            if (ui.screen == SCR_MIDI)
+                ui.m_sel = (int32_t)i;
             if (ui.screen == SCR_LIB) {  /* LIB: the pick goes onto the pad */
                 char t[24];
+                if (desc[i].lock) {
+                    app_say("LOCKED", "LFO UNLOCKS IT");
+                    continue;
+                }
+                undo_snap();
                 pad_stop(i);
-                if (lib_sel < 7u)
-                    make_chord(lib_sel, i);
-                else
-                    make_prog(lib_sel - 7u, i);
-                pads[i].lock = 1;
+                desc[i].src = ui.lib_t < NCTYPES ? SRC_LIBC : SRC_LIBP;
+                desc[i].a = ui.lib_sel;
+                desc[i].t = ui.lib_t < NCTYPES ? ui.lib_t : set.type;
+                pad_make(i);
                 str_set(t, "PAD ", sizeof t);
                 num_text((int32_t)i + 1, t + 4, 0);
-                app_say(t, lib_sel < 7u ? "A CHORD, KEPT" : "A PROGRESSION, KEPT");
+                app_say(t, ui.lib_t < NCTYPES ? "A CHORD FROM LIB" : "A PROGRESSION FROM LIB");
             }
-            if (pad_latched[i] && (pl[i].on || cp[i].on)) {   /* latched and playing: tapped again, it stops */
+            if (pad_latched[i] && (pl[i].on || cp[i].on)) {
                 pad_stop(i);
                 pad_held[i] = 0;
             } else {
@@ -1207,9 +1618,10 @@ static void input(void)
         } else if (!(keys & bit) && (ui.keys & bit)) {
             pad_held[i] = 0;
             if (!pad_latched[i]) {
+                pad_release_rec(i);
                 if (pads[i].type == PAD_CHORD)
                     ev_push(QE_CSTOP, i, 0);
-                else if (pl[i].looped)   /* let go after it looped: it stops */
+                else if (pl[i].looped)
                     ev_push(QE_PSTOP, i, 0);
             }
             ui.redraw = 1;
@@ -1221,13 +1633,15 @@ static void input(void)
         if ((keys & bit) && !(ui.keys & bit)) {
             uint8_t m = (uint8_t)clamp(deg_pitch((int32_t)i), 0, 127);
             uint32_t vel = touch_vel(k);
-            notes_on(k, &m, 1, vel ? vel : 100u, set.ch[1]);
+            notes_on(k, &m, 1, vel ? vel : 100u, set.ovr[16u + i] != CH_NONE ? set.ovr[16u + i] : set.ch[MS_BPADS]);
+            if (ui.screen == SCR_MIDI)
+                ui.m_sel = 16 + (int32_t)i;
             coach_event(CE_BPAD);
             ui.redraw = 1;
         } else if (!(keys & bit) && (ui.keys & bit))
             notes_off(k);
     }
-    /* the C pads: BASS, NO BASS, NO ROOT, LATCH */
+    /* the C pads: BASS, NO BASS, NO ROOT, TAP */
     for (i = 0; i < 4u; i++) {
         uint32_t bit = 1u << BK[7u + i];
         if ((keys & bit) && !(ui.keys & bit)) {
@@ -1235,19 +1649,24 @@ static void input(void)
                 set.bassm = (uint8_t)i;
                 rekey();
                 app_say("TYPE", BM_NAME[i]);
-            } else {
-                set.latch = (uint8_t)!set.latch;
-                set_dirty = 1;
-                if (!set.latch) {        /* LATCH off: what it kept going stops */
-                    uint32_t q;
-                    for (q = 0; q < NPADS; q++)
-                        if (pad_latched[q]) {
-                            pad_latched[q] = 0;
-                            if (!pad_held[q])
-                                ev_push(pads[q].type == PAD_PROG ? QE_PSTOP : QE_CSTOP, q, 0);
-                        }
-                }
-                app_say("LATCH", set.latch ? "ON: PADS KEEP PLAYING" : "OFF");
+            } else {                     /* TAP: the tempo from the last taps */
+                if (ui.tap_n && now - ui.tap[(ui.tap_n - 1u) % 4u] > 2000u)
+                    ui.tap_n = 0;
+                ui.tap[ui.tap_n % 4u] = now;
+                ui.tap_n++;
+                if (ui.tap_n >= 2u) {
+                    uint32_t n = ui.tap_n < 4u ? ui.tap_n : 4u, first = ui.tap[(ui.tap_n - n) % 4u];
+                    uint32_t avg = (now - first) / (n - 1u);
+                    if (avg) {
+                        char b[8];
+                        set.bpm = (uint8_t)clamp((int32_t)((60000u + avg / 2u) / avg), 40, 240);
+                        tempo = set.bpm;
+                        set_dirty = 1;
+                        num_text(set.bpm, b, 0);
+                        app_say("TAP", b);
+                    }
+                } else
+                    app_say("TAP", "KEEP TAPPING");
             }
             coach_event(CE_CPAD);
             ui.redraw = 1;
@@ -1257,189 +1676,318 @@ buttons:
     for (i = 0; i < NB; i++) {
         uint32_t bit = 1u << i;
         int down = (btn & bit) && !(ui.btn & bit), up = !(btn & bit) && (ui.btn & bit);
-        if (i == B_OCTDN || i == B_OCTUP) {
-            if (down && !(ui.btn & (1u << (i == B_OCTUP ? B_OCTDN : B_OCTUP))))
-                ui.oct_mod = 0;
-            if (up && !ui.oct_mod) {
+        if (i == B_OCTDN || i == B_OCTUP) {   /* the keyboard's octave */
+            if (down) {
                 int32_t o = clamp(set.octave + (i == B_OCTUP ? 1 : -1), -2, 2);
+                char t[16] = "KEYS ";
                 if (o != set.octave) {
-                    char t[4];
-                    num_text(o, t, 1);
                     set.octave = (int8_t)o;
                     set_dirty = 1;
-                    app_say("OCTAVE", t);
                 }
+                num_text(o, t + 5, 1);
+                app_say("OCTAVE", t);
+            }
+            continue;
+        }
+        if (i == B_HOME) {               /* HOME: a tap home; held, SHIFT */
+            if (down) {
+                ui.home_at = now ? now : 1u;
+                ui.shift_used = 0;
+            }
+            if (up) {
+                if (!ui.shift_used) {
+                    if (ui.coach == CS_CHOOSE) {
+                        ui.coach = CS_NONE;
+                        set.coach_set = 1;
+                        set_dirty = 1;
+                    } else if (ui.coach) {
+                        coach_end();
+                        app_say("STEPS", "HOLD SYS FOR THEM AGAIN");
+                    }
+                    if (ui.rs != RS_OFF && ui.rs != RS_REC) {
+                        ui.rs = RS_OFF;
+                        rec_on = 0;
+                    }
+                    ui.screen = SCR_HOME;
+                    ui.m_sel = -1;
+                }
+                ui.home_at = 0;
+            }
+            ui.redraw = 1;
+            continue;
+        }
+        if (i == B_SAVE) {               /* SAVE: a tap saves; held, LOAD (below) */
+            if (down)
+                ui.save_at = now ? now : 1u;
+            if (up) {
+                if (ui.save_at && ui.save_at != 0xFFFFFFFFu) {
+                    int r = session_save();
+                    app_say(r ? "SAVE" : "SAVED", r == -2 ? "TOO MANY NOTES" : r ? "FAILED" : "THE PADS AND SETTINGS");
+                }
+                ui.save_at = 0;
             }
             continue;
         }
         if (!down)
             continue;
-        if (ui.coach == CS_CHOOSE && i != B_PLAY && i != B_HOME)
-            continue;                    /* the choice first */
-        if (i == B_SAVE) {
-            if (plat_store_save(OBJ_SETTINGS, &set, sizeof set) == 0) {
-                set_dirty = 0;
-                app_say("SAVED", "KEY AND SETTINGS");
-            } else
-                app_say("SAVE", "FAILED");
-        } else if (i == B_PLAY) {
-            if (ui.coach == CS_CHOOSE) { /* the choice made */
+        if (ui.coach == CS_CHOOSE && i != B_PLAY)
+            continue;
+        if (i == B_PLAY) {
+            if (ui.coach == CS_CHOOSE) {
                 set.coach = ui.co_pick;
                 set.coach_set = 1;
-                set_dirty = 1;
                 plat_store_save(OBJ_SETTINGS, &set, sizeof set);
-                set_dirty = 0;
                 if (set.coach == CO_OFF) {
                     ui.coach = CS_NONE;
                     app_say("STEPS OFF", "HOLD SYS FOR THEM");
                 } else
                     coach_start();
+            } else if (shift()) {        /* SHIFT + PLAY: every pad cleared (LOCKed ones stay) */
+                uint32_t q;
+                undo_snap();
+                players_stop();
+                for (q = 0; q < NPADS; q++)
+                    if (!desc[q].lock) {
+                        desc[q].src = SRC_EMPTY;
+                        __builtin_memset(&pads[q], 0, sizeof pads[q]);
+                    }
+                ui.pad = -1;
+                app_say("PADS CLEARED", "ARP UNDOES IT. PRESET REFILLS");
             } else if (ui.screen == SCR_PICK) {
                 pick_use();
                 coach_event(CE_KEYSET);
             } else if (ui.screen == SCR_LIB) {   /* hear the pick */
                 pad_stop(PREVIEW);
-                if (lib_sel < 7u)
-                    make_chord(lib_sel, PREVIEW);
-                else
-                    make_prog(lib_sel - 7u, PREVIEW);
-                if (pads[PREVIEW].type == PAD_CHORD) {   /* a chord: a beat of it, as a phrase */
+                if (ui.lib_t < NCTYPES) {
+                    uint32_t k;
                     pad_t *p = &pads[PREVIEW];
-                    uint32_t k, nn = p->n;
-                    uint8_t nt[MAXN];
-                    for (k = 0; k < nn; k++)
-                        nt[k] = p->note[k];
+                    chord_into(p, ui.lib_sel, ui.lib_t);
                     p->type = PAD_PROG;
                     p->pn = 0;
                     p->len = (uint16_t)(PPQ * 2u);
-                    for (k = 0; k < nn; k++)
-                        ph_note(PREVIEW, nt[k], 0, PPQ * 2u - 10u, 100);
-                }
+                    for (k = 0; k < p->n; k++)
+                        ph_note(PREVIEW, p->note[k], 0, PPQ * 2u - 10u, 100);
+                } else
+                    prog_into(PREVIEW, ui.lib_sel, set.type, set.plays);
                 ev_push(QE_PSTART, PREVIEW, 100);
             } else {
-                players_stop();
-                app_say("ALL", "NOTES OFF");
+                all_notes_off();
+                app_say("STOP", "ALL NOTES OFF");
             }
-        } else if (i == B_HOME) {
-            if (ui.coach && ui.coach != CS_CHOOSE) {
-                coach_end();
-                app_say("STEPS", "HOLD SYS FOR THEM AGAIN");
-            } else if (ui.coach == CS_CHOOSE) {
-                ui.coach = CS_NONE;
-                set.coach_set = 1;
-                set_dirty = 1;
-            }
-            ui.screen = SCR_HOME;
-        } else if (i == B_EDIT) {        /* PICK NOTES */
+        } else if (i == B_EDIT) {
             if (ui.screen == SCR_PICK)
                 ui.screen = SCR_HOME;
             else {
                 pick_enter();
                 app_say("PICK NOTES", "PLAY A FEW YOU LIKE");
             }
-        } else if (i == B_SEL || i == B_LFO) {   /* LIB */
+        } else if (i == B_SEL) {         /* LIB */
             ui.screen = ui.screen == SCR_LIB ? SCR_HOME : SCR_LIB;
-        } else if (i == B_FX) {
-            ui.screen = ui.screen == SCR_FX ? SCR_HOME : SCR_FX;
-        } else if (i == B_GLO) {         /* SYS: tapped, the MIDI page; held, COACH (below) */
-        } else {
-            static const char *const LABEL[NB] = {"FX", "SEL", "ENV", "LFO", "EDIT", "SYS", "HOME", "SAVE",
-                                                  "ARP", "SEQ", "PLAY", "REC", "OCT-", "OCT+"};
-            app_say(LABEL[i], "COMING SOON");
+        } else if (i == B_ENV) {         /* PAD EDIT: the pad played last */
+            if (ui.screen == SCR_PAD)
+                ui.screen = SCR_HOME;
+            else if (ui.pad < 0 || pads[ui.pad].type == PAD_EMPTY)
+                app_say("PAD EDIT", "PLAY A PAD FIRST");
+            else
+                ui.screen = SCR_PAD;
+        } else if (i == B_LFO) {         /* LOCK the pad played last */
+            if (ui.pad < 0 || pads[ui.pad].type == PAD_EMPTY)
+                app_say("LOCK", "PLAY A PAD FIRST");
+            else {
+                char t[24] = "PAD ";
+                desc[ui.pad].lock = (uint8_t)!desc[ui.pad].lock;
+                if (!desc[ui.pad].lock)
+                    pad_make((uint32_t)ui.pad);
+                num_text(ui.pad + 1, t + 4, 0);
+                app_say(t, desc[ui.pad].lock ? "LOCKED: KEPT AS IT IS" : "UNLOCKED");
+                set_dirty = 1;
+            }
+        } else if (i == B_FX) {          /* MIDI */
+            ui.screen = ui.screen == SCR_MIDI ? SCR_HOME : SCR_MIDI;
+            ui.m_sel = -1;
+        } else if (i == B_ARP) {         /* UNDO */
+            undo_swap();
+        } else if (i == B_SEQ) {         /* LATCH */
+            set.latch = (uint8_t)!set.latch;
+            set_dirty = 1;
+            if (!set.latch) {
+                uint32_t q;
+                for (q = 0; q < NPADS; q++)
+                    if (pad_latched[q]) {
+                        pad_latched[q] = 0;
+                        if (!pad_held[q])
+                            ev_push(pads[q].type == PAD_PROG ? QE_PSTOP : QE_CSTOP, q, 0);
+                    }
+            }
+            app_say("LATCH", set.latch ? "ON: PADS KEEP PLAYING" : "OFF");
+        } else if (i == B_REC) {
+            if (ui.rs == RS_OFF)
+                rec_arm();
+            else if (ui.rs == RS_REC)
+                rec_stop();
+            else {
+                ui.rs = RS_OFF;
+                rec_on = 0;
+                app_say("REC", "CANCELLED");
+            }
         }
         ui.redraw = 1;
     }
-    /* ALGORITHM: the notes' length */
-    if ((e = plat_enc(EN_ALGO)) != 0) {
-        set.len = (int8_t)clamp(set.len + e, -5, 5);
-        app_say("LENGTH", LEN_NAME[set.len + 5]);
-        set_dirty = 1;
+    {                                    /* SAVE held 0.8 s: LOAD */
+        if (ui.save_at && ui.save_at != 0xFFFFFFFFu && now - ui.save_at >= 800u) {
+            ui.save_at = 0xFFFFFFFFu;
+            players_stop();
+            undo_snap();
+            if (plat_store_load(OBJ_SETTINGS, &set, sizeof set) != (int)sizeof set || set.magic != SET_MAGIC)
+                settings_defaults();
+            tempo = set.bpm;
+            app_say("LOAD", session_load() ? "NOTHING SAVED YET" : "THE SAVED PADS");
+            if (set.coach_set == 0)
+                set.coach_set = 1;
+        }
     }
     {
         int32_t es = plat_enc(EN_SELECT), k1 = plat_enc(EN_K1), k2 = plat_enc(EN_K2), k3 = plat_enc(EN_K3),
-                k4 = plat_enc(EN_K4), ek = plat_enc(EN_PRESET);
-        if ((es || k1 || k2 || k3 || k4 || ek) && (btn & (1u << B_OCTDN | 1u << B_OCTUP)))
-            ui.oct_mod = 1;
+                k4 = plat_enc(EN_K4), ek = plat_enc(EN_PRESET), ea = plat_enc(EN_ALGO);
+        if ((es || k1 || k2 || k3 || k4 || ek || ea) && (btn >> B_HOME & 1u))
+            ui.shift_used = 1;
         if (ui.coach == CS_CHOOSE) {
             if (es)
                 ui.co_pick = (uint8_t)clamp(ui.co_pick + es, CO_OFF, CO_ALWAYS);
-            es = k1 = k2 = k3 = k4 = ek = 0;
+            es = k1 = k2 = k3 = k4 = ek = ea = 0;
         }
         if (ui.screen == SCR_PICK) {
             if (es && fd_cnt)
                 fd_sel = (uint8_t)clamp((int32_t)fd_sel + es, 0, (int32_t)fd_cnt - 1);
-            if (k1) {                    /* CLEAR */
+            if (k1) {
                 fd_n = 0;
                 fd_pcs = 0;
                 fd_rank();
             }
-            es = k1 = k2 = k3 = k4 = ek = 0;
+            es = k1 = 0;
         } else if (ui.screen == SCR_LIB) {
+            if (k1) {                    /* the type shown: TRIADS .. ADD9, PROGRESSIONS */
+                ui.lib_t = (uint8_t)clamp(ui.lib_t + k1, 0, (int32_t)NCTYPES);
+                ui.lib_sel = 0;
+            }
             if (es)
-                lib_sel = (uint8_t)clamp((int32_t)lib_sel + es, 0, (int32_t)LIB_N - 1);
-            es = 0;
-        } else if (ui.screen == SCR_FX) {
+                ui.lib_sel = (uint8_t)clamp((int32_t)ui.lib_sel + es, 0, ui.lib_t < NCTYPES ? 6 : (int32_t)NPROGS - 1);
+            es = k1 = 0;
+        } else if (ui.screen == SCR_PAD && ui.pad >= 0) {   /* PAD EDIT */
+            pfx_t *f = &pfx[ui.pad];
+            if (ek) {
+                f->plays = (uint8_t)clamp(f->plays + ek, 0, PL_N - 1);
+                if (pads[ui.pad].type == PAD_PROG)
+                    pad_make((uint32_t)ui.pad);
+            }
             if (k1)
-                set.strum = (uint8_t)clamp(set.strum + 2 * k1, 0, 50);
+                f->speed = (uint8_t)clamp(f->speed + k1, 0, 6);
             if (k2)
-                set.human = (uint8_t)clamp(set.human + 5 * k2, 0, 50);
+                f->human = (uint8_t)clamp(f->human + 5 * k2, 0, 50);
             if (k3)
-                set.arprate = (uint8_t)clamp(set.arprate + k3, 0, 5);
-            if (k1 || k2 || k3)
+                f->len = (int8_t)clamp(f->len + k3, -5, 5);
+            if (k4)
+                f->inv = (int8_t)clamp(f->inv + k4, -3, 3);
+            if (es)
+                f->vel = (uint8_t)(f->vel ? clamp((int32_t)f->vel + 8 * es, 0, 127) : (es > 0 ? 40 : 0));
+            if (ea) {                    /* the pad's octave; SHIFT: every pad's */
+                if (shift()) {
+                    all_d = ea > 0 ? 1 : -1;
+                    all_pads(ap_oct);
+                    app_say("OCTAVE", "ALL PADS");
+                } else
+                    f->oct = (int8_t)clamp(f->oct + ea, -2, 2);
+            }
+            if (ek || k1 || k2 || k3 || k4 || es || ea)
                 set_dirty = 1;
-            k1 = k2 = k3 = k4 = 0;
+            es = k1 = k2 = k3 = k4 = ek = ea = 0;
         } else if (ui.screen == SCR_MIDI) {
-            int32_t kk[2] = {k1, k2};
-            uint32_t g;
-            for (g = 0; g < 2u; g++)
-                if (kk[g]) {
-                    players_stop();
-                    set.ch[g] = (uint8_t)clamp((int32_t)set.ch[g] + kk[g], 0, 15);
+            int32_t kk[5] = {k1, k2, k3, k4, ek};
+            static const uint8_t SEC[5] = {MS_CHORDS, MS_PROGS, MS_BPADS, MS_PICK, MS_LIB};
+            uint32_t g, q;
+            for (g = 0; g < 5u; g++)
+                if (kk[g]) {             /* a section's channel: its pads' own ones reset */
+                    uint32_t s = SEC[g];
+                    all_notes_off();
+                    set.ch[s] = (uint8_t)ch_step(set.ch[s], kk[g], 0);
+                    for (q = 0; q < NOVR; q++)
+                        if ((s == MS_CHORDS && q < 8u) || (s == MS_PROGS && q >= 8u && q < 16u) || (s == MS_BPADS && q >= 16u))
+                            set.ovr[q] = CH_NONE;
                     set_dirty = 1;
                 }
+            if (es && ui.m_sel >= 0) {   /* the pad picked: its own channel */
+                all_notes_off();
+                set.ovr[ui.m_sel] = (uint8_t)ch_step(set.ovr[ui.m_sel], es, 1);
+                set_dirty = 1;
+            }
+            es = k1 = k2 = k3 = k4 = ek = 0;
+        } else if (ui.screen == SCR_SETUP) {
+            if (k1) {
+                set.ble = (uint8_t)(k1 > 0);
+                plat_ble_enable(set.ble);
+            }
+            if (k2)
+                set.clk_out = (uint8_t)(k2 > 0);
+            if (k3)
+                set.clk_in = (uint8_t)(k3 > 0);
             if (k4) {
                 set.coach = (uint8_t)clamp(set.coach + k4, CO_OFF, CO_ALWAYS);
                 set.coach_set = 1;
-                set_dirty = 1;
             }
+            if (k1 || k2 || k3 || k4)
+                set_dirty = 1;
             k1 = k2 = k3 = k4 = 0;
         }
-        /* everywhere else: the home knobs */
-        if (ek) {                        /* PRESET: the key's root */
+        /* home's knobs, everywhere they're not used */
+        if (ek) {                        /* PRESET: the key's root (cleared pads come back) */
             char t[24];
+            uint32_t q;
             set.root = (uint8_t)(((int32_t)set.root + ek % 12 + 12) % 12);
+            for (q = 0; q < NPADS; q++)
+                if (desc[q].src == SRC_EMPTY) {
+                    desc[q].src = SRC_KIT;
+                    desc[q].a = (uint8_t)q;
+                }
             rekey();
             key_name(set.root, set.scale, t);
             app_say("KEY", t);
         }
-        if (k1) {                        /* K1: the scale */
+        if (k1) {
             char t[24];
             set.scale = (uint8_t)(((int32_t)set.scale + k1 % (int32_t)NSCALES + (int32_t)NSCALES) % (int32_t)NSCALES);
             rekey();
             key_name(set.root, set.scale, t);
             app_say("KEY", t);
         }
-        if (k2) {                        /* K2: the chords' type */
+        if (k2) {
             set.type = (uint8_t)clamp(set.type + k2, 0, (int32_t)NCTYPES - 1);
             rekey();
             app_say("TYPE", CTYPE_NAME[set.type]);
             coach_event(CE_SHAPE);
         }
-        if (k3) {                        /* K3: how the pads play */
+        if (k3) {                        /* every pad plays so */
             set.plays = (uint8_t)clamp(set.plays + k3, 0, PL_N - 1);
+            all_pads(ap_plays);
             rekey();
-            app_say("PLAYS", PLAYS_NAME[set.plays]);
+            app_say("PLAYS, ALL PADS", PLAYS_NAME[set.plays]);
             coach_event(CE_SHAPE);
         }
-        if (k4) {                        /* K4: humanize */
+        if (k4) {
             char t[8];
             set.human = (uint8_t)clamp(set.human + 5 * k4, 0, 50);
+            all_pads(ap_human);
             num_text(set.human * 2, t, 0);
             text_cat(t, "%");
-            app_say("HUMANIZE", t);
+            app_say("HUMANIZE, ALL PADS", t);
             set_dirty = 1;
         }
-        if (es) {                        /* SELECT: BPM */
+        if (ea) {
+            set.len = (int8_t)clamp(set.len + ea, -5, 5);
+            all_pads(ap_len);
+            app_say("LENGTH, ALL PADS", LEN_NAME[set.len + 5]);
+            set_dirty = 1;
+        }
+        if (es) {
             char b[8];
             set.bpm = (uint8_t)clamp((int32_t)set.bpm + es, 40, 240);
             tempo = set.bpm;
@@ -1447,11 +1995,10 @@ buttons:
             app_say("BPM", b);
             set_dirty = 1;
         }
-        if (es || k1 || k2 || k3 || k4 || ek)
+        if (es || k1 || k2 || k3 || k4 || ek || ea)
             ui.redraw = 1;
     }
-    {                                    /* SYS: a tap, the MIDI page; held 0.8 s, COACH */
-        uint32_t now = plat_ms();
+    {                                    /* SYS: a tap, SETUP; held 0.8 s, COACH */
         if (btn & 1u << B_GLO) {
             if (!ui.sys_at)
                 ui.sys_at = now ? now : 1u;
@@ -1461,7 +2008,7 @@ buttons:
             }
         } else {
             if (ui.sys_at && ui.sys_at != 0xFFFFFFFFu && ui.coach != CS_CHOOSE) {
-                ui.screen = ui.screen == SCR_MIDI ? SCR_HOME : SCR_MIDI;
+                ui.screen = ui.screen == SCR_SETUP ? SCR_HOME : SCR_SETUP;
                 ui.redraw = 1;
             }
             ui.sys_at = 0;
@@ -1476,19 +2023,16 @@ buttons:
 void app_input_only(void) { input(); }
 
 /* ================================================================= lights === */
-/* home: the A pads dim, held or playing full; the B pads show the chord you played: the bass full (blinking when
- * NO BASS or NO ROOT takes it out), the rest of the chord mid, the key dim; the C pad in use full, LATCH full when
- * on. COACH: what the step means blinks */
 static void lights(void)
 {
     uint32_t i, bright = 0, dim = 0, mid = 0, btn = 0, now = plat_ms();
-    int blink = (now / 260u) & 1u;
+    int blink = (now / 260u) & 1u, fast = (now / 130u) & 1u;
     if (ui.coach == CS_CHOOSE) {
         plat_lights(blink ? 1u << B_PLAY : 0u, 0, 0, 0, 1);
         plat_lights_mid(0, 0);
         return;
     }
-    if (ui.screen == SCR_PICK) {         /* the notes picked full, the rest of the scale shown dim */
+    if (ui.screen == SCR_PICK) {
         uint16_t sm = fd_cnt ? scale_mask(fd_list[fd_sel] >> 4, fd_list[fd_sel] & 15u) : 0;
         for (i = 0; i < NKEYS; i++) {
             uint32_t pc = (uint32_t)(53 + (int32_t)i) % 12u;
@@ -1497,7 +2041,7 @@ static void lights(void)
             else if (sm >> pc & 1u)
                 dim |= 1u << i;
         }
-        if (ui.coach == CS_NOTES && !fd_n && blink)   /* every key: play me */
+        if (ui.coach == CS_NOTES && !fd_n && blink)
             for (i = 0; i < NKEYS; i++)
                 dim |= 1u << i;
         btn = 1u << B_EDIT;
@@ -1509,24 +2053,45 @@ static void lights(void)
     }
     for (i = 0; i < 16u; i++) {
         uint32_t bit = 1u << WK[i];
+        if (ui.rs == RS_PICK) {          /* REC: the pads you can record into blink */
+            if (!desc[i].lock && blink)
+                bright |= bit;
+            continue;
+        }
+        if ((ui.rs == RS_COUNT || ui.rs == RS_REC) && i == ui.rpad) {
+            if (ui.rs == RS_REC || fast)
+                bright |= bit;
+            continue;
+        }
+        if (ui.screen == SCR_MIDI) {     /* pads with their own channel full, the picked one blinking */
+            if ((int32_t)i == ui.m_sel ? blink : set.ovr[i] != CH_NONE)
+                bright |= bit;
+            else
+                dim |= bit;
+            continue;
+        }
         if ((ui.keys & bit) || pl[i].on || cp[i].on)
             bright |= bit;
         else if (ui.screen == SCR_LIB)
-            mid |= bit;                  /* drop targets */
+            mid |= bit;
         else if (ui.coach == CS_PADS) {
             if (blink)
                 bright |= bit;
             else
                 dim |= bit;
-        }
-        else if (pads[i].type != PAD_EMPTY)
+        } else if (pads[i].type != PAD_EMPTY)
             dim |= bit;
     }
     {
         cur_t c = cur_chord();
         for (i = 0; i < 7u; i++) {
             uint32_t bit = 1u << BK[i], pc = deg_pc((int32_t)i);
-            if (ui.keys & bit)
+            if (ui.screen == SCR_MIDI) {
+                if (16 + (int32_t)i == ui.m_sel ? blink : set.ovr[16u + i] != CH_NONE)
+                    bright |= bit;
+                else
+                    dim |= bit;
+            } else if (ui.keys & bit)
                 bright |= bit;
             else if (c.ok && pc == c.bass) {
                 if (c.bass_on || blink)
@@ -1543,7 +2108,7 @@ static void lights(void)
     }
     for (i = 0; i < 4u; i++) {
         uint32_t bit = 1u << BK[7u + i];
-        int on = i < 3u ? set.bassm == i : set.latch;
+        int on = i < 3u ? set.bassm == i : (int)((now * (uint32_t)tempo / 60u) % 1000u < 120u);   /* TAP: the beat */
         if (on || (ui.keys & bit) || (ui.coach == CS_CPADS && blink))
             bright |= bit;
         else
@@ -1551,13 +2116,19 @@ static void lights(void)
     }
     if (set_dirty)
         btn |= 1u << B_SAVE;
-    btn |= 1u << (ui.screen == SCR_LIB ? B_SEL : ui.screen == SCR_FX ? B_FX : ui.screen == SCR_MIDI ? B_GLO : B_HOME);
-    if (ui.screen == SCR_LIB)
+    if (set.latch)
+        btn |= 1u << B_SEQ;
+    if (ui.pad >= 0 && desc[ui.pad].lock)
         btn |= 1u << B_LFO;
+    if (U.have)
+        btn |= 1u << B_ARP;
+    if (ui.rs == RS_REC || ((ui.rs == RS_PICK || ui.rs == RS_COUNT) && blink))
+        btn |= 1u << B_REC;
+    btn |= 1u << (ui.screen == SCR_LIB ? B_SEL : ui.screen == SCR_PAD ? B_ENV : ui.screen == SCR_MIDI ? B_FX
+                  : ui.screen == SCR_SETUP ? B_GLO : B_HOME);
     plat_lights(btn | ui.btn, bright, 0, dim, 1);
     plat_lights_mid(0, mid);
 }
-
 /* ================================================================ drawing === */
 /* the Earth Science palette: Earth, Air, Fire, Water; ink, slate, purple and white for the rest */
 static const uint16_t EARTH_C = RGB(0x7C, 0x5D, 0x48), AIR_C = RGB(0xAD, 0xCF, 0xDE), FIRE_C = RGB(0xDC, 0x7B, 0x78),
@@ -1716,35 +2287,41 @@ static void draw_bpads(int32_t y)
     }
 }
 
+
 /* the bottom half at home: the 16 A pads, the C pads, the knobs */
 static void draw_home_bottom(void)
 {
     uint32_t i;
     lab_begin();
-    for (i = 0; i < 16u; i++) {          /* two rows of 8: the chords, the progressions */
+    for (i = 0; i < 16u; i++) {
         int32_t x = 4 + (int32_t)(i % 8u) * 29, y = 2 + (int32_t)(i / 8u) * 23;
         int on = (int)(ui.keys >> WK[i] & 1u) || pl[i].on || cp[i].on;
         const pad_t *p = &pads[i];
-        uint16_t bg = p->type == PAD_PROG ? (on ? WATER_C : ES_PURPLE) : (on ? EARTH_C : ES_SLATE);
+        uint16_t bg = p->type == PAD_EMPTY ? ES_INK : p->type == PAD_PROG ? (on ? WATER_C : ES_PURPLE) : (on ? EARTH_C : ES_SLATE);
         char t[8];
         cv_rect(x, y, 27, 21, bg);
+        if (p->type == PAD_EMPTY)
+            cv_rect(x, y + 20, 27, 1, ES_SLATE);
         if ((int32_t)i == ui.pad)
             cv_rect(x, y + 18, 27, 3, AIR_C);
-        if (p->lock)
+        if (desc[i].lock)
             cv_rect(x + 22, y, 5, 5, AIR_C);
         if (p->type == PAD_CHORD)
             str_set(t, p->roman, sizeof t);
-        else {
+        else if (desc[i].src == SRC_REC)
+            str_set(t, "REC", sizeof t);
+        else if (p->type == PAD_PROG) {
             t[0] = 'P';
-            num_text((int32_t)i - 7, t + 1, 0);
-        }
+            num_text(desc[i].src == SRC_LIBP ? desc[i].a + 1 : (int32_t)i - 7, t + 1, 0);
+        } else
+            t[0] = 0;
         cv_text(x + (27 - text_w(&FONT_XS, t)) / 2, y + 4, &FONT_XS, t, on ? ES_INK : C_WHITE);
     }
     for (i = 0; i < 4u; i++) {           /* the C pads */
-        static const char *const CN[4] = {"BASS", "NO BASS", "NO ROOT", "LATCH"};
+        static const char *const CN[4] = {"BASS", "NO BASS", "NO ROOT", "TAP"};
         int32_t x = 4 + (int32_t)i * 58;
-        int on = i < 3u ? set.bassm == i : set.latch;
-        cv_rect(x, 50, 56, 16, on ? (i < 3u ? EARTH_C : FIRE_C) : ES_SLATE);
+        int on = i < 3u && set.bassm == i;
+        cv_rect(x, 50, 56, 16, on ? EARTH_C : ES_SLATE);
         cv_text(x + (56 - text_w(&FONT_XS, CN[i])) / 2, 52, &FONT_XS, CN[i], C_WHITE);
     }
     {
@@ -1760,20 +2337,43 @@ static void draw_home_bottom(void)
     cv_blit(0, 120);
 }
 
+static void pad_heading(char *t)         /* "PAD 3  Em7" */
+{
+    const pad_t *p = &pads[ui.pad];
+    str_set(t, "PAD ", 24);
+    num_text(ui.pad + 1, t + 4, 0);
+    text_cat(t, "  ");
+    if (p->type == PAD_CHORD) {
+        char rn[4];
+        spell(p->root_pc, tonic_letter() + p->deg, rn);
+        text_cat(t, rn);
+        text_cat(t, p->qual);
+    } else
+        text_cat_n(t, p->title, 24);
+}
 static void draw_home_top(void)
 {
     const pad_t *p = ui.pad >= 0 ? &pads[ui.pad] : 0;
     int32_t x;
     lab_begin();
-    top_bar("SEED", EARTH_C);
-    if (p && p->type == PAD_CHORD) {
-        char t[24], r[2] = {p->nm[0][0], 0};
+    top_bar(ui.rs == RS_REC ? "REC" : ui.rs ? "REC?" : "SEED", ui.rs ? FIRE_C : EARTH_C);
+    if (set.latch)
+        cv_text(234 - text_w(&FONT_XS, "LATCH"), 30, &FONT_XS, "LATCH", FIRE_C);
+    if (ui.rs == RS_PICK) {
+        text_c(40, &FONT_M, "TAP A PAD", C_WHITE);
+        text_c(64, &FONT_XS, "TO RECORD INTO. REC AGAIN: CANCEL", LAB_LABEL);
+    } else if (ui.rs == RS_COUNT || ui.rs == RS_REC) {
+        char t[24] = "PAD ";
+        num_text(ui.rpad + 1, t + 4, 0);
+        text_c(40, &FONT_M, ui.rs == RS_COUNT ? "COUNT IN" : "RECORDING", ui.rs == RS_COUNT ? AIR_C : FIRE_C);
+        text_c(64, &FONT_B, t, C_WHITE);
+    } else if (p && p->type == PAD_CHORD) {
+        char t[24], r[2], rn[4];
         const char *acc;
         int32_t w;
-        /* the chord's name from its root (as written, the bass mode aside) */
-        char rn[4];
         spell(p->root_pc, tonic_letter() + p->deg, rn);
         r[0] = rn[0];
+        r[1] = 0;
         acc = rn + 1;
         str_set(t, "PAD ", sizeof t);
         num_text(ui.pad + 1, t + 4, 0);
@@ -1789,7 +2389,7 @@ static void draw_home_top(void)
     } else if (p && p->type == PAD_PROG) {
         char t[24] = "PAD ";
         num_text(ui.pad + 1, t + 4, 0);
-        text_cat(t, ", PROGRESSION");
+        text_cat(t, desc[ui.pad].src == SRC_REC ? ", RECORDED" : ", PROGRESSION");
         cv_text(8, 32, &FONT_B, t, LAB_LABEL);
         text_c(56, &FONT_B, p->title, C_WHITE);
     } else {
@@ -1848,20 +2448,18 @@ static void draw_pick_bottom(void)
 
 static void lib_label(uint32_t s, char *t)
 {
-    if (s < 7u) {
-        uint8_t dim;
-        char r[6];
-        chord_label(s, t);
+    uint8_t dim;
+    char r[6];
+    if (ui.lib_t < NCTYPES) {
+        chord_label(s, ui.lib_t, t);
         roman_of(s, r, &dim);
         text_cat(t, "  ");
         text_cat(t, r);
     } else {
         uint32_t k;
-        uint8_t dim;
         str_set(t, "", 24);
         for (k = 0; k < 4u; k++) {
-            char r[6];
-            roman_of(PROGS[s - 7u][k], r, &dim);
+            roman_of(PROGS[s % NPROGS][k], r, &dim);
             if (k)
                 text_cat(t, " ");
             text_cat(t, r);
@@ -1870,72 +2468,125 @@ static void lib_label(uint32_t s, char *t)
 }
 static void draw_lib(void)
 {
-    uint32_t i, first;
+    uint32_t i, first, n = ui.lib_t < NCTYPES ? 7u : NPROGS;
     lab_begin();
     top_bar("LIB", ES_PURPLE);
-    text_c(40, &FONT_B, lib_sel < 7u ? "YOUR KEY'S CHORDS" : "PROGRESSIONS", LAB_LABEL);
     {
-        char t[24];
-        lib_label(lib_sel, t);
-        text_c(62, fit_font(t, 230, &FONT_M), t, C_WHITE);
+        char t[32] = "K1: ";
+        text_cat(t, ui.lib_t < NCTYPES ? CTYPE_NAME[ui.lib_t] : "PROGRESSIONS");
+        text_c(34, &FONT_B, t, AIR_C);
+        lib_label(ui.lib_sel, t);
+        text_c(58, fit_font(t, 230, &FONT_M), t, C_WHITE);
     }
     text_c(96, &FONT_XS, "PLAY: HEAR IT. A WHITE KEY: PUT IT THERE", LAB_LABEL);
     cv_blit(0, 0);
     lab_begin();
-    first = lib_sel > 1u ? lib_sel - 1u : 0u;
-    for (i = 0; i < 4u && first + i < LIB_N; i++) {
+    first = ui.lib_sel > 1u ? ui.lib_sel - 1u : 0u;
+    for (i = 0; i < 4u && first + i < n; i++) {
         char t[24];
         uint32_t k = first + i;
         int32_t y = 8 + (int32_t)i * 26;
         lib_label(k, t);
-        if (k == lib_sel)
+        if (k == ui.lib_sel)
             cv_rect(2, y - 2, 236, 22, AIR_C);
-        cv_text(10, y, &FONT_B, t, k == lib_sel ? ES_INK : C_WHITE);
+        cv_text(10, y, &FONT_B, t, k == ui.lib_sel ? ES_INK : C_WHITE);
     }
     cv_blit(0, 120);
 }
 
-static void draw_fx(void)
+static void draw_pad(void)               /* PAD EDIT, as the web's pad edit window */
 {
-    static const char *const LBL[4] = {"K1 STRUM", "K2 HUMAN", "K3 ARP", ""};
-    char v[4][12];
+    const pfx_t *f = &pfx[ui.pad];
+    char t[32], v[4][12];
+    static const char *const LBL[4] = {"K1 SPEED", "K2 HUMAN", "K3 LENGTH", "K4 INVERT"};
     lab_begin();
-    top_bar("FX", WATER_C);
-    text_c(44, &FONT_B, "HOW THE PADS PLAY", C_WHITE);
-    text_c(66, &FONT_XS, "STRUM: CHORD. ARP: THE ARP'S SPEED", LAB_LABEL);
+    top_bar("PAD EDIT", AIR_C);
+    pad_heading(t);
+    text_c(32, fit_font(t, 230, &FONT_B), t, C_WHITE);
+    cv_text(8, 56, &FONT_XS, "PRESET PLAYS", LAB_LABEL);
+    cv_text(8, 68, &FONT_M, PLAYS_NAME[f->plays % PL_N], FIRE_C);
+    cv_text(130, 56, &FONT_XS, "SELECT VELOCITY", LAB_LABEL);
+    if (f->vel)
+        num_text(f->vel, t, 0);
+    else
+        str_set(t, "AS PLAYED", sizeof t);
+    cv_text(130, 70, &FONT_B, t, C_WHITE);
+    cv_text(130, 92, &FONT_XS, "ALGO OCTAVE", LAB_LABEL);
+    num_text(f->oct, t, 1);
+    cv_text(200, 90, &FONT_B, t, C_WHITE);
+    cv_text(8, 96, &FONT_XS, desc[ui.pad].lock ? "LOCKED (LFO)" : "LFO: LOCK IT", LAB_LABEL);
     cv_blit(0, 0);
     lab_begin();
-    num_text(set.strum * 2, v[0], 0);
-    text_cat(v[0], "MS");
-    num_text(set.human * 2, v[1], 0);
+    num_text(SPEED_PCT[f->speed % 7u], v[0], 0);
+    text_cat(v[0], "%");
+    num_text(f->human * 2, v[1], 0);
     text_cat(v[1], "%");
-    str_set(v[2], ARP_RATE_NAME[set.arprate % 6u], sizeof v[2]);
-    v[3][0] = 0;
-    bottom_bar(40, LBL, v);
+    str_set(v[2], f->len ? LEN_NAME[f->len + 5] : "AS IS", sizeof v[2]);
+    num_text(f->inv, v[3], f->inv != 0);
+    bottom_bar(8, LBL, v);
+    text_c(66, &FONT_XS, "SHIFT (HOLD HOME) + ALGO: EVERY PAD'S OCTAVE", LAB_LABEL);
     cv_blit(0, 120);
 }
 
 static void draw_midi(void)
 {
-    static const char *const LBL[4] = {"K1 A PADS", "K2 B PADS", "", "K4 STEPS"};
-    char v[4][12];
+    static const char *const SN[5] = {"PRESET  LIB PREVIEWS", "K1  PADS 1 TO 8", "K2  PADS 9 TO 16",
+                                      "K3  B PADS", "K4  PICK NOTES"};
+    static const uint8_t SEC[5] = {MS_LIB, MS_CHORDS, MS_PROGS, MS_BPADS, MS_PICK};
+    uint32_t i;
+    char t[24], c[12];
     lab_begin();
-    top_bar("SYS", ES_PURPLE);
-    text_c(40, &FONT_B, "MIDI OUT CHANNELS", C_WHITE);
-    text_c(64, &FONT_XS, "HOLD SYS FOR THE STEPS", LAB_LABEL);
+    top_bar("MIDI", WATER_C);
+    text_c(32, &FONT_XS, set.ble ? "OUT OVER USB AND BLUETOOTH" : "OUT OVER USB (BLUETOOTH OFF: SYS)", LAB_LABEL);
+    if (ui.m_sel >= 0) {
+        if (ui.m_sel < 16) {
+            str_set(t, "PAD ", sizeof t);
+            num_text(ui.m_sel + 1, t + 4, 0);
+        } else {
+            str_set(t, "B PAD ", sizeof t);
+            num_text(ui.m_sel - 15, t + 6, 0);
+        }
+        text_c(48, &FONT_M, t, C_WHITE);
+        str_set(t, "SELECT: ", sizeof t);
+        text_cat(t, ch_name(set.ovr[ui.m_sel], c));
+        text_c(78, &FONT_B, t, FIRE_C);
+    } else {
+        text_c(50, &FONT_B, "TAP A PAD OR KEY", C_WHITE);
+        text_c(70, &FONT_XS, "TO GIVE IT ITS OWN CHANNEL (SELECT)", LAB_LABEL);
+    }
     cv_blit(0, 0);
     lab_begin();
-    str_set(v[0], "CH ", sizeof v[0]);
-    num_text(set.ch[0] + 1, v[0] + 3, 0);
-    str_set(v[1], "CH ", sizeof v[1]);
-    num_text(set.ch[1] + 1, v[1] + 3, 0);
-    v[2][0] = 0;
-    str_set(v[3], set.coach == CO_OFF ? "OFF" : set.coach == CO_FIRST ? "FIRST" : "ALWAYS", sizeof v[3]);
-    bottom_bar(40, LBL, v);
+    for (i = 0; i < 5u; i++) {
+        int32_t y = 4 + (int32_t)i * 23;
+        cv_text(8, y + 2, &FONT_B, SN[i], C_WHITE);
+        ch_name(set.ch[SEC[i]], c);
+        cv_rect(170, y, 66, 20, set.ch[SEC[i]] >= CH_OFF ? ES_SLATE : WATER_C);
+        cv_text(170 + (66 - text_w(&FONT_B, c)) / 2, y + 2, &FONT_B, c, set.ch[SEC[i]] >= CH_OFF ? C_WHITE : ES_INK);
+    }
     cv_blit(0, 120);
 }
 
-/* COACH: the step's card over the top half, the screen it means under it */
+static int clock_ext(void) { return set.clk_in && clk_seen && clock_smp - clk_seen < 22050u; }
+static void draw_setup(void)
+{
+    static const char *const LBL[4] = {"K1 BT MIDI", "K2 CLK OUT", "K3 CLK IN", "K4 STEPS"};
+    char v[4][12], t[24];
+    lab_begin();
+    top_bar("SETUP", ES_PURPLE);
+    num_text((int32_t)tempo, t, 0);
+    text_cat(t, clock_ext() ? " BPM, FROM CLOCK IN" : " BPM (SELECT, OR TAP)");
+    text_c(40, &FONT_B, t, C_WHITE);
+    text_c(66, &FONT_XS, "HOLD SYS: THE STEPS. HOLD SAVE: LOAD", LAB_LABEL);
+    cv_blit(0, 0);
+    lab_begin();
+    str_set(v[0], set.ble ? "ON" : "OFF", sizeof v[0]);
+    str_set(v[1], set.clk_out ? "ON" : "OFF", sizeof v[1]);
+    str_set(v[2], set.clk_in ? "ON" : "OFF", sizeof v[2]);
+    str_set(v[3], set.coach == CO_OFF ? "OFF" : set.coach == CO_FIRST ? "FIRST" : "ALWAYS", sizeof v[3]);
+    bottom_bar(30, LBL, v);
+    cv_blit(0, 120);
+}
+
 static void draw_coach_top(void)
 {
     char t[24];
@@ -1954,7 +2605,7 @@ static void draw_coach_top(void)
         pill(4, 3, t, AIR_C, ES_INK);
         cv_text(234 - text_w(&FONT_XS, "HOME: SKIP"), 9, &FONT_XS, "HOME: SKIP", LAB_LABEL);
         cv_text(8, 30, fit_font(coach_title(ui.coach), 224, &FONT_M), coach_title(ui.coach), FIRE_C);
-        if (ui.coach >= CS_PADS) {       /* the B pads under it, as at home */
+        if (ui.coach >= CS_PADS) {
             wrap(8, 52, 224, &FONT_B, 17, coach_text(ui.coach), C_WHITE, 2);
             draw_bpads(88);
         } else
@@ -1999,16 +2650,17 @@ void app_init(void)
     pal[4] = RGB(0xFF, 0xFF, 0xFF);
     {
         int got = plat_store_load(OBJ_SETTINGS, &set, sizeof set);
+        uint32_t i, bad = 0;
+        for (i = 0; i < MS_N; i++)
+            bad |= set.ch[i] > CH_OFF;
         if (got != (int)sizeof set || set.magic != SET_MAGIC || set.root > 11u || set.scale >= NSCALES ||
             set.octave < -2 || set.octave > 2 || set.type >= NCTYPES || set.plays >= PL_N || set.bassm >= BM_N ||
-            set.human > 50u || set.strum > 50u || set.len < -5 || set.len > 5 || set.bpm < 40u || set.bpm > 240u ||
-            set.arprate > 5u || set.ch[0] > 15u || set.ch[1] > 15u || set.ch[2] > 15u || set.coach >= CO_N) {
+            set.human > 50u || set.len < -5 || set.len > 5 || set.bpm < 40u || set.bpm > 240u || set.coach >= CO_N || bad)
             settings_defaults();
-            first_boot = 1;
-        }
     }
     tempo = set.bpm;
-    kit_build();
+    kit_fresh();
+    session_load();                      /* the saved pads, if any */
 }
 
 void app_ui_init(void)
@@ -2025,22 +2677,29 @@ void app_ui_init(void)
 
 void app_frame(void)
 {
-    static uint32_t last_on, last_blink;
+    static uint32_t last_on;
     uint32_t now = plat_ms(), i, on = 0;
-    (void)first_boot;
     input();
     lights();
     ann_tick(now);
+    if (clock_ext() && clk_avg) {        /* MIDI clock in: the BPM follows it */
+        uint32_t b = (uint32_t)(SR * 60.0f * 16.0f / (24.0f * (float)clk_avg) + 0.5f);
+        if (b >= 30u && b <= 300u && b != tempo) {
+            tempo = b;
+            ui.redraw = 1;
+        }
+    } else if (tempo != set.bpm && !clock_ext())
+        tempo = set.bpm;
     for (i = 0; i <= NPADS; i++)
         on |= (uint32_t)(pl[i].on | (i < NPADS ? cp[i].on : 0)) << i;
     if (on != last_on) {
         last_on = on;
         ui.redraw = 1;
     }
-    if (ui.pad >= 0 && pl[ui.pad].on) {  /* a progression playing: its bar moves the B pads */
-        static uint32_t bar_at;
-        if (now - bar_at >= 100u) {
-            bar_at = now;
+    if ((ui.pad >= 0 && pl[ui.pad].on) || ui.rs) {
+        static uint32_t at;
+        if (now - at >= 100u) {
+            at = now;
             ui.redraw = 1;
         }
     }
@@ -2048,11 +2707,8 @@ void app_frame(void)
         ui.msg_until = 0;
         ui.redraw = 1;
     }
-    if (now / 260u != last_blink) {      /* (the screen's muted keys don't blink: only the lights) */
-        last_blink = now / 260u;
-    }
 #ifndef PLAT_HOST
-    if (now - ui.boot_at < 2600u) {      /* SEED's splash, about 2.5 s */
+    if (now - ui.boot_at < 2600u) {
         if (!splash_done) {
             splash_done = 1;
             draw_splash();
@@ -2075,10 +2731,12 @@ void app_frame(void)
             draw_pick_bottom();
         } else if (ui.screen == SCR_LIB)
             draw_lib();
-        else if (ui.screen == SCR_FX)
-            draw_fx();
+        else if (ui.screen == SCR_PAD && ui.pad >= 0)
+            draw_pad();
         else if (ui.screen == SCR_MIDI)
             draw_midi();
+        else if (ui.screen == SCR_SETUP)
+            draw_setup();
         else {
             if (!ui.coach)
                 draw_home_top();
@@ -2131,18 +2789,43 @@ int app_expect(const char *what, int *got)
         *got = fd_n;
     else if (!strcmp(what, "midi_ch"))
         *got = ch_last;
-    else if (!strncmp(what, "padnote", 7)) {   /* padnoteK: the last pad's K-th note */
+    else if (!strcmp(what, "bpm"))
+        *got = (int)tempo;
+    else if (!strcmp(what, "rec"))
+        *got = ui.rs;
+    else if (!strcmp(what, "ble"))
+        *got = set.ble;
+    else if (!strncmp(what, "padnote", 7)) {
         int k = atoi(what + 7);
         *got = ui.pad >= 0 && k < pads[ui.pad].n ? pads[ui.pad].note[k] : -1;
-    } else if (!strncmp(what, "padn", 4))   /* padnN: pad N's notes (a chord) or phrase notes */
+    } else if (!strncmp(what, "padn", 4))
         *got = pads[atoi(what + 4) % NPADS].type == PAD_CHORD ? pads[atoi(what + 4) % NPADS].n
-                                                               : pads[atoi(what + 4) % NPADS].pn; else if (!strncmp(what, "playing", 7)) {
+                                                               : pads[atoi(what + 4) % NPADS].pn;
+    else if (!strncmp(what, "padtype", 7))
+        *got = pads[atoi(what + 7) % NPADS].type;
+    else if (!strncmp(what, "playing", 7)) {
         int k = atoi(what + 7) % (NPADS + 1);
         *got = pl[k].on || (k < (int)NPADS && cp[k].on);
     } else if (!strncmp(what, "lock", 4))
-        *got = pads[atoi(what + 4) % NPADS].lock;
+        *got = desc[atoi(what + 4) % NPADS].lock;
+    else if (!strncmp(what, "src", 3))
+        *got = desc[atoi(what + 3) % NPADS].src;
+    else if (!strncmp(what, "inv", 3))
+        *got = pfx[atoi(what + 3) % NPADS].inv;
+    else if (!strncmp(what, "ovr", 3))
+        *got = set.ovr[atoi(what + 3) % NOVR];
+    else if (!strncmp(what, "secch", 5))
+        *got = set.ch[atoi(what + 5) % MS_N];
     else
         return 0;
     return 1;
 }
 #endif
+
+int seed_ble_on(void)                    /* (app.h APP_BLE_AT_BOOT: before app_init has the settings, read them) */
+{
+    settings_t s;
+    if (plat_store_load(OBJ_SETTINGS, &s, sizeof s) != (int)sizeof s || s.magic != SET_MAGIC)
+        return 1;
+    return s.ble != 0;
+}
