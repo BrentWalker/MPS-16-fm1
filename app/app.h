@@ -14,8 +14,8 @@
 int seed_ble_on(void);
 
 /* the store: the app's objects and their flash offsets (the panel calibration is the platform's) */
-enum { OBJ_SETTINGS, OBJ_PANEL, OBJ_BLE, OBJ_SESS, OBJ_NOTES, OBJ_NOBJ };
-#define APP_STORE_MAP {0xFC000u, 0xDC000u, 0xDE000u, 0xD8000u, 0xDA000u}
+enum { OBJ_SETTINGS, OBJ_PANEL, OBJ_BLE, OBJ_SESS, OBJ_NOTES, OBJ_LOOP, OBJ_NOBJ };
+#define APP_STORE_MAP {0xFC000u, 0xDC000u, 0xDE000u, 0xD8000u, 0xDA000u, 0xD6000u}
 
 /* the contract: the platform calls these */
 void app_init(void);

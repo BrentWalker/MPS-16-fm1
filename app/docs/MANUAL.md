@@ -16,7 +16,7 @@ This is an early test build by BeatSmith.
 5. [PICK NOTES](#5-pick-notes)
 6. [LIB](#6-lib)
 7. [EDIT and LOCK](#7-edit-and-lock)
-8. [REC, UNDO, SAVE and LOAD](#8-rec-undo-save-and-load)
+8. [LOOP, UNDO, SAVE and LOAD](#8-loop-undo-save-and-load)
 9. [SOUND, MIDI and SETUP](#9-sound-midi-and-setup)
 10. [All the controls](#10-all-the-controls)
 
@@ -45,7 +45,7 @@ the step, it moves on by itself:
 5. **SHAPE IT**: turn K2 for 7ths and 9ths, K3 for how the pads play.
 6. **BASS OR NOT**: try one of the last four black keys.
 
-**HOME** skips the steps. **Hold SYS** to start them again any time.
+**HOME** skips the steps. **HOME + SYS** starts them again any time.
 
 ![Step 4: the note keys show the chord](img/seed-step4.png)
 
@@ -145,20 +145,39 @@ move their octave, FX picks their sound.
 **LFO** is **LOCK**: it locks the key you played last, so it stays exactly as it is when the key, type or bass mode
 changes, and group changes leave it out. LFO again unlocks it. A small corner marks a locked key.
 
-## 8. REC, UNDO, SAVE and LOAD
+## 8. LOOP, UNDO, SAVE and LOAD
 
-![REC](img/seed-rec.png)
+![LOOP](img/seed-loop.png)
 
-**REC**: the white keys blink. Tap the key to record into, then a bar of clicks counts you in. Play the note keys, the chord
-keys or MIDI in, and press REC again to stop. The take is rounded to whole bars and goes on that pad. REC before the
-count ends cancels.
+**REC** opens the LOOP window and arms it: REC blinks. **PLAY** gives a bar's intro (the metronome counts it in),
+then the loop runs and records what goes out as MIDI: chord keys, progression keys with their rhythms, note keys and
+MIDI in. Every pass that records becomes a layer, so keep playing to stack parts.
 
-**ARP** is **UNDO**: one step back (a LIB drop, a take, clearing the pads, a LOAD). ARP again goes forward.
+| Control | Does |
+|---|---|
+| PLAY | Armed: the intro, then recording. Playing: stop. Stopped: play the loop (no recording) |
+| REC | Playing: recording on and off. Stopped: arm. In another screen: back to LOOP |
+| ARP | The last layer off |
+| HOME + REC | Clear the loop |
+| K1 | METRONOME: OFF, INTRO ONLY, ALWAYS (the FM-1's speaker only, never MIDI) |
+| K2 | BARS: 1, 2, 4, 8 |
+| K3 | QUANTIZE: OFF or 16THS, on playback, so it can always be switched off again |
+| K4 | SWING: STRAIGHT to 75%, with QUANTIZE on |
 
-**SHIFT + PLAY** (hold HOME, press PLAY) clears every pad that isn't locked. Turn PRESET to bring the kit back, or
-ARP to undo.
+The loop plays out on the channels its notes came in on and follows TAP and MIDI clock. It keeps playing when you
+leave the window; PLAY stops it anywhere. The colours: blue chord keys, light blue progression keys, red note keys,
+white the keyboard and MIDI in.
 
-**SAVE** keeps the pads, their EDIT settings and the settings. **Hold SAVE** to LOAD them back.
+**SYS** (GLO) tapped is **STOP ALL**, always dim lit: every key, the loop, all notes off on every channel. Hold SYS
+for SETUP, and **HOME + SYS** for COACH.
+
+**ARP** outside the loop window is **UNDO**: one step back (a LIB drop, clearing the keys, a LOAD). ARP again goes
+forward.
+
+**SHIFT** is **HOME held**. **SHIFT + PLAY** clears every key that isn't locked. Turn PRESET to bring the kit back,
+or ARP to undo.
+
+**SAVE** keeps the keys, their EDIT settings, the loop and the settings. **Hold SAVE** to LOAD them back.
 
 ## 9. SOUND, MIDI and SETUP
 
@@ -186,8 +205,8 @@ Set your synths to listen on those. SETUP shows the map too. **PLAY** sends all 
 
 ![SETUP](img/seed-setup.png)
 
-**SYS** (tap) opens SETUP: K1 Bluetooth MIDI on or off, K2 MIDI clock out (24 a beat, at the BPM), K3 MIDI clock in
-(the BPM follows it while it comes), K4 the steps (OFF, FIRST, ALWAYS). **Hold SYS** for the steps.
+**Hold SYS** for SETUP: K1 Bluetooth MIDI on or off, K2 MIDI clock out (24 a beat, at the BPM), K3 MIDI clock in
+(the BPM follows it while it comes), K4 the steps (OFF, FIRST, ALWAYS). **HOME + SYS** for the steps.
 
 ## 10. All the controls
 
@@ -203,10 +222,10 @@ Set your synths to listen on those. SETUP shows the map too. **PLAY** sends all 
 | ENV | EDIT: the group played last, or the key held |
 | LFO | LOCK |
 | FX | SOUND: each group's sound, and OUT (sound, MIDI, or both) |
-| SYS (GLO) | Tap: SETUP. Hold: COACH |
-| PLAY | STOP ALL, always dim lit: everything stops, all notes off on every channel. SHIFT: clear the keys. In PICK NOTES: use the scale. In LIB: hear it |
-| ARP | UNDO |
+| SYS (GLO) | STOP ALL, always dim lit. Held: SETUP. HOME + SYS: COACH |
+| PLAY | The loop: armed, the intro and recording; playing, stop; stopped, play. SHIFT: clear the keys. In PICK NOTES: use the scale. In LIB: hear it |
+| ARP | UNDO. In LOOP: the last layer off |
 | SEQ | Free for now |
-| REC | Record into a key |
+| REC | LOOP: open it armed, recording on and off. HOME + REC: clear |
 | SAVE | Save. Held: LOAD |
 | OCT- / OCT+ | Octave: of the key you hold, else the group played last. In PICK NOTES: the keyboard |

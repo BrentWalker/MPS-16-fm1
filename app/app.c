@@ -5,8 +5,9 @@
  * 9-16): progressions, one at a time. NOTE KEYS (black 1-7): the notes of the key, lit by the chord you played. The
  * last 4 black keys (C pads): BASS, NO BASS, NO ROOT, TAP. A change goes to the group played last; hold a key and it
  * goes to that key alone. HOME (held: SHIFT), EDIT pick notes, SEL the library, ENV EDIT (rhythm, strum, speed,
- * humanize, length, swing, inversion), LFO LOCK, SYS setup (held: COACH), PLAY STOP ALL (SHIFT: clear the keys), ARP
- * UNDO, REC, SAVE (held: LOAD), OCT- / OCT+ octave, FX SOUND (8 sounds a group; OUT: sound, MIDI or both). MIDI out
+ * humanize, length, swing, inversion), LFO LOCK, SYS STOP ALL (held: SETUP; HOME + SYS: COACH), REC the LOOP window
+ * (PLAY: a bar in, then it loops and records, a layer a pass; ARP: the last layer off), PLAY the loop (SHIFT: clear
+ * the keys), ARP UNDO, SAVE (held: LOAD), OCT- / OCT+ octave, FX SOUND (8 sounds a group; OUT: sound, MIDI or both). MIDI out
  * over USB and Bluetooth on four fixed channels (chord keys, progression keys, note keys, the keyboard), clock out
  * and in.
  *
@@ -596,7 +597,7 @@ static float frac1(float x) { return x - (float)(int32_t)x; }   /* x >= 0 */
 #define QN 128u
 static volatile uint32_t q_ev[QN];
 static volatile uint32_t q_w, q_r;
-enum { QE_OFF, QE_ON, QE_PSTART, QE_PSTOP, QE_CSTART, QE_CSTOP };
+enum { QE_OFF, QE_ON, QE_PSTART, QE_PSTOP, QE_CSTART, QE_CSTOP, QE_LOOP };
 static void ev_push_g(uint32_t type, uint32_t a, uint32_t b, uint32_t g)
 {
     uint32_t w = q_w;
@@ -658,41 +659,77 @@ static void midi_note(uint32_t on, uint32_t ch, uint32_t m, uint32_t v)
     plat_midi_send((on ? 0x09u | (0x90u | ch) << 8 | m << 16 | v << 24 : 0x08u | (0x80u | ch) << 8 | m << 16),
                    midi_to());
 }
+static void loop_rec(uint32_t on, uint32_t ch, uint32_t p, uint32_t v);
 static void out_on(uint32_t m, uint32_t v, uint32_t ch)
 {
     voice_on(m, v, ch % NGRP);
     midi_note(1, ch, m, v);
+    loop_rec(1, ch, m, v);
 }
 static void out_off(uint32_t m, uint32_t ch)
 {
     voice_off(m, ch % NGRP);
     midi_note(0, ch, m, 0);
+    loop_rec(0, ch, m, 0);
 }
 static uint32_t pad_ch(uint32_t i)       /* pads 1-8 on 1, 9-16 on 2; LIB's preview (i = NPADS) on the keyboard's */
 {
     return i >= NPADS ? CH_KEYS : i < 8u ? CH_PADS1 : CH_PADS2;
 }
 
-/* REC: what you play, from the main loop and from MIDI in, with the audio clock */
-#define RECMAX 256u
+/* ================================================================== LOOP === */
+/* the loop recorder: REC opens it and arms it (REC blinks), PLAY gives a bar's intro, then it loops and records what
+ * goes out as MIDI (every key, every rhythm, MIDI in), a layer a pass. All of it runs on the audio side; the UI
+ * sends it commands (QE_LOOP) and reads it to draw */
+#define LMAX 440u
+#define LOOP_MAGIC 0x31504F4Cu           /* "LOP1" */
 typedef struct {
-    uint32_t t;
-    uint8_t on, p, v, pad;
-} recev_t;
-static PLAT_POOL recev_t rec_ev[RECMAX];
-static volatile uint32_t rec_n;
-static volatile uint8_t rec_on;
-static void rec_push(uint32_t on, uint32_t p, uint32_t v)
+    uint16_t s, d;                       /* start, length: ticks (PPQ) in the loop; d 0: still held */
+    uint8_t p, v, ch, layer;
+} lnote_t;
+typedef struct {
+    uint32_t magic;
+    uint8_t bars, metro, quant, swing;   /* bars 1 2 4 8; metro LM_*; quant 0/1 (16ths); swing 50 .. 75 */
+    uint16_t n, rsv;
+    lnote_t e[LMAX];
+} loop_t;
+enum { LM_OFF, LM_INTRO, LM_ALWAYS, LM_N };
+enum { LR_STOP, LR_INTRO, LR_PLAY };
+enum { LC_INTRO, LC_PLAY, LC_STOP, LC_RECON, LC_RECOFF, LC_CLEAR, LC_UNDO };
+static PLAT_POOL loop_t L;
+static PLAT_POOL float lp_left[LMAX];    /* a note sounding: ticks left */
+static PLAT_POOL uint8_t lp_open[LMAX];  /* a note recording: held still */
+static volatile uint8_t lp_run, lp_rec, lp_layer, lp_used;
+static volatile float lp_pos;            /* ticks into the loop (the intro: into its bar) */
+static uint32_t loop_len(void) { return (uint32_t)(L.bars ? L.bars : 4u) * 4u * PPQ; }
+static void loop_rec(uint32_t on, uint32_t ch, uint32_t p, uint32_t v)   /* audio side: a MIDI note went out */
 {
-    uint32_t n = rec_n;
-    if (!rec_on || n >= RECMAX)
+    uint32_t k, len = loop_len();
+    float pos;
+    if (!lp_rec || (lp_run != LR_PLAY && !(lp_run == LR_INTRO && lp_pos > (float)(4u * PPQ - 24u))))
         return;
-    rec_ev[n].t = clock_smp;
-    rec_ev[n].on = (uint8_t)on;
-    rec_ev[n].p = (uint8_t)p;
-    rec_ev[n].v = (uint8_t)v;
-    BARRIER();
-    rec_n = n + 1u;
+    pos = lp_run == LR_INTRO ? 0.0f : lp_pos;   /* the intro's last 16th: on the 1 */
+    if (on) {
+        if (L.n >= LMAX)
+            return;
+        k = L.n;
+        L.e[k].s = (uint16_t)pos;
+        L.e[k].d = 0;
+        L.e[k].p = (uint8_t)p;
+        L.e[k].v = (uint8_t)(v ? v : 1u);
+        L.e[k].ch = (uint8_t)ch;
+        L.e[k].layer = lp_layer;
+        lp_open[k] = 1;
+        lp_left[k] = 0.0f;
+        L.n = (uint16_t)(k + 1u);
+        lp_used = 1;
+    } else
+        for (k = 0; k < L.n; k++)
+            if (lp_open[k] && L.e[k].p == p && L.e[k].ch == ch) {
+                uint32_t d = ((uint32_t)pos + len - L.e[k].s) % len;
+                L.e[k].d = (uint16_t)(d < 6u ? 6u : d);
+                lp_open[k] = 0;
+            }
 }
 
 /* MIDI clock: in (the BPM follows it), out (24 a beat, at the BPM) */
@@ -715,10 +752,10 @@ static void midi_in(void)                /* audio interrupt: MIDI in plays the s
         }
         if (hi == 0x90u && d2) {
             voice_on(d1, d2, (st & 15u) < NGRP ? st & 15u : CH_KEYS);   /* MIDI in: its channel's sound */
-            rec_push(1, d1, d2);
+            loop_rec(1, st & 15u, d1, d2);
         } else if (hi == 0x80u || hi == 0x90u) {
             voice_off(d1, (st & 15u) < NGRP ? st & 15u : CH_KEYS);
-            rec_push(0, d1, 0);
+            loop_rec(0, st & 15u, d1, 0);
         }
     }
 }
@@ -934,6 +971,196 @@ static void chord_tick(uint32_t n)
     }
 }
 
+/* the loop, audio side */
+static void lp_click(int hi)
+{
+    voice_on(hi ? 96u : 84u, 90u, NGRP);
+    voice_off(hi ? 96u : 84u, NGRP);
+}
+static void lp_sound(uint32_t k, int on)   /* loop playback: the FM-1 and MIDI out, never recorded again */
+{
+    const lnote_t *e = &L.e[k];
+    uint32_t g = e->ch < NGRP ? e->ch : CH_KEYS;
+    if (on) {
+        voice_on(e->p, e->v, g);
+        midi_note(1, e->ch, e->p, e->v);
+    } else {
+        voice_off(e->p, g);
+        midi_note(0, e->ch, e->p, 0);
+    }
+}
+static void lp_silence(void)
+{
+    uint32_t k;
+    for (k = 0; k < L.n; k++)
+        if (lp_left[k] > 0.0f) {
+            lp_sound(k, 0);
+            lp_left[k] = 0.0f;
+        }
+}
+static void lp_close(void)               /* recording stops: the notes still held end here */
+{
+    uint32_t k, len = loop_len();
+    for (k = 0; k < L.n; k++)
+        if (lp_open[k]) {
+            uint32_t d = ((uint32_t)lp_pos + len - L.e[k].s) % len;
+            L.e[k].d = (uint16_t)(d < 6u ? 6u : d);
+            lp_open[k] = 0;
+        }
+}
+static uint32_t lp_top(void)             /* the newest layer */
+{
+    uint32_t k, t = 0;
+    for (k = 0; k < L.n; k++)
+        if (L.e[k].layer > t)
+            t = L.e[k].layer;
+    return t;
+}
+static void loop_cmd(uint32_t c)
+{
+    uint32_t k, j;
+    switch (c) {
+    case LC_INTRO:
+        lp_silence();
+        lp_run = LR_INTRO;
+        lp_pos = 0.0f;
+        lp_layer = (uint8_t)(lp_top() + 1u);
+        lp_used = 0;
+        lp_rec = 1;
+        if (L.metro != LM_OFF)
+            lp_click(1);
+        break;
+    case LC_PLAY:
+        lp_silence();
+        lp_run = LR_PLAY;
+        lp_pos = 0.0f;
+        lp_rec = 0;
+        break;
+    case LC_STOP:
+        lp_close();
+        lp_silence();
+        lp_run = LR_STOP;
+        lp_rec = 0;
+        break;
+    case LC_RECON:
+        lp_layer = (uint8_t)(lp_top() + 1u);
+        lp_used = 0;
+        lp_rec = 1;
+        break;
+    case LC_RECOFF:
+        lp_close();
+        lp_rec = 0;
+        break;
+    case LC_CLEAR:
+        lp_silence();
+        lp_close();
+        L.n = 0;
+        lp_layer = 1;
+        break;
+    case LC_UNDO:                        /* the newest layer off */
+        lp_close();
+        lp_silence();
+        {
+            uint32_t t = lp_top();
+            for (k = j = 0; k < L.n; k++)
+                if (L.e[k].layer != t)
+                    L.e[j++] = L.e[k];
+            L.n = (uint16_t)j;
+        }
+        if (lp_rec) {
+            lp_layer = (uint8_t)(lp_top() + 1u);
+            lp_used = 0;
+        }
+        break;
+    }
+}
+static float lp_start(const lnote_t *e, uint32_t len)   /* where a note plays: QUANTIZE (16ths) and SWING */
+{
+    float s = (float)e->s;
+    if (L.quant) {
+        s = (float)(((uint32_t)e->s + 12u) / 24u * 24u % len);
+        s = swing_t(s, L.swing);
+    }
+    return s;
+}
+static void lp_span(float a, float b, uint32_t len)   /* the notes starting in [a, b) */
+{
+    uint32_t k;
+    for (k = 0; k < L.n; k++) {
+        float st;
+        if (lp_open[k] || !L.e[k].d)
+            continue;
+        st = lp_start(&L.e[k], len);
+        if (st >= a && st < b) {
+            if (lp_left[k] > 0.0f)
+                lp_sound(k, 0);
+            lp_sound(k, 1);
+            lp_left[k] = (float)L.e[k].d;
+        }
+    }
+}
+static void lp_clicks(float a, float b, int intro)   /* the beats in [a, b) */
+{
+    uint32_t q = (uint32_t)(a / (float)PPQ) + 1u;
+    if (a <= 0.0f && b > 0.0f && !intro)
+        q = 0;
+    for (; (float)(q * PPQ) < b; q++)
+        if ((float)(q * PPQ) >= a)
+            lp_click(q % 4u == 0u);
+}
+static void loop_tick(uint32_t n)
+{
+    float adv = (float)n * (float)tempo * (float)PPQ / (60.0f * SR);
+    uint32_t k, len = loop_len();
+    if (lp_run == LR_STOP)
+        return;
+    for (k = 0; k < L.n; k++)            /* the notes sounding count down */
+        if (lp_left[k] > 0.0f) {
+            lp_left[k] -= adv;
+            if (lp_left[k] <= 0.0f) {
+                lp_left[k] = 0.0f;
+                lp_sound(k, 0);
+            }
+        }
+    if (lp_run == LR_INTRO) {
+        float a = lp_pos, b = a + adv;
+        if (L.metro != LM_OFF && b < (float)(4u * PPQ))
+            lp_clicks(a, b, 1);
+        lp_pos = b;
+        if (b >= (float)(4u * PPQ)) {
+            lp_run = LR_PLAY;
+            lp_pos = 0.0f;
+            if (L.metro == LM_ALWAYS)
+                lp_click(1);
+            lp_span(-1.0f, b - (float)(4u * PPQ), len);
+            lp_pos = b - (float)(4u * PPQ);
+        }
+        return;
+    }
+    {
+        float a = lp_pos, b = a + adv;
+        if (b < (float)len) {
+            lp_span(a, b, len);
+            if (L.metro == LM_ALWAYS)
+                lp_clicks(a, b, 0);
+            lp_pos = b;
+        } else {                         /* round again: a new layer if this pass recorded */
+            lp_span(a, (float)len, len);
+            if (L.metro == LM_ALWAYS)
+                lp_clicks(a, (float)len, 0);
+            b -= (float)len;
+            if (lp_rec && lp_used) {
+                lp_layer++;
+                lp_used = 0;
+            }
+            lp_span(-1.0f, b, len);
+            if (L.metro == LM_ALWAYS)
+                lp_click(1);
+            lp_pos = b;
+        }
+    }
+}
+
 static uint32_t clk_acc;                 /* MIDI clock out: samples toward the next tick, in 24ths of a beat x 16 */
 void app_render(int32_t *lr, uint32_t n, uint32_t master_q12)
 {
@@ -946,10 +1173,16 @@ void app_render(int32_t *lr, uint32_t n, uint32_t master_q12)
     while (q_r != q_w) {
         BARRIER();
         uint32_t e = q_ev[q_r % QN], type = e >> 16 & 255u, a = e >> 8 & 127u, b = e & 127u, g = e >> 24;
-        if (type == QE_ON)
+        if (type == QE_ON) {
             voice_on(a, b, g);
-        else if (type == QE_OFF)
+            if (g < NGRP)
+                loop_rec(1, g, a, b);
+        } else if (type == QE_OFF) {
             voice_off(a, g);
+            if (g < NGRP)
+                loop_rec(0, g, a, 0);
+        } else if (type == QE_LOOP)
+            loop_cmd(a);
         else if (type == QE_CSTART && a < NPADS)
             cp_start(a, b);
         else if (type == QE_CSTOP && a < NPADS)
@@ -967,6 +1200,7 @@ void app_render(int32_t *lr, uint32_t n, uint32_t master_q12)
     }
     phrase_tick(n);
     chord_tick(n);
+    loop_tick(n);
     midi_in();
     if (set.clk_out) {                   /* 24 a beat */
         uint32_t per = (uint32_t)(SR * 60.0f * 16.0f / (24.0f * (float)tempo));
@@ -1096,7 +1330,6 @@ static void notes_on(uint32_t k, const uint8_t *notes, uint32_t n, uint32_t vel,
         h->note[h->n++] = (uint8_t)m;
         ev_push_g(QE_ON, (uint32_t)m, vel, ch % NGRP);
         midi_note(1, ch, (uint32_t)m, vel);
-        rec_push(1, (uint32_t)m, vel);
     }
 }
 static void notes_off(uint32_t k)
@@ -1106,7 +1339,6 @@ static void notes_off(uint32_t k)
     for (i = 0; i < h->n; i++) {
         ev_push_g(QE_OFF, h->note[i], 0, h->ch % NGRP);
         midi_note(0, h->ch, h->note[i], 0);
-        rec_push(0, h->note[i], 0);
     }
     h->n = 0;
 }
@@ -1161,7 +1393,6 @@ static void pad_start(uint32_t i, uint32_t vel)
         }
         for (k = 0; k < n; k++) {
             cbuf[i][k] = (uint8_t)clamp(v[k] + 12 * f->oct, 0, 127);
-            rec_push(1, cbuf[i][k], f->vel ? f->vel : vel);
         }
         cbuf_n[i] = (uint8_t)n;
         ev_push(QE_CSTART, i, vel);
@@ -1176,18 +1407,10 @@ static void pad_start(uint32_t i, uint32_t vel)
         ev_push(QE_PSTART, i, vel);
     }
 }
-static void pad_release_rec(uint32_t i)   /* REC: a chord pad let go */
-{
-    uint32_t k;
-    if (pads[i].type == PAD_CHORD)
-        for (k = 0; k < cbuf_n[i]; k++)
-            rec_push(0, cbuf[i][k], 0);
-}
 
 /* ======================================================================= UI === */
-enum { SCR_HOME, SCR_PICK, SCR_LIB, SCR_PAD, SCR_SETUP, SCR_SOUND };
+enum { SCR_HOME, SCR_PICK, SCR_LIB, SCR_PAD, SCR_SETUP, SCR_SOUND, SCR_LOOP };
 enum { CS_NONE, CS_CHOOSE, CS_NOTES, CS_SCALE, CS_PADS, CS_BASS, CS_SHAPE, CS_CPADS, CS_DONE };
-enum { RS_OFF, RS_PICK, RS_COUNT, RS_REC };
 static struct {
     char msg[2][24];
     uint32_t msg_until;
@@ -1198,8 +1421,8 @@ static struct {
     uint8_t shift_used;                  /* HOME held and used as SHIFT: its release goes nowhere */
     uint8_t coach, co_count, co_pick;
     uint32_t co_at, boot_at;
-    uint8_t rs, rpad;                    /* REC: the state, the pad it records into */
-    uint32_t r_t0, r_click;              /* REC: the take's start (samples), the next click (samples) */
+    uint8_t l_arm;                       /* LOOP: armed (REC blinks): PLAY gives the intro, then records */
+    uint8_t l_reload;                    /* LOAD: the loop to load once its player stopped */
     uint32_t tap[4];                     /* TAP: the last taps */
     uint8_t tap_n;
     uint8_t lib_t, lib_sel;              /* LIB: the type shown (NCTYPES: the progressions), the pick */
@@ -1303,10 +1526,31 @@ static int session_save(void)
         }
     }
     if (plat_store_save(OBJ_SETTINGS, &set, sizeof set) || plat_store_save(OBJ_SESS, &SS, sizeof SS) ||
-        plat_store_save(OBJ_NOTES, note_buf, nn ? nn * sizeof(pnote_t) : sizeof(pnote_t)))
+        plat_store_save(OBJ_NOTES, note_buf, nn ? nn * sizeof(pnote_t) : sizeof(pnote_t)) ||
+        plat_store_save(OBJ_LOOP, &L, sizeof L))
         return -1;
     set_dirty = 0;
     return 0;
+}
+static void loop_load_defaults(void)
+{
+    __builtin_memset(&L, 0, sizeof L);
+    L.magic = LOOP_MAGIC;
+    L.bars = 4;
+    L.metro = LM_INTRO;
+    L.swing = 50;
+}
+static void loop_load(void)              /* the saved loop (the player stopped first: LOAD) */
+{
+    lp_run = LR_STOP;
+    lp_rec = 0;
+    __builtin_memset(lp_left, 0, sizeof lp_left);
+    __builtin_memset(lp_open, 0, sizeof lp_open);
+    if (plat_store_load(OBJ_LOOP, &L, sizeof L) != (int)sizeof L || L.magic != LOOP_MAGIC || L.n > LMAX ||
+        (L.bars != 1u && L.bars != 2u && L.bars != 4u && L.bars != 8u) || L.metro >= LM_N || L.swing < 50u ||
+        L.swing > 75u)
+        loop_load_defaults();
+    lp_layer = 1;
 }
 static int session_load(void)
 {
@@ -1529,118 +1773,28 @@ static const char *coach_text(uint32_t s)
                                     "THE BRIGHT BLACK KEY IS THE BASS OF YOUR CHORD. PLAY ALONG.",
                                     "TURN K2 FOR 7THS AND 9THS. ENV: HOW THEY PLAY.",
                                     "THE LAST 4 BLACK KEYS: BASS, NO BASS, NO ROOT, TAP. TRY ONE.",
-                                    "THAT'S SEED. HOLD SYS ANY TIME FOR THESE STEPS."};
+                                    "THAT'S SEED. HOME + SYS ANY TIME FOR THESE STEPS."};
     return T[s % 9u];
 }
 
-/* ------------------------------------------------------------------ REC --- */
+/* ----------------------------------------------------------------- LOOP --- */
 static uint32_t bpb_smp(void) { return (uint32_t)(SR * 60.0f / (float)tempo); }   /* a beat, in samples */
-static void rec_arm(void)
+static void loop_send(uint32_t c) { ev_push(QE_LOOP, c, 0); }
+static void loop_play(void)              /* PLAY: stop it; armed, the intro and recording; else play it */
 {
-    players_stop();
-    ui.rs = RS_PICK;
-    app_say("REC", "TAP A WHITE KEY TO RECORD INTO");
-}
-static void rec_pick(uint32_t i)         /* the pad: a bar's count-in, then recording */
-{
-    if (desc[i].lock) {
-        app_say("LOCKED", "PICK ANOTHER PAD");
-        return;
-    }
-    ui.rpad = (uint8_t)i;
-    ui.rs = RS_COUNT;
-    ui.r_t0 = clock_smp + 4u * bpb_smp() + 2000u;
-    ui.r_click = clock_smp + 2000u;
-    rec_n = 0;
-    rec_on = 1;
-    app_say("REC", "COUNT IN");
-}
-static void rec_stop(void)               /* the take onto the pad: rounded to whole bars */
-{
-    uint32_t now = clock_smp, i, j, n = rec_n, bar = 4u * bpb_smp(), bars, len;
-    pad_t *p;
-    rec_on = 0;
-    if (ui.rs != RS_REC) {
-        ui.rs = RS_OFF;
-        app_say("REC", "CANCELLED");
-        return;
-    }
-    ui.rs = RS_OFF;
-    bars = (now - ui.r_t0 + bar / 2u) / bar;
-    if (bars < 1u)
-        bars = 1u;
-    if (bars > 8u)
-        bars = 8u;
-    len = bars * 4u * PPQ;
-    undo_snap();
-    p = &pads[ui.rpad];
-    __builtin_memset(p, 0, sizeof *p);
-    p->type = PAD_PROG;
-    p->len = (uint16_t)len;
-    str_set(p->title, "RECORDED", sizeof p->title);
-    for (i = 0; i < n && p->pn < MAXPH; i++) {
-        const recev_t *e = &rec_ev[i];
-        uint32_t s, d = 0;
-        int32_t dt;
-        if (!e->on)
-            continue;
-        dt = (int32_t)(e->t - ui.r_t0);
-        if (dt < -(int32_t)(bpb_smp() / 4u))
-            continue;                    /* well before the 1 */
-        s = dt < 0 ? 0u : (uint32_t)((float)dt / (float)bpb_smp() * (float)PPQ);
-        if (s >= len)
-            continue;
-        for (j = i + 1u; j < n; j++)     /* its note off */
-            if (!rec_ev[j].on && rec_ev[j].p == e->p) {
-                d = (uint32_t)((float)(rec_ev[j].t - e->t) / (float)bpb_smp() * (float)PPQ);
-                break;
-            }
-        if (j == n)
-            d = (uint32_t)((float)(now - e->t) / (float)bpb_smp() * (float)PPQ);
-        if (d < 4u)
-            d = 4u;
-        if (s + d > len)
-            d = len - s;
-        ph[ui.rpad][p->pn].s = (uint16_t)s;
-        ph[ui.rpad][p->pn].d = (uint16_t)d;
-        ph[ui.rpad][p->pn].p = e->p;
-        ph[ui.rpad][p->pn].v = e->v;
-        p->pn++;
-    }
-    if (!p->pn) {
-        undo_swap();
-        app_say("REC", "NOTHING WAS PLAYED");
-        return;
-    }
-    desc[ui.rpad].src = SRC_REC;
-    pfx_default(&pfx[ui.rpad]);
-    pfx[ui.rpad].plays = RH_HOLD;
-    pfx[ui.rpad].len = 0;
-    pfx[ui.rpad].human = 0;
-    ui.pad = ui.rpad;
-    {
-        char t[24], b[16];
-        key_label(ui.rpad, t);
-        num_text((int32_t)bars, b, 0);
-        text_cat(b, bars == 1u ? " BAR RECORDED" : " BARS RECORDED");
-        app_say(t, b);
-    }
-}
-static void rec_tick(void)               /* the count-in's clicks, then the take starts */
-{
-    if (ui.rs == RS_COUNT) {
-        uint32_t now = clock_smp;
-        if ((int32_t)(now - ui.r_click) >= 0 && (int32_t)(ui.r_t0 - now) > 0) {
-            uint32_t first = (ui.r_t0 - ui.r_click) / bpb_smp() == 3u;
-            ev_push_g(QE_ON, first ? 96u : 84u, 90, NGRP);
-            ev_push_g(QE_OFF, first ? 96u : 84u, 0, NGRP);
-            ui.r_click += bpb_smp();
-        }
-        if ((int32_t)(now - ui.r_t0) >= 0) {
-            ui.rs = RS_REC;
-            app_say("REC", "PLAYING IN: REC AGAIN STOPS");
-        }
-    }
+    if (lp_run != LR_STOP) {
+        loop_send(LC_STOP);
+        ui.l_arm = 0;
+        app_say("LOOP", "STOPPED");
+    } else if (ui.l_arm) {
+        loop_send(LC_INTRO);
+        ui.l_arm = 0;
+        app_say("LOOP", "A BAR IN, THEN RECORDING");
+    } else if (L.n) {
+        loop_send(LC_PLAY);
+        app_say("LOOP", "PLAYING");
+    } else
+        app_say("LOOP", "EMPTY: REC, THEN PLAY");
 }
 
 /* ================================================================== input === */
@@ -1731,7 +1885,6 @@ static void input(void)
 
     if (ui.coach == CS_DONE && ((keys & ~ui.keys) || now - ui.co_at > 4000u))
         coach_end();
-    rec_tick();
     if ((btn >> B_HOME & 1u) && ((keys & ~ui.keys) || (btn & ~ui.btn & ~(1u << B_HOME))))
         ui.shift_used = 1;               /* HOME held with something else: SHIFT */
 
@@ -1758,11 +1911,6 @@ static void input(void)
         uint32_t k = WK[i], bit = 1u << k;
         if ((keys & bit) && !(ui.keys & bit)) {
             uint32_t vel = touch_vel(k);
-            if (ui.rs == RS_PICK) {      /* REC: the pad to record into */
-                rec_pick(i);
-                ui.redraw = 1;
-                continue;
-            }
             if (ui.screen == SCR_LIB) {  /* LIB: the pick goes onto the pad */
                 char t[24];
                 if (desc[i].lock) {
@@ -1788,7 +1936,6 @@ static void input(void)
         } else if (!(keys & bit) && (ui.keys & bit)) {
             pad_held[i] = 0;
             if (!pad_latched[i]) {
-                pad_release_rec(i);
                 if (pads[i].type == PAD_CHORD)
                     ev_push(QE_CSTOP, i, 0);
                 else if (pl[i].looped)
@@ -1935,11 +2082,10 @@ buttons:
                         set_dirty = 1;
                     } else if (ui.coach) {
                         coach_end();
-                        app_say("STEPS", "HOLD SYS FOR THEM AGAIN");
+                        app_say("STEPS", "HOME + SYS FOR THEM AGAIN");
                     }
-                    if (ui.rs != RS_OFF && ui.rs != RS_REC) {
-                        ui.rs = RS_OFF;
-                        rec_on = 0;
+                    if (ui.l_arm) {
+                        ui.l_arm = 0;
                     }
                     ui.screen = SCR_HOME;
                 }
@@ -1971,7 +2117,7 @@ buttons:
                 plat_store_save(OBJ_SETTINGS, &set, sizeof set);
                 if (set.coach == CO_OFF) {
                     ui.coach = CS_NONE;
-                    app_say("STEPS OFF", "HOLD SYS FOR THEM");
+                    app_say("STEPS OFF", "HOME + SYS FOR THEM");
                 } else
                     coach_start();
             } else if (shift()) {        /* SHIFT + PLAY: every pad cleared (LOCKed ones stay) */
@@ -2005,10 +2151,8 @@ buttons:
                     prog_into(PREVIEW, ui.lib_sel, set.type, set.plays);
                 }
                 ev_push(QE_PSTART, PREVIEW, 100);
-            } else {
-                all_notes_off();
-                app_say("STOP", "ALL NOTES OFF");
-            }
+            } else
+                loop_play();
         } else if (i == B_EDIT) {
             if (ui.screen == SCR_PICK)
                 ui.screen = SCR_HOME;
@@ -2034,17 +2178,29 @@ buttons:
             }
         } else if (i == B_FX) {          /* SOUND: each group's sound, and OUT */
             ui.screen = ui.screen == SCR_SOUND ? SCR_HOME : SCR_SOUND;
-        } else if (i == B_ARP) {         /* UNDO */
-            undo_swap();
+        } else if (i == B_ARP) {         /* UNDO; in the loop window: the last layer off */
+            if (ui.screen == SCR_LOOP) {
+                loop_send(LC_UNDO);
+                app_say("LOOP", L.n ? "LAST LAYER OFF" : "NOTHING TO UNDO");
+            } else
+                undo_swap();
         } else if (i == B_REC) {
-            if (ui.rs == RS_OFF)
-                rec_arm();
-            else if (ui.rs == RS_REC)
-                rec_stop();
-            else {
-                ui.rs = RS_OFF;
-                rec_on = 0;
-                app_say("REC", "CANCELLED");
+            if (shift()) {               /* SHIFT + REC: the loop cleared */
+                loop_send(LC_CLEAR);
+                ui.l_arm = 0;
+                app_say("LOOP", "CLEARED");
+            } else if (ui.screen != SCR_LOOP) {   /* the loop window, armed */
+                ui.screen = SCR_LOOP;
+                if (lp_run == LR_STOP) {
+                    ui.l_arm = 1;
+                    app_say("LOOP", "ARMED: PLAY STARTS IT");
+                }
+            } else if (lp_run == LR_PLAY) {       /* playing: recording on and off */
+                loop_send(lp_rec ? LC_RECOFF : LC_RECON);
+                app_say("LOOP", lp_rec ? "PLAYING" : "RECORDING");
+            } else if (lp_run == LR_STOP) {
+                ui.l_arm = (uint8_t)!ui.l_arm;
+                app_say("LOOP", ui.l_arm ? "ARMED: PLAY STARTS IT" : "NOT ARMED");
             }
         }
         ui.redraw = 1;
@@ -2053,6 +2209,9 @@ buttons:
         if (ui.save_at && ui.save_at != 0xFFFFFFFFu && now - ui.save_at >= 800u) {
             ui.save_at = 0xFFFFFFFFu;
             players_stop();
+            loop_send(LC_STOP);          /* the loop: loaded once the player has stopped (app_frame) */
+            ui.l_arm = 0;
+            ui.l_reload = 1;
             undo_snap();
             if (plat_store_load(OBJ_SETTINGS, &set, sizeof set) != (int)sizeof set || set.magic != SET_MAGIC)
                 settings_defaults();
@@ -2168,6 +2327,37 @@ buttons:
                 edit_say(what, t);
             }
             es = k1 = k2 = k3 = k4 = ek = ea = 0;
+        } else if (ui.screen == SCR_LOOP) {   /* K1 METRONOME, K2 BARS, K3 QUANTIZE, K4 SWING */
+            static const uint8_t BARS[4] = {1, 2, 4, 8};
+            static const char *const MN[LM_N] = {"OFF", "INTRO ONLY", "ALWAYS"};
+            char t[12];
+            if (k1) {
+                L.metro = (uint8_t)clamp(L.metro + k1, 0, LM_N - 1);
+                app_say("METRONOME", MN[L.metro]);
+            }
+            if (k2) {
+                uint32_t q;
+                for (q = 0; q < 3u && BARS[q] != L.bars; q++)
+                    ;
+                q = (uint32_t)clamp((int32_t)q + k2, 0, 3);
+                L.bars = BARS[q];
+                num_text(L.bars, t, 0);
+                text_cat(t, L.bars == 1u ? " BAR" : " BARS");
+                app_say("LOOP LENGTH", t);
+            }
+            if (k3) {
+                L.quant = k3 > 0;
+                app_say("QUANTIZE", L.quant ? "ON: 16THS" : "OFF");
+            }
+            if (k4) {
+                L.swing = (uint8_t)clamp(L.swing + k4, 50, 75);
+                num_text(L.swing, t, 0);
+                text_cat(t, "%");
+                app_say("SWING", L.swing > 50u ? t : "STRAIGHT");
+            }
+            if (k1 || k2 || k3 || k4)
+                set_dirty = 1;
+            es = k1 = k2 = k3 = k4 = ek = ea = 0;
         } else if (ui.screen == SCR_SOUND) {
             int32_t kk[NGRP] = {k1, k2, k3, k4};
             uint32_t g;
@@ -2230,17 +2420,27 @@ buttons:
         if (es || k1 || k2 || k3 || k4 || ek || ea)
             ui.redraw = 1;
     }
-    {                                    /* SYS: a tap, SETUP; held 0.8 s, COACH */
+    {                                    /* SYS (GLO): a tap, STOP ALL; held 0.8 s, SETUP; SHIFT + SYS, COACH */
         if (btn & 1u << B_GLO) {
-            if (!ui.sys_at)
+            if (!ui.sys_at) {
                 ui.sys_at = now ? now : 1u;
-            else if (ui.sys_at != 0xFFFFFFFFu && now - ui.sys_at >= 800u) {
+                if (shift()) {
+                    ui.sys_at = 0xFFFFFFFFu;
+                    ui.shift_used = 1;
+                    coach_start();
+                }
+            } else if (ui.sys_at != 0xFFFFFFFFu && now - ui.sys_at >= 800u) {
                 ui.sys_at = 0xFFFFFFFFu;
-                coach_start();
+                if (ui.coach != CS_CHOOSE)
+                    ui.screen = ui.screen == SCR_SETUP ? SCR_HOME : SCR_SETUP;
+                ui.redraw = 1;
             }
         } else {
             if (ui.sys_at && ui.sys_at != 0xFFFFFFFFu && ui.coach != CS_CHOOSE) {
-                ui.screen = ui.screen == SCR_SETUP ? SCR_HOME : SCR_SETUP;
+                all_notes_off();
+                loop_send(LC_STOP);
+                ui.l_arm = 0;
+                app_say("STOP ALL", "EVERYTHING OFF");
                 ui.redraw = 1;
             }
             ui.sys_at = 0;
@@ -2260,7 +2460,7 @@ static void lights(void)
     uint32_t i, bright = 0, dim = 0, mid = 0, btn = 0, now = plat_ms();
     int blink = (now / 260u) & 1u, fast = (now / 130u) & 1u;
     if (ui.coach == CS_CHOOSE) {
-        plat_lights(blink ? 1u << B_PLAY : 0u, 0, 1u << B_PLAY, 0, 1);
+        plat_lights(blink ? 1u << B_PLAY : 0u, 0, 1u << B_GLO, 0, 1);
         plat_lights_mid(0, 0);
         return;
     }
@@ -2279,22 +2479,12 @@ static void lights(void)
         btn = 1u << B_EDIT;
         if (fd_cnt && (ui.coach != CS_SCALE || blink))
             btn |= 1u << B_PLAY;
-        plat_lights(btn | ui.btn, bright, 1u << B_PLAY, dim, 1);
+        plat_lights(btn | ui.btn, bright, 1u << B_GLO, dim, 1);
         plat_lights_mid(0, 0);
         return;
     }
     for (i = 0; i < 16u; i++) {
         uint32_t bit = 1u << WK[i];
-        if (ui.rs == RS_PICK) {          /* REC: the pads you can record into blink */
-            if (!desc[i].lock && blink)
-                bright |= bit;
-            continue;
-        }
-        if ((ui.rs == RS_COUNT || ui.rs == RS_REC) && i == ui.rpad) {
-            if (ui.rs == RS_REC || fast)
-                bright |= bit;
-            continue;
-        }
         if ((ui.keys & bit) || pl[i].on || cp[i].on)
             bright |= bit;
         else if (ui.screen == SCR_LIB)
@@ -2340,11 +2530,13 @@ static void lights(void)
         btn |= 1u << B_LFO;
     if (U.have)
         btn |= 1u << B_ARP;
-    if (ui.rs == RS_REC || ((ui.rs == RS_PICK || ui.rs == RS_COUNT) && blink))
+    if ((lp_rec && (lp_run == LR_PLAY || fast)) || (ui.l_arm && blink))   /* REC: recording, the intro, armed */
         btn |= 1u << B_REC;
+    if (lp_run != LR_STOP)
+        btn |= 1u << B_PLAY;
     btn |= 1u << (ui.screen == SCR_LIB ? B_SEL : ui.screen == SCR_PAD ? B_ENV : ui.screen == SCR_SOUND ? B_FX
-                  : ui.screen == SCR_SETUP ? B_GLO : B_HOME);
-    plat_lights(btn | ui.btn, bright, 1u << B_PLAY, dim, 1);
+                  : ui.screen == SCR_SETUP ? B_GLO : ui.screen == SCR_LOOP ? B_REC : B_HOME);
+    plat_lights(btn | ui.btn, bright, 1u << B_GLO, dim, 1);
     plat_lights_mid(0, mid);
 }
 /* ================================================================ drawing === */
@@ -2572,16 +2764,8 @@ static void draw_home_top(void)
     const pad_t *p = ui.pad >= 0 ? &pads[ui.pad] : 0;
     int32_t x;
     lab_begin();
-    top_bar(ui.rs == RS_REC ? "REC" : ui.rs ? "REC?" : "SEED", ui.rs ? FIRE_C : EARTH_C);
-    if (ui.rs == RS_PICK) {
-        text_c(40, &FONT_M, "TAP A WHITE KEY", C_WHITE);
-        text_c(64, &FONT_XS, "TO RECORD INTO. REC AGAIN: CANCEL", LAB_LABEL);
-    } else if (ui.rs == RS_COUNT || ui.rs == RS_REC) {
-        char t[24];
-        key_label(ui.rpad, t);
-        text_c(40, &FONT_M, ui.rs == RS_COUNT ? "COUNT IN" : "RECORDING", ui.rs == RS_COUNT ? AIR_C : FIRE_C);
-        text_c(64, &FONT_B, t, C_WHITE);
-    } else if (p && p->type == PAD_CHORD) {
+    top_bar(lp_rec && lp_run ? "SEED  LOOP REC" : lp_run ? "SEED  LOOP" : "SEED", lp_rec && lp_run ? FIRE_C : EARTH_C);
+    if (p && p->type == PAD_CHORD) {
         char t[24], r[2], rn[4];
         const char *acc;
         int32_t w;
@@ -2907,6 +3091,83 @@ static void draw_pad(void)               /* EDIT: the group played last (or the 
     cv_blit(0, 120);
 }
 
+static uint16_t ch_col(uint32_t ch)      /* a loop note's colour: what played it */
+{
+    return ch == CH_PADS1 ? WATER_C : ch == CH_PADS2 ? AIR_C : ch == CH_BPADS ? FIRE_C : C_WHITE;
+}
+static void draw_loop(void)              /* LOOP: the notes, the bars, the playhead */
+{
+    static const char *const MN[LM_N] = {"OFF", "INTRO", "ALWAYS"};
+    static const char *const LBL[4] = {"K1 METRO", "K2 BARS", "K3 QUANT", "K4 SWING"};
+    uint32_t len = loop_len(), k, n = L.n, lo = 127, hi = 0, bars = L.bars ? L.bars : 4u;
+    int32_t x0 = 6, y0 = 48, w = 228, h = 68, rh;
+    char t[24], v[4][12];
+    const char *st;
+    uint16_t sc;
+    lab_begin();
+    if (lp_run == LR_INTRO) {
+        st = "INTRO";
+        sc = AIR_C;
+    } else if (lp_run == LR_PLAY) {
+        st = lp_rec ? "RECORDING" : "PLAYING";
+        sc = lp_rec ? FIRE_C : WATER_C;
+    } else {
+        st = ui.l_arm ? "ARMED" : "STOPPED";
+        sc = ui.l_arm ? FIRE_C : LAB_LABEL;
+    }
+    top_bar("LOOP", FIRE_C);
+    text_c(28, &FONT_M, st, sc);
+    cv_rect(x0, y0, w, h, ES_SLATE);
+    for (k = 1; k < bars; k++)
+        cv_rect(x0 + w * (int32_t)k / (int32_t)bars, y0, 1, h, ES_PURPLE);
+    for (k = 0; k < n; k++) {
+        if (L.e[k].p < lo)
+            lo = L.e[k].p;
+        if (L.e[k].p > hi)
+            hi = L.e[k].p;
+    }
+    if (n) {
+        rh = (h - 4) / (int32_t)(hi - lo + 1u);
+        rh = rh > 6 ? 6 : rh < 1 ? 1 : rh;
+        for (k = 0; k < n; k++) {
+            const lnote_t *e = &L.e[k];
+            float s0 = lp_start(e, len);
+            int32_t x = x0 + (int32_t)(s0 / (float)len * (float)w);
+            int32_t xw = (int32_t)((float)(e->d ? e->d : 24u) / (float)len * (float)w);
+            int32_t y = y0 + h - 2 - ((int32_t)(e->p - lo) + 1) * rh;
+            if (s0 >= (float)len)
+                continue;
+            if (xw < 2)
+                xw = 2;
+            if (x + xw > x0 + w)
+                xw = x0 + w - x;
+            cv_rect(x, y, xw, rh > 2 ? rh - 1 : rh, lp_left[k] > 0.0f ? C_WHITE : ch_col(e->ch));
+        }
+    } else
+        text_c(76, &FONT_XS, "EMPTY. PLAY, THEN PLAY YOUR KEYS", LAB_LABEL);
+    if (lp_run == LR_PLAY)
+        cv_rect(x0 + (int32_t)(lp_pos / (float)len * (float)w), y0, 2, h, FIRE_C);
+    else if (lp_run == LR_INTRO)
+        cv_rect(x0, y0 + h - 3, (int32_t)(lp_pos / (float)(4u * PPQ) * (float)w), 3, AIR_C);
+    cv_blit(0, 0);
+    lab_begin();
+    str_set(v[0], MN[L.metro % LM_N], sizeof v[0]);
+    num_text(bars, v[1], 0);
+    str_set(v[2], L.quant ? "16THS" : "OFF", sizeof v[2]);
+    if (L.swing > 50u) {
+        num_text(L.swing, v[3], 0);
+        text_cat(v[3], "%");
+    } else
+        str_set(v[3], "STRAIGHT", sizeof v[3]);
+    bottom_bar(8, LBL, v);
+    text_c(54, &FONT_XS, lp_run ? "PLAY: STOP. REC: RECORDING ON / OFF" : "PLAY: START. REC: ARM", LAB_LABEL);
+    text_c(68, &FONT_XS, "ARP: LAST LAYER OFF. HOME + REC: CLEAR", LAB_LABEL);
+    num_text((int32_t)n, t, 0);
+    text_cat(t, n == 1u ? " NOTE" : " NOTES");
+    text_c(88, &FONT_B, t, C_WHITE);
+    cv_blit(0, 120);
+}
+
 static void draw_sound(void)
 {
     static const char *const LBL[4] = {"K1 CHORDS", "K2 PROGS", "K3 NOTES", "K4 KEYBOARD"};
@@ -2937,7 +3198,7 @@ static void draw_setup(void)
     num_text((int32_t)tempo, t, 0);
     text_cat(t, clock_ext() ? " BPM, FROM CLOCK IN" : " BPM (SELECT, OR TAP)");
     text_c(40, &FONT_B, t, C_WHITE);
-    text_c(66, &FONT_XS, "HOLD SYS: THE STEPS. HOLD SAVE: LOAD", LAB_LABEL);
+    text_c(66, &FONT_XS, "HOME+SYS: THE STEPS. HOLD SAVE: LOAD", LAB_LABEL);
     text_c(86, &FONT_XS, "MIDI: CHORD KEYS CH 1, PROGRESSIONS CH 2", WATER_C);
     text_c(100, &FONT_XS, "NOTE KEYS CH 3, KEYBOARD CH 4", WATER_C);
     cv_blit(0, 0);
@@ -3023,6 +3284,7 @@ void app_init(void)
     tempo = set.bpm;
     kit_fresh();
     session_load();                      /* the saved pads, if any */
+    loop_load();
 }
 
 void app_ui_init(void)
@@ -3042,6 +3304,11 @@ void app_frame(void)
     static uint32_t last_on;
     uint32_t now = plat_ms(), i, on = 0;
     input();
+    if (ui.l_reload && q_r == q_w && lp_run == LR_STOP) {
+        ui.l_reload = 0;
+        loop_load();
+        ui.redraw = 1;
+    }
     lights();
     ann_tick(now);
     if (clock_ext() && clk_avg) {        /* MIDI clock in: the BPM follows it */
@@ -3058,7 +3325,7 @@ void app_frame(void)
         last_on = on;
         ui.redraw = 1;
     }
-    if ((ui.pad >= 0 && pl[ui.pad].on) || ui.rs ||
+    if ((ui.pad >= 0 && pl[ui.pad].on) || (ui.screen == SCR_LOOP && lp_run != LR_STOP) ||
         (ui.screen == SCR_PAD && edit_ref() >= 0 && (pl[edit_ref()].on || cp[edit_ref()].on))) {
         static uint32_t at;
         if (now - at >= (ui.screen == SCR_PAD ? 60u : 100u)) {
@@ -3100,6 +3367,8 @@ void app_frame(void)
             draw_setup();
         else if (ui.screen == SCR_SOUND)
             draw_sound();
+        else if (ui.screen == SCR_LOOP)
+            draw_loop();
         else {
             if (!ui.coach)
                 draw_home_top();
@@ -3159,7 +3428,15 @@ int app_expect(const char *what, int *got)
     else if (!strcmp(what, "bpm"))
         *got = (int)tempo;
     else if (!strcmp(what, "rec"))
-        *got = ui.rs;
+        *got = lp_rec;
+    else if (!strcmp(what, "looprun"))
+        *got = lp_run;
+    else if (!strcmp(what, "loopn"))
+        *got = L.n;
+    else if (!strcmp(what, "looparm"))
+        *got = ui.l_arm;
+    else if (!strcmp(what, "loopbars"))
+        *got = L.bars;
     else if (!strncmp(what, "strum", 5))
         *got = pfx[atoi(what + 5) % NPADS].strum;
     else if (!strncmp(what, "swing", 5))

@@ -209,7 +209,7 @@ key 14 down
 wait 900
 shot seed-progedit.png
 key 14 up
-tap PLAY
+tap GLO
 wait 60
 # a note key: HUMANIZE only
 key 1 down
@@ -297,7 +297,7 @@ tap OCT+
 wait 30
 expect padoct8 0
 expect padoct9 0
-tap PLAY
+tap GLO
 wait 60
 # one progression at a time: pad 10 stops pad 9
 key 14 down
@@ -309,7 +309,7 @@ expect playing8 0
 expect playing9 1
 key 14 up
 key 16 up
-tap PLAY
+tap GLO
 wait 100
 # SOUND (FX): B pads to BELL, OUT to MIDI only (the FM-1 quiet), back to both
 tap FX
@@ -333,42 +333,80 @@ expect out 0
 tap FX
 wait 30
 expect screen 0
-# REC into pad 16: count in, a B pad, REC stops
+# LOOP: REC opens it armed, PLAY: a bar in, then it records; REC off; a second layer; ARP takes it off
 tap REC
 wait 30
-key 26 down
+expect screen 6
+expect looparm 1
+turn K2 -1
+turn K3 1
 wait 30
-key 26 up
-expect rec 2
-wait 2800
-expect rec 3
+expect loopbars 2
+tap PLAY
+wait 60
+expect looprun 1
+wait 2300
+expect looprun 2
+expect rec 1
+key 2 down
+wait 400
+key 2 up
 key 1 down
-wait 300
+wait 200
 key 1 up
-wait 600
+wait 400
 tap REC
 wait 60
 expect rec 0
-expect src15 3
-expect padn15 1
-shot seed-rec.png
-# SETUP (SYS)
-tap GLO
+expect loopn >3
+wait 600
+shot seed-loop.png
+tap REC
+wait 60
+key 3 down
+wait 150
+key 3 up
+wait 100
+tap REC
+wait 60
+expect loopn >4
+tap ARP
+wait 60
+expect loopn >3
+expect loopn <6
+tap PLAY
+wait 60
+expect looprun 0
+tap HOME
+wait 30
+# SETUP: SYS held; a tap is STOP ALL
+press GLO
+wait 900
+release GLO
 wait 30
 expect screen 4
 turn K1 -1
 wait 30
 expect ble 0
 shot seed-setup.png
-tap GLO
+tap HOME
 wait 30
+expect screen 0
 # SAVE, change, LOAD
 tap SAVE
 wait 60
+expect loopn >3
+press HOME
+wait 30
+tap REC
+wait 30
+release HOME
+wait 30
+expect loopn 0
 turn K2 1
 wait 30
 press SAVE
 wait 900
 release SAVE
 wait 60
-expect src15 3
+expect loopn >3
