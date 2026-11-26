@@ -254,8 +254,8 @@ typedef struct {
     int8_t len, inv, oct, rsv;
 } pfx_t;
 static const uint16_t SPEED_PCT[7] = {50, 67, 75, 100, 133, 150, 200};
-static pad_t pads[NPADS + 1];
-static pnote_t ph[NPADS + 1][MAXPH];
+static PLAT_POOL pad_t pads[NPADS + 1];
+static PLAT_POOL pnote_t ph[NPADS + 1][MAXPH];
 static desc_t desc[NPADS];
 static pfx_t pfx[NPADS + 1];
 
@@ -586,7 +586,7 @@ typedef struct {
     uint32_t t;
     uint8_t on, p, v, pad;
 } recev_t;
-static recev_t rec_ev[RECMAX];
+static PLAT_POOL recev_t rec_ev[RECMAX];
 static volatile uint32_t rec_n;
 static volatile uint8_t rec_on;
 static void rec_push(uint32_t on, uint32_t p, uint32_t v)
@@ -655,7 +655,7 @@ typedef struct {
     uint8_t snd[MAXPH];
     uint16_t endt[MAXPH];
 } player_t;
-static player_t pl[NPADS + 1];
+static PLAT_POOL player_t pl[NPADS + 1];
 static void pl_release(uint32_t i)
 {
     uint32_t k;
@@ -1098,7 +1098,7 @@ void app_say(const char *a, const char *b)
 }
 
 /* ----------------------------------------------------------------- UNDO --- */
-static struct {
+static PLAT_POOL struct {
     uint8_t have;
     pad_t pad[NPADS];
     pnote_t uph[NPADS][MAXPH];
@@ -1151,9 +1151,9 @@ typedef struct {
     uint16_t rsv;
     pad_t p[NPADS];                      /* (only the kept ones matter) */
 } sess_t;
-static sess_t SS;
+static PLAT_POOL sess_t SS;
 #define NOTES_MAX (PLAT_STORE_MAX / sizeof(pnote_t))
-static pnote_t note_buf[NOTES_MAX];
+static PLAT_POOL pnote_t note_buf[NOTES_MAX];
 static int session_save(void)
 {
     uint32_t i, k, nn = 0;
