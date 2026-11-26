@@ -1,6 +1,0 @@
-# a drive a computer wrote (tests/make_computer_disk.py): a long file name, a text file, macOS extras
-wait 600
-loadimg /tmp/disk_computer.img
-expect files 4
-load 3
-expect notes 163

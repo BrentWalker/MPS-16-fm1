@@ -1,12 +1,13 @@
-/* MPS-16 ver FM1: chords and phrases on 16 pads, for the M-VAVE FM-1. Built on fm1-base.
+/* SEED: MPS-16's chord builder for the M-VAVE FM-1. Built on fm1-base.
  * Copyright (C) 2026 BeatSmith Media (BeatSmith). Licence of this file: to be chosen (see README).
  * This header is the app's half of the contract with the platform (device/unity.c, host/plat_host.c). */
 #pragma once
 #include <stdint.h>
 #include "plat.h"
 
-#define APP_NAME "MPS-16"
-#define APP_SPLASH_RGB RGB(232, 163, 61)   /* BeatSmith amber */
+#define APP_NAME "SEED"
+#define APP_TAGLINE "AN MPS-16 FUNCTION FOR FM-1"
+#define APP_SPLASH_RGB RGB(124, 93, 72)    /* Earth */
 #define APP_BLOCK 256u                     /* frames per audio block: 5.8 ms at 44.1 kHz */
 #define APP_TOUCH                          /* velocity from the keys (lib/touch.h) */
 
@@ -22,9 +23,6 @@ void app_ui_init(void);
 void app_frame(void);
 void app_input_only(void);
 void app_say(const char *a, const char *b);
-#define APP_WEB                            /* the browser emulator's own exports (web.c) */
-#define APP_LOOP                           /* every pass of the main loop: the USB drive's requests */
-void app_loop(void);
 
 /* the host simulator's checks (host/plat_host.c "expect") */
 #define APP_HOST_EXPECT

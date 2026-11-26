@@ -1,0 +1,165 @@
+# SEED in the host simulator: from the repository, ./build.sh --host, then from base/:
+#   ../app/build/host/mps-16_host ../app/tests/seed.txt ../app/build/host
+wait 600
+# a first start: COACH asks first
+expect coach 1
+shot seed-choose.png
+turn SELECT 1
+wait 30
+tap PLAY
+wait 60
+expect coachmode 2
+expect coach 2
+expect screen 1
+shot seed-step1.png
+# step 1: notes (C, E, G, A)
+key 7 down
+wait 30
+key 7 up
+key 11 down
+wait 30
+key 11 up
+key 14 down
+wait 30
+key 14 up
+wait 30
+expect picked 3
+expect coach 3
+key 16 down
+wait 30
+key 16 up
+wait 30
+expect picked 4
+shot seed-step2.png
+leds
+# step 2: the scale, PLAY uses it
+tap PLAY
+wait 60
+expect root 0
+expect scale 1
+expect screen 0
+expect coach 4
+shot seed-step3.png
+# step 3: the pads
+key 0 down
+wait 60
+expect voices 4
+expect padnote0 60
+expect padnote1 64
+expect padnote2 67
+expect padnote3 71
+key 0 up
+wait 200
+key 2 down
+wait 60
+key 2 up
+key 4 down
+wait 60
+shot seed-step4.png
+leds
+key 4 up
+wait 100
+expect coach 5
+# step 4: the bass
+key 1 down
+wait 30
+key 1 up
+key 3 down
+wait 30
+key 3 up
+wait 30
+expect coach 6
+# step 5: shape it
+turn K2 1
+wait 60
+expect type 2
+expect coach 7
+shot seed-step6.png
+# step 6: a C pad: NO BASS
+key 20 down
+wait 30
+key 20 up
+wait 60
+expect bassm 1
+expect coach 8
+shot seed-done.png
+wait 4500
+expect coach 0
+# home: NO BASS on a 9th chord: the bottom note out
+key 0 down
+wait 60
+expect padn0 4
+expect voices 4
+shot seed-home-nobass.png
+leds
+key 0 up
+wait 300
+# BASS again, 7ths
+key 17 down
+wait 30
+key 17 up
+turn K2 -1
+wait 60
+expect type 1
+expect bassm 0
+expect padn0 4
+# a progression: tap plays it, LATCH keeps it going
+key 25 down
+wait 50
+key 25 up
+wait 50
+key 23 down
+wait 60
+key 23 up
+wait 100
+expect playing13 1
+wait 11000
+expect playing13 1
+shot seed-home.png
+key 23 down
+wait 30
+key 23 up
+wait 100
+expect playing13 0
+# LATCH off
+key 25 down
+wait 30
+key 25 up
+expect latch 0
+# PICK NOTES from home, PLAY: a minor key
+tap EDIT
+wait 30
+key 4 down
+wait 30
+key 4 up
+key 7 down
+wait 30
+key 7 up
+key 11 down
+wait 30
+key 11 up
+wait 30
+shot seed-pick.png
+tap PLAY
+wait 60
+expect root 9
+expect scale 0
+# LIB: a progression onto pad 1, kept
+tap LFO
+wait 30
+turn SELECT 8
+wait 30
+shot seed-lib.png
+key 0 down
+wait 60
+key 0 up
+expect lock0 1
+tap HOME
+wait 30
+# SYS: the MIDI page
+tap GLO
+wait 30
+shot seed-sys.png
+tap GLO
+wait 30
+expect screen 0

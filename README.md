@@ -1,10 +1,15 @@
-# MPS-16 ver FM1
+# MPS-16 ver FM1: SEED
 
-Free firmware for the M-VAVE FM-1 by BeatSmith, in the Earth Science family. A MIDI phrase sampler: load a MIDI file and it is on the 16 A pads (the white keys) at once, in its own key. The B pads (the first 7 black keys) play bass and lead in the key, the C pads (the last 4) change key for a bridge, MUTATE makes repeated chords more interesting, and each pad group sends MIDI on its own channel.
+Free firmware for the M-VAVE FM-1 by BeatSmith, in the Earth Science family. SEED is MPS-16's chord builder: play a
+few notes you like, pick a scale that fits, and the 16 white keys (A pads) hold that key's chords and progressions.
+The first 7 black keys (B pads) play the notes of the key, lit by the chord you played (the bass bright). The last 4
+(C pads) are BASS, NO BASS, NO ROOT and LATCH. COACH, a step screen, walks you through it with the keys and buttons
+it means lit. Everything goes out over USB MIDI.
 
-MPS-16 ver FM1 is the hardware version of MPS-16 ver WEB, and groundwork for the MPS-16 plugin.
+From 0.30 the FM1 version is SEED only. The earlier MIDI phrase sampler (0.25 and before) is tagged
+`v0.25-sampler` and stays on the site under /v/.
 
-**Status:** 0.25, test builds. Install it or try it in the browser: https://brentwalker.github.io/MPS-16-fm1/ (older versions for testing: /v/VERSION/install/). Manual: [app/docs/MANUAL.md](app/docs/MANUAL.md).
+**Status:** 0.30, test builds. Install it or try it in the browser: https://brentwalker.github.io/MPS-16-fm1/ (older versions for testing: /v/VERSION/install/). Manual: [app/docs/MANUAL.md](app/docs/MANUAL.md).
 
 ## Built on
 
@@ -28,7 +33,7 @@ Host simulator (any Linux or macOS machine with a C compiler and Python 3):
 
     cd base && python3 tools/build.py ../app --host
 
-Tests: `sh tests/run_tests.sh` (host simulator: tests/basic, m2, m3). Firmware builds run on GitHub Actions through
+Tests: `sh tests/run_tests.sh` (host simulator: app/tests/seed.txt). Firmware builds run on GitHub Actions through
 the shared FM-1 builder: "Build and attest firmware", or "Publish site" to rebuild the installer and emulator (it
 asks for a version). See fm1-base's README for the toolchain.
 
