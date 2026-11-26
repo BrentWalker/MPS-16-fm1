@@ -147,8 +147,8 @@ that key's whole group.
 
 The lines move smoothly, in tiny steps that grow the faster you turn (hold HOME for the finest). They go anywhere,
 notes there or not, up to a quarter of the sequence past either edge, and the notes never move: what's outside the
-lines is dark and doesn't play. The window shows while you turn and closes when you let go, with its length in
-seconds.
+lines is dark and doesn't play. In EDIT the lines move for the key you select (the one played last, or the one held)
+only; anywhere else, holding a key moves them for its whole group. EDIT shows the window and its length in seconds.
 
 - **Progression keys**: a tap plays START to END once.
 - **Chord keys on a rhythm or an arp**: START to END goes round while you hold the key, and stops when you let go.
@@ -172,7 +172,9 @@ last with the playhead, brown the lowest note, white the notes sounding now. Pre
 
 **ARP** steps the RHYTHM, no screen: HOLD, STABS, OFFBEAT, 3-3-2, SYNC, ARP UP, ARP DOWN, ARP UP-DN, ARP RANDOM.
 
-**EDIT** is pad edit, the window: turn PRESET for START and ALGO for END here without holding a key (section 7).
+**EDIT** is pad edit, the window: play a key to select it, then PRESET moves its START and ALGO its END, for that
+key alone. Outside EDIT, holding a key and turning PRESET or ALGO moves them for its whole group, without opening the
+window.
 
 **ENV**, the notes' shape:
 
