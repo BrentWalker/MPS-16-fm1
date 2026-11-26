@@ -147,21 +147,16 @@ ARP to undo.
 
 ## 9. MIDI and SETUP
 
-![MIDI](img/seed-midi.png)
+MIDI goes out over **USB** and **Bluetooth** (the FM-1's TRS jack is MIDI in only), on four fixed channels:
 
-MIDI goes out over **USB** and **Bluetooth** (the FM-1's TRS jack is MIDI in only). **FX** opens MIDI: five sections,
-as on the web, each on its own channel (1 to 16, or OFF):
+| Channel | What |
+|---|---|
+| 1 | Pads 1 to 8 (chords) |
+| 2 | Pads 9 to 16 (progressions) |
+| 3 | B pads |
+| 4 | The keyboard: PICK NOTES and LIB previews |
 
-| Knob | Section | Starts on |
-|---|---|---|
-| K1 | Pads 1 to 8 (chords) | 1 |
-| K2 | Pads 9 to 16 (progressions) | 2 |
-| K3 | B pads | 3 |
-| K4 | PICK NOTES | 4 |
-| PRESET | LIB previews | 4 |
-
-Tap any pad or B pad on this page and turn **SELECT** to give just that one its own channel. Turning a section's
-knob puts its pads back on the section's channel. **PLAY** sends all notes off on every channel.
+Set your synths to listen on those. SETUP shows the map too. **PLAY** sends all notes off on every channel.
 
 ![SETUP](img/seed-setup.png)
 
@@ -180,7 +175,7 @@ knob puts its pads back on the section's channel. **PLAY** sends all notes off o
 | SEL | LIB |
 | ENV | PAD EDIT |
 | LFO | LOCK |
-| FX | MIDI |
+| FX | Free for now |
 | SYS (GLO) | Tap: SETUP. Hold: COACH |
 | PLAY | Stop, all notes off. SHIFT: clear the pads. In PICK NOTES: use the scale. In LIB: hear it |
 | ARP | UNDO |

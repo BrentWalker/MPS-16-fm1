@@ -203,24 +203,22 @@ expect padtype1 1
 tap ARP
 wait 30
 expect padtype5 1
-# MIDI (FX): progressions on channel 2 by default, pad 3 on its own channel 5
-tap FX
-wait 30
-expect secch1 1
-key 4 down
-wait 30
-key 4 up
-turn SELECT 5
-wait 30
-expect ovr2 4
-shot seed-midi.png
+# MIDI: fixed channels. Pad 3 on 1, pad 10 on 2, a B pad on 3, the keyboard on 4
 key 4 down
 wait 60
-expect midi_ch 4
+expect midi_ch 0
 key 4 up
 wait 100
-tap FX
-wait 30
+key 16 down
+wait 60
+expect midi_ch 1
+key 16 up
+wait 100
+key 1 down
+wait 60
+expect midi_ch 2
+key 1 up
+wait 100
 # REC into pad 16: count in, a B pad, REC stops
 tap REC
 wait 30
@@ -243,7 +241,7 @@ shot seed-rec.png
 # SETUP (SYS)
 tap GLO
 wait 30
-expect screen 5
+expect screen 4
 turn K1 -1
 wait 30
 expect ble 0
