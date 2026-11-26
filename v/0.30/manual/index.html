@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MPS-16: SEED, MPS-16 ver FM1</title>
+<meta name="description" content="SEED, MPS-16 ver FM1 for MPS-16, a firmware for the M-VAVE FM-1.">
+<style>
+/* paper and ink: warm white paper, ink-blue type, vermilion for what is played, mustard for asides; a shade of the
+   paper for code and callouts (CTL-1's; a firmware may restyle its site) */
+:root {
+  --paper: #fbf8f1; --sheet: #efe9dc; --rule: #ddd4c2; --ink: #1e2b5a; --muted: #5d6585;
+  --hot: #e5482e; --hot-t: #f8d3c9; --cool: #d9a21b; --cool-t: #f5e4b8;
+  --hot-ink: #c23a22;                                 /* the vermilion as text: 4.5:1 on the paper */
+  color-scheme: light;
+}
+body {
+  background: var(--paper); color: var(--ink); margin: 0;
+  font: 400 17px/1.6 "Helvetica Neue", Helvetica, Arial, sans-serif;
+  padding-inline: 16px; padding-block: 32px 64px;
+}
+main { max-width: 46rem; margin: 0 auto; }
+.page > .site { max-width: 46rem; margin-inline: auto; }
+main:focus { outline: none; }
+h1, h2, h3 { font-family: inherit; text-wrap: balance; line-height: 1.2; }
+h1 { font-size: 2.2rem; font-weight: 700; margin: 0 0 .4rem; letter-spacing: .02em; }
+h2 { font-size: 1.3rem; font-weight: 700; margin: 3rem 0 .8rem; padding-top: .8rem; border-top: 2px solid var(--ink); }
+h2 .num { color: var(--hot); margin-right: .5em; font-variant-numeric: tabular-nums; }
+h3 { font-size: 1.1rem; font-weight: 700; margin: 2rem 0 .5rem; }
+p, li { max-width: 65ch; }
+p { margin: 0 0 1rem; }
+ul, ol { padding-left: 1.3rem; margin: 0 0 1rem; }
+li { margin: .2rem 0; }
+li::marker { color: var(--hot); }
+strong { font-weight: 700; }
+a { color: var(--ink); text-decoration-color: var(--hot); text-decoration-thickness: 2px; text-underline-offset: 3px; }
+a:hover { background: var(--hot-t); }
+:focus-visible { outline: 3px solid var(--hot-ink); outline-offset: 2px; }
+.skip { position: absolute; left: 16px; top: -100px; background: var(--ink); color: var(--paper); padding: 8px 14px; border-radius: 0 0 6px 6px; z-index: 1; }
+.skip:focus { top: 0; }
+code, pre { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: .86em; }
+code { background: var(--sheet); padding: .08em .35em; border-radius: 3px; }
+pre { background: var(--sheet); border-radius: 6px; padding: 14px 16px; overflow-x: auto; line-height: 1.45; margin: 0 0 1.2rem; }
+pre code { background: none; padding: 0; font-size: inherit; }
+hr { display: none; }
+.table { overflow-x: auto; margin: 0 0 1.3rem; }
+table { border-collapse: collapse; width: 100%; font-size: .95rem; font-variant-numeric: tabular-nums; }
+th, td { text-align: left; vertical-align: top; padding: .45rem .7rem .45rem 0; border-bottom: 1px solid var(--rule); }
+th { font-weight: 700; text-transform: uppercase; letter-spacing: .06em; font-size: .78rem; color: var(--muted); border-bottom: 2px solid var(--ink); }
+td:first-child { white-space: nowrap; }
+.lede { margin-bottom: 1.6rem; }
+.status { background: var(--sheet); border-radius: 6px; padding: 12px 16px; }
+.status p { margin: 0; }
+.site { display: flex; flex-wrap: wrap; align-items: baseline; gap: .3rem 1.2rem; margin: 0 0 1.6rem; padding-bottom: .5rem; border-bottom: 2px solid var(--ink); }
+.site .home { font-size: 1.1rem; font-weight: 700; letter-spacing: .04em; color: var(--ink); text-decoration: none; }
+.site .home:hover { color: var(--hot-ink); background: none; }
+.site nav { margin-left: auto; display: flex; flex-wrap: wrap; gap: .2rem 1rem; font-size: .92rem; }
+.site nav a { color: var(--ink); text-underline-offset: 3px; }
+.site nav a[aria-current] { text-decoration: none; color: var(--hot-ink); }
+a.home { color: inherit; text-decoration: none; }
+a.home:hover { background: none; color: var(--hot-ink); }
+main > a.home { display: inline-block; font-size: .9rem; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 0 0 .4rem; }
+.callout { border-left: 4px solid var(--cool); background: var(--cool-t); padding: 10px 16px; margin: 0 0 1.2rem; max-width: 65ch; border-radius: 0 6px 6px 0; }
+.callout p { margin: 0; }
+details { background: var(--sheet); border-radius: 6px; padding: 0 16px; margin: 0 0 1.2rem; }
+details > summary { cursor: pointer; padding: 10px 0; }
+details[open] > summary { margin-bottom: .4rem; }
+details > :last-child { margin-bottom: 1rem; }
+.swatch { display: inline-block; width: .7em; height: .7em; margin-right: .4em; vertical-align: .02em; }
+nav.contents ol { columns: 2 14rem; column-gap: 2rem; padding-left: 1.3rem; }
+.figs { display: flex; flex-wrap: wrap; gap: 20px; margin: .4rem 0 1.6rem; }
+figure { margin: 0; flex: 0 1 auto; }
+figure img { display: block; max-width: 100%; height: auto; }
+figure.shot img { width: 300px; image-rendering: pixelated; border-radius: 4px; box-shadow: 0 0 0 1px var(--rule); }
+figure.wide { flex-basis: 100%; }
+figure.wide img { width: 100%; }
+figcaption { color: var(--muted); font-size: .88rem; margin-top: .4rem; max-width: 300px; }
+figure.wide figcaption { max-width: none; }
+nav.contents li { break-inside: avoid; }
+@media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
+</style>
+</head>
+<body>
+<a class="skip" href="#content">Skip to content</a>
+<div class="page">
+<main id="content" tabindex="-1">
+<a class="home" href="../">MPS-16</a>
+<h1>SEED, MPS-16 ver FM1</h1>
+<p>SEED is the chord builder of MPS-16, as firmware for the M-VAVE FM-1. Play a few notes you like, pick a scale that fits them, and the 16 white keys hold that key's chords and progressions. The black keys play the notes of the key and light up the bass of every chord you play. It sends everything out over USB MIDI, so it can drive the synths you already have.</p>
+<p>This is an early test build by BeatSmith.</p>
+<nav class="contents" aria-label="Contents"><h2 id="contents">Contents</h2>
+<ol><li><a href="#install-1-install"><a href="#1-install">Install</a></a></li><li><a href="#the-first-start-coach-2-the-first-start-coach"><a href="#2-the-first-start-coach">The first start: COACH</a></a></li><li><a href="#the-keys-a-b-and-c-pads-3-the-keys-a-b-and-c-pads"><a href="#3-the-keys-a-b-and-c-pads">The keys: A, B and C pads</a></a></li><li><a href="#home-4-home"><a href="#4-home">Home</a></a></li><li><a href="#pick-notes-5-pick-notes"><a href="#5-pick-notes">PICK NOTES</a></a></li><li><a href="#lib-6-lib"><a href="#6-lib">LIB</a></a></li><li><a href="#fx-and-sys-7-fx-and-sys"><a href="#7-fx-and-sys">FX and SYS</a></a></li><li><a href="#all-the-controls-8-all-the-controls"><a href="#8-all-the-controls">All the controls</a></a></li></ol>
+<h2 id="s1"><span class="num">1</span>Install</h2>
+<p>From Chrome or Edge on a computer, with the FM-1 connected by USB: open the <a href="../install/">installer</a> and follow it. The installer can put M-VAVE's own firmware back. You can also <a href="../emu/">try SEED in the browser</a> first: it runs the same code, with sound.</p>
+<h2 id="s2"><span class="num">2</span>The first start: COACH</h2>
+<div class="figs"><figure class="shot"><img src="img/seed-choose.png" alt="COACH asks first" loading="lazy"><figcaption>COACH asks first</figcaption></figure></div>
+<p>The first time SEED starts, it asks whether to show its steps. Turn <strong>SELECT</strong> to choose <strong>NO, NOT NOW</strong>, <strong>THIS FIRST TIME</strong> or <strong>EVERY START</strong>, then press <strong>PLAY</strong>. You can change it later on the SYS page (K4).</p>
+<div class="figs"><figure class="shot"><img src="img/seed-step1.png" alt="Step 1: pick your notes" loading="lazy"><figcaption>Step 1: pick your notes</figcaption></figure></div>
+<p>COACH is six short steps. Each one says what to do, and the keys and buttons it means light up or blink. When you do the step, it moves on by itself:</p>
+<ol><li><a href="#pick-your-notes-play-a-few-notes-you-like-on-any-keys"><strong>PICK YOUR NOTES</strong>: play a few notes you like, on any keys.</a></li><li><a href="#pick-a-scale-turn-select-to-a-scale-that-fits-press-play"><strong>PICK A SCALE</strong>: turn SELECT to a scale that fits, press PLAY.</a></li><li><a href="#play-the-pads-the-white-keys-blink-play-a-few"><strong>PLAY THE PADS</strong>: the white keys blink. Play a few.</a></li><li><a href="#play-the-bass-the-bright-black-key-is-the-bass-of-the-chord-you-just-played"><strong>PLAY THE BASS</strong>: the bright black key is the bass of the chord you just played.</a></li><li><a href="#shape-it-turn-k2-for-7ths-and-9ths-k3-for-how-the-pads-play"><strong>SHAPE IT</strong>: turn K2 for 7ths and 9ths, K3 for how the pads play.</a></li><li><a href="#bass-or-not-try-one-of-the-last-four-black-keys"><strong>BASS OR NOT</strong>: try one of the last four black keys.</a></li></ol>
+<p><strong>HOME</strong> skips the steps. <strong>Hold SYS</strong> to start them again any time.</p>
+<div class="figs"><figure class="shot"><img src="img/seed-step4.png" alt="Step 4: the B pads show the chord" loading="lazy"><figcaption>Step 4: the B pads show the chord</figcaption></figure></div>
+<h2 id="s3"><span class="num">3</span>The keys: A, B and C pads</h2>
+<ul><li><a href="#a-pads-the-16-white-keys-pads-1-to-8-are-your-key-s-chords-1-to-7-then-the-first-one-an-octave-up-pads-9-to-16-are-progressions-four-bars-each"><strong>A pads</strong>: the 16 white keys. Pads 1 to 8 are your key's chords (1 to 7, then the first one an octave up). Pads 9 to 16 are progressions, four bars each.</a></li><li><a href="#b-pads-the-first-7-black-keys-the-notes-of-your-key-from-the-root-up"><strong>B pads</strong>: the first 7 black keys. The notes of your key, from the root up.</a></li><li><a href="#c-pads-the-last-4-black-keys-bass-no-bass-no-root-and-latch"><strong>C pads</strong>: the last 4 black keys. <strong>BASS</strong>, <strong>NO BASS</strong>, <strong>NO ROOT</strong> and <strong>LATCH</strong>.</a></li></ul>
+<p>The B pads' lights show the chord you played last, so you always know what to play along:</p>
+<div class="table" tabindex="0" role="region" aria-label="Table: The keys: A, B and C pads (Light, Means)"><table><thead><tr><th>Light</th><th>Means</th></tr></thead><tbody><tr><td>Bright</td><td>the bass of the chord</td></tr><tr><td>Blinking</td><td>the bass, taken out by NO BASS or NO ROOT: still the note to play under it</td></tr><tr><td>Mid</td><td>the rest of the chord</td></tr><tr><td>Dim</td><td>the rest of the key</td></tr></tbody></table></div>
+<p>The screen shows the same thing in the Earth Science colours, as MPS-16 ver WEB does: brown the bass, red the root, blue the chord, an outline for a note that was taken out.</p>
+<p><strong>BASS, NO BASS, NO ROOT</strong>: BASS plays the chords as they are, and the progressions with a bass line. NO BASS drops each chord's bottom note and the bass line. NO ROOT drops the root too, as long as two notes stay. The lit C pad is the one in use.</p>
+<p><strong>LATCH</strong>: with it on, a pad keeps playing after you let go. Tap a playing pad to stop it. Turn LATCH off and the pads it kept going stop.</p>
+<h2 id="s4"><span class="num">4</span>Home</h2>
+<div class="figs"><figure class="shot"><img src="img/seed-home.png" alt="Home" loading="lazy"><figcaption>Home</figcaption></figure></div>
+<p>At home the screen shows the key and tempo, the pad you played last, the B pads in colour, the 16 A pads, the C pads and the four knobs.</p>
+<div class="table" tabindex="0" role="region" aria-label="Table: Home (Control, Does)"><table><thead><tr><th>Control</th><th>Does</th></tr></thead><tbody><tr><td>PRESET</td><td>The key's root</td></tr><tr><td>K1</td><td>The scale (major, minor and the modes)</td></tr><tr><td>K2</td><td>TYPE: TRIADS, 7THS, 9THS, SUS2, SUS4, ADD9</td></tr><tr><td>K3</td><td>PLAYS: CHORD (held), STABS (on 1, the and of 2, and 4), ARP</td></tr><tr><td>K4</td><td>HUMANIZE: a little timing and velocity, like a player</td></tr><tr><td>SELECT</td><td>BPM</td></tr><tr><td>ALGORITHM</td><td>The notes' length: left shorter, right longer, all the way right LEGATO</td></tr><tr><td>OCT- / OCT+</td><td>The octave</td></tr></tbody></table></div>
+<p>A chord pad plays while you hold it. A progression plays once when you tap it, loops while you hold it past the end, and stops when you let go after it looped.</p>
+<div class="figs"><figure class="shot"><img src="img/seed-home-nobass.png" alt="NO BASS" loading="lazy"><figcaption>NO BASS</figcaption></figure></div>
+<h2 id="s5"><span class="num">5</span>PICK NOTES</h2>
+<div class="figs"><figure class="shot"><img src="img/seed-pick.png" alt="PICK NOTES" loading="lazy"><figcaption>PICK NOTES</figcaption></figure></div>
+<p>Press <strong>EDIT</strong>. Every key is now a note, like a normal keyboard. Play the notes you like: each one you play is added, and playing it again takes it out. The scales that hold all of them are listed below, best first (the first note you played as the root). Turn <strong>SELECT</strong> to choose one and press <strong>PLAY</strong>: the pads are rebuilt in that key. <strong>K1</strong> clears your notes. EDIT again (or HOME) goes back without changing anything.</p>
+<h2 id="s6"><span class="num">6</span>LIB</h2>
+<div class="figs"><figure class="shot"><img src="img/seed-lib.png" alt="LIB" loading="lazy"><figcaption>LIB</figcaption></figure></div>
+<p>Press <strong>SEL</strong> (or LFO). Turn <strong>SELECT</strong> through your key's chords and the progressions. <strong>PLAY</strong> lets you hear the one picked, and a <strong>white key</strong> puts it on that pad. A pad you put something on keeps it when you change the key (a small corner marks it).</p>
+<h2 id="s7"><span class="num">7</span>FX and SYS</h2>
+<p><strong>FX</strong>: K1 STRUM (the chord's notes one after another), K2 HUMANIZE, K3 the ARP's speed.</p>
+<div class="figs"><figure class="shot"><img src="img/seed-sys.png" alt="SYS" loading="lazy"><figcaption>SYS</figcaption></figure></div>
+<p><strong>SYS</strong> (tap): the MIDI page. K1 the A pads' channel, K2 the B pads' channel, K4 the steps (OFF, FIRST, ALWAYS). <strong>Hold SYS</strong> for the steps.</p>
+<h2 id="s8"><span class="num">8</span>All the controls</h2>
+<div class="table" tabindex="0" role="region" aria-label="Table: All the controls (Control, Does)"><table><thead><tr><th>Control</th><th>Does</th></tr></thead><tbody><tr><td>A pads (white keys)</td><td>Chords (1 to 8) and progressions (9 to 16). In LIB, take the pick</td></tr><tr><td>B pads (black keys 1 to 7)</td><td>The notes of the key, lit by the chord you played</td></tr><tr><td>C pads (last 4 black keys)</td><td>BASS, NO BASS, NO ROOT, LATCH</td></tr><tr><td>HOME</td><td>Home, from anywhere. In COACH: skip</td></tr><tr><td>EDIT</td><td>PICK NOTES</td></tr><tr><td>SEL or LFO</td><td>LIB</td></tr><tr><td>FX</td><td>FX</td></tr><tr><td>SYS (GLO)</td><td>Tap: MIDI page. Hold: COACH</td></tr><tr><td>PLAY</td><td>All notes off. In PICK NOTES: use the scale. In LIB: hear it. In COACH's question: choose</td></tr><tr><td>SAVE</td><td>Keep the key and the settings</td></tr><tr><td>PRESET, K1 to K4, SELECT, ALGORITHM</td><td>See <a href="#4-home">Home</a></td></tr><tr><td>OCT- / OCT+</td><td>The octave</td></tr></tbody></table></div>
+</main>
+</div>
+</body>
+</html>

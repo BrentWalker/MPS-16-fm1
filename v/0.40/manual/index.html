@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MPS-16: SEED, MPS-16 ver FM1</title>
+<meta name="description" content="SEED, MPS-16 ver FM1 for MPS-16, a firmware for the M-VAVE FM-1.">
+<style>
+/* paper and ink: warm white paper, ink-blue type, vermilion for what is played, mustard for asides; a shade of the
+   paper for code and callouts (CTL-1's; a firmware may restyle its site) */
+:root {
+  --paper: #fbf8f1; --sheet: #efe9dc; --rule: #ddd4c2; --ink: #1e2b5a; --muted: #5d6585;
+  --hot: #e5482e; --hot-t: #f8d3c9; --cool: #d9a21b; --cool-t: #f5e4b8;
+  --hot-ink: #c23a22;                                 /* the vermilion as text: 4.5:1 on the paper */
+  color-scheme: light;
+}
+body {
+  background: var(--paper); color: var(--ink); margin: 0;
+  font: 400 17px/1.6 "Helvetica Neue", Helvetica, Arial, sans-serif;
+  padding-inline: 16px; padding-block: 32px 64px;
+}
+main { max-width: 46rem; margin: 0 auto; }
+.page > .site { max-width: 46rem; margin-inline: auto; }
+main:focus { outline: none; }
+h1, h2, h3 { font-family: inherit; text-wrap: balance; line-height: 1.2; }
+h1 { font-size: 2.2rem; font-weight: 700; margin: 0 0 .4rem; letter-spacing: .02em; }
+h2 { font-size: 1.3rem; font-weight: 700; margin: 3rem 0 .8rem; padding-top: .8rem; border-top: 2px solid var(--ink); }
+h2 .num { color: var(--hot); margin-right: .5em; font-variant-numeric: tabular-nums; }
+h3 { font-size: 1.1rem; font-weight: 700; margin: 2rem 0 .5rem; }
+p, li { max-width: 65ch; }
+p { margin: 0 0 1rem; }
+ul, ol { padding-left: 1.3rem; margin: 0 0 1rem; }
+li { margin: .2rem 0; }
+li::marker { color: var(--hot); }
+strong { font-weight: 700; }
+a { color: var(--ink); text-decoration-color: var(--hot); text-decoration-thickness: 2px; text-underline-offset: 3px; }
+a:hover { background: var(--hot-t); }
+:focus-visible { outline: 3px solid var(--hot-ink); outline-offset: 2px; }
+.skip { position: absolute; left: 16px; top: -100px; background: var(--ink); color: var(--paper); padding: 8px 14px; border-radius: 0 0 6px 6px; z-index: 1; }
+.skip:focus { top: 0; }
+code, pre { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: .86em; }
+code { background: var(--sheet); padding: .08em .35em; border-radius: 3px; }
+pre { background: var(--sheet); border-radius: 6px; padding: 14px 16px; overflow-x: auto; line-height: 1.45; margin: 0 0 1.2rem; }
+pre code { background: none; padding: 0; font-size: inherit; }
+hr { display: none; }
+.table { overflow-x: auto; margin: 0 0 1.3rem; }
+table { border-collapse: collapse; width: 100%; font-size: .95rem; font-variant-numeric: tabular-nums; }
+th, td { text-align: left; vertical-align: top; padding: .45rem .7rem .45rem 0; border-bottom: 1px solid var(--rule); }
+th { font-weight: 700; text-transform: uppercase; letter-spacing: .06em; font-size: .78rem; color: var(--muted); border-bottom: 2px solid var(--ink); }
+td:first-child { white-space: nowrap; }
+.lede { margin-bottom: 1.6rem; }
+.status { background: var(--sheet); border-radius: 6px; padding: 12px 16px; }
+.status p { margin: 0; }
+.site { display: flex; flex-wrap: wrap; align-items: baseline; gap: .3rem 1.2rem; margin: 0 0 1.6rem; padding-bottom: .5rem; border-bottom: 2px solid var(--ink); }
+.site .home { font-size: 1.1rem; font-weight: 700; letter-spacing: .04em; color: var(--ink); text-decoration: none; }
+.site .home:hover { color: var(--hot-ink); background: none; }
+.site nav { margin-left: auto; display: flex; flex-wrap: wrap; gap: .2rem 1rem; font-size: .92rem; }
+.site nav a { color: var(--ink); text-underline-offset: 3px; }
+.site nav a[aria-current] { text-decoration: none; color: var(--hot-ink); }
+a.home { color: inherit; text-decoration: none; }
+a.home:hover { background: none; color: var(--hot-ink); }
+main > a.home { display: inline-block; font-size: .9rem; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 0 0 .4rem; }
+.callout { border-left: 4px solid var(--cool); background: var(--cool-t); padding: 10px 16px; margin: 0 0 1.2rem; max-width: 65ch; border-radius: 0 6px 6px 0; }
+.callout p { margin: 0; }
+details { background: var(--sheet); border-radius: 6px; padding: 0 16px; margin: 0 0 1.2rem; }
+details > summary { cursor: pointer; padding: 10px 0; }
+details[open] > summary { margin-bottom: .4rem; }
+details > :last-child { margin-bottom: 1rem; }
+.swatch { display: inline-block; width: .7em; height: .7em; margin-right: .4em; vertical-align: .02em; }
+nav.contents ol { columns: 2 14rem; column-gap: 2rem; padding-left: 1.3rem; }
+.figs { display: flex; flex-wrap: wrap; gap: 20px; margin: .4rem 0 1.6rem; }
+figure { margin: 0; flex: 0 1 auto; }
+figure img { display: block; max-width: 100%; height: auto; }
+figure.shot img { width: 300px; image-rendering: pixelated; border-radius: 4px; box-shadow: 0 0 0 1px var(--rule); }
+figure.wide { flex-basis: 100%; }
+figure.wide img { width: 100%; }
+figcaption { color: var(--muted); font-size: .88rem; margin-top: .4rem; max-width: 300px; }
+figure.wide figcaption { max-width: none; }
+nav.contents li { break-inside: avoid; }
+@media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
+</style>
+</head>
+<body>
+<a class="skip" href="#content">Skip to content</a>
+<div class="page">
+<main id="content" tabindex="-1">
+<a class="home" href="../">MPS-16</a>
+<h1>SEED, MPS-16 ver FM1</h1>
+<p>SEED is the chord builder of MPS-16, as firmware for the M-VAVE FM-1. Play a few notes you like, pick a scale that fits them, and the 16 white keys hold that key's chords and progressions. The black keys play the notes of the key and light up the bass of every chord you play. It sends everything out over USB MIDI, so it can drive the synths you already have.</p>
+<p>This is an early test build by BeatSmith.</p>
+<nav class="contents" aria-label="Contents"><h2 id="contents">Contents</h2>
+<ol><li><a href="#install-1-install"><a href="#1-install">Install</a></a></li><li><a href="#the-first-start-coach-2-the-first-start-coach"><a href="#2-the-first-start-coach">The first start: COACH</a></a></li><li><a href="#the-keys-3-the-keys"><a href="#3-the-keys">The keys</a></a></li><li><a href="#home-4-home"><a href="#4-home">Home</a></a></li><li><a href="#pick-notes-5-pick-notes"><a href="#5-pick-notes">PICK NOTES</a></a></li><li><a href="#lib-6-lib"><a href="#6-lib">LIB</a></a></li><li><a href="#hold-a-key-select-preset-algo-7-hold-a-key-select-preset-algo"><a href="#7-hold-a-key-select-preset-algo">Hold a key: SELECT, PRESET, ALGO</a></a></li><li><a href="#edit-and-lock-8-edit-and-lock"><a href="#8-edit-and-lock">EDIT and LOCK</a></a></li><li><a href="#loop-undo-save-and-load-9-loop-undo-save-and-load"><a href="#9-loop-undo-save-and-load">LOOP, UNDO, SAVE and LOAD</a></a></li><li><a href="#sound-midi-and-setup-10-sound-midi-and-setup"><a href="#10-sound-midi-and-setup">SOUND, MIDI and SETUP</a></a></li><li><a href="#all-the-controls-11-all-the-controls"><a href="#11-all-the-controls">All the controls</a></a></li></ol>
+<h2 id="s1"><span class="num">1</span>Install</h2>
+<p>From Chrome or Edge on a computer, with the FM-1 connected by USB: open the <a href="../install/">installer</a> and follow it. The installer can put M-VAVE's own firmware back. You can also <a href="../emu/">try SEED in the browser</a> first: it runs the same code, with sound.</p>
+<h2 id="s2"><span class="num">2</span>The first start: COACH</h2>
+<div class="figs"><figure class="shot"><img src="img/seed-choose.png" alt="COACH asks first" loading="lazy"><figcaption>COACH asks first</figcaption></figure></div>
+<p>The first time SEED starts, it asks whether to show its steps. Turn <strong>K1</strong> to choose <strong>NO, NOT NOW</strong>, <strong>THIS FIRST TIME</strong> or <strong>EVERY START</strong>, then press <strong>PLAY</strong>. You can change it later on the SYS page (K4).</p>
+<div class="figs"><figure class="shot"><img src="img/seed-step1.png" alt="Step 1: pick your notes" loading="lazy"><figcaption>Step 1: pick your notes</figcaption></figure></div>
+<p>COACH is six short steps. Each one says what to do, and the keys and buttons it means light up or blink. When you do the step, it moves on by itself:</p>
+<ol><li><a href="#pick-your-notes-play-a-few-notes-you-like-on-any-keys"><strong>PICK YOUR NOTES</strong>: play a few notes you like, on any keys.</a></li><li><a href="#pick-a-scale-turn-k1-to-a-scale-that-fits-press-play"><strong>PICK A SCALE</strong>: turn K1 to a scale that fits, press PLAY.</a></li><li><a href="#play-the-pads-the-white-keys-blink-play-a-few"><strong>PLAY THE PADS</strong>: the white keys blink. Play a few.</a></li><li><a href="#play-the-bass-the-bright-black-key-is-the-bass-of-the-chord-you-just-played"><strong>PLAY THE BASS</strong>: the bright black key is the bass of the chord you just played.</a></li><li><a href="#shape-it-turn-k2-for-7ths-and-9ths-k3-for-how-the-pads-play"><strong>SHAPE IT</strong>: turn K2 for 7ths and 9ths, K3 for how the pads play.</a></li><li><a href="#bass-or-not-try-one-of-the-last-four-black-keys"><strong>BASS OR NOT</strong>: try one of the last four black keys.</a></li></ol>
+<p><strong>HOME</strong> skips the steps. <strong>HOME + SYS</strong> starts them again any time.</p>
+<div class="figs"><figure class="shot"><img src="img/seed-step4.png" alt="Step 4: the note keys show the chord" loading="lazy"><figcaption>Step 4: the note keys show the chord</figcaption></figure></div>
+<h2 id="s3"><span class="num">3</span>The keys</h2>
+<ul><li><a href="#chord-keys-white-keys-1-to-8-your-key-s-chords-1-to-7-then-the-first-one-an-octave-up"><strong>CHORD KEYS</strong>: white keys 1 to 8, your key's chords (1 to 7, then the first one an octave up).</a></li><li><a href="#progression-keys-white-keys-9-to-16-progressions-of-four-bars-each-a-tap-plays-it-once-start-to-end-even-if-you-let-go-tapping-again-restarts-it-sys-stops-it-the-loop-recorder-does-the-looping-one-progression-plays-at-a-time-start-another-and-the-first-stops"><strong>PROGRESSION KEYS</strong>: white keys 9 to 16, progressions of four bars each. A tap plays it once, START to END, even if you let go; tapping again restarts it. SYS stops it. The LOOP recorder does the looping. One progression plays at a time: start another and the first stops.</a></li><li><a href="#note-keys-the-first-7-black-keys-the-notes-of-your-key-from-the-root-up-sounding-while-you-hold-them"><strong>NOTE KEYS</strong>: the first 7 black keys. The notes of your key, from the root up, sounding while you hold them.</a></li><li><a href="#c-pads-the-last-4-black-keys-bass-no-bass-no-root-and-tap"><strong>C pads</strong>: the last 4 black keys. <strong>BASS</strong>, <strong>NO BASS</strong>, <strong>NO ROOT</strong> and <strong>TAP</strong>.</a></li></ul>
+<p>The note keys' lights show the chord you played last, so you always know what to play along:</p>
+<div class="table" tabindex="0" role="region" aria-label="Table: The keys (Light, Means)"><table><thead><tr><th>Light</th><th>Means</th></tr></thead><tbody><tr><td>Bright</td><td>the bass of the chord</td></tr><tr><td>Blinking</td><td>the bass, taken out by NO BASS or NO ROOT: still the note to play under it</td></tr><tr><td>Mid</td><td>the rest of the chord</td></tr><tr><td>Dim</td><td>the rest of the key</td></tr></tbody></table></div>
+<p>The screen shows the same thing in the Earth Science colours, as MPS-16 ver WEB does: brown the bass, red the root, blue the chord, an outline for a note that was taken out.</p>
+<p><strong>BASS, NO BASS, NO ROOT</strong>: BASS plays the chords as they are, and the progressions with a bass line. NO BASS drops each chord's bottom note and the bass line. NO ROOT drops the root too, as long as two notes stay. Like every change, it goes to the group you played last (all the chord keys, or all the progression keys); <strong>hold a key</strong> while you tap it and it goes to that key alone.</p>
+<p><strong>TAP</strong>: tap it on the beat a few times and the BPM follows. Its light flashes on the beat. MIDI clock coming in sets the BPM too.</p>
+<h2 id="s4"><span class="num">4</span>Home</h2>
+<div class="figs"><figure class="shot"><img src="img/seed-home.png" alt="Home" loading="lazy"><figcaption>Home</figcaption></figure></div>
+<div class="table" tabindex="0" role="region" aria-label="Table: Home (Control, Does)"><table><thead><tr><th>Control</th><th>Does</th></tr></thead><tbody><tr><td>K1</td><td>The scale (major, minor and the modes)</td></tr><tr><td>K2</td><td>TYPE: TRIADS, 7THS, 9THS, SUS2, SUS4, ADD9</td></tr><tr><td>K3</td><td>LENGTH: 1/32, 1/16, 1/8, 1/4, 1/2, AS IS, 1 BAR, 2 BARS, 4 BARS, LEGATO. The group played last, or hold a key for that key</td></tr><tr><td>K4</td><td>Free for now</td></tr><tr><td>OCT- / OCT+</td><td>Octave: of the key you hold, else of the group you played last</td></tr><tr><td>Hold a key + SELECT</td><td>The group's sound, or MIDI 1-4</td></tr><tr><td>Hold a key + PRESET</td><td>The group's window START line</td></tr><tr><td>Hold a key + ALGO</td><td>The group's window END line</td></tr><tr><td>HOME, held</td><td>SHIFT</td></tr></tbody></table></div>
+<h2 id="the-one-rule">The one rule</h2>
+<p>Every change goes to the <strong>group you played last</strong>: all the chord keys, all the progression keys, or the note keys. <strong>Hold a key</strong> while you make the change and it goes to that key alone. A group change sets every key in it to the same value. LOCKed keys are left out of group changes.</p>
+<div class="figs"><figure class="shot"><img src="img/seed-home-nobass.png" alt="NO BASS" loading="lazy"><figcaption>NO BASS</figcaption></figure></div>
+<h2 id="s5"><span class="num">5</span>PICK NOTES</h2>
+<div class="figs"><figure class="shot"><img src="img/seed-pick.png" alt="PICK NOTES" loading="lazy"><figcaption>PICK NOTES</figcaption></figure></div>
+<p>Press <strong>EDIT</strong>. Every key is now a note, like a normal keyboard. Play the notes you like: each one you play is added, and playing it again takes it out. The scales that hold all of them are listed below, best first (the first note you played as the root). Turn <strong>K1</strong> to choose one and press <strong>PLAY</strong>: the keys are rebuilt in that key. <strong>K2</strong> starts again. This is where the key's root is set now. EDIT again (or HOME) goes back without changing anything.</p>
+<h2 id="s6"><span class="num">6</span>LIB</h2>
+<div class="figs"><figure class="shot"><img src="img/seed-lib.png" alt="LIB" loading="lazy"><figcaption>LIB</figcaption></figure></div>
+<p>Press <strong>SEL</strong>. <strong>K1</strong> picks what's listed: TRIADS, 7THS, 9THS, SUS2, SUS4, ADD9 or PROGRESSIONS. Turn <strong>K2</strong> to choose one, <strong>PLAY</strong> to hear it, and a <strong>white key</strong> puts it on that pad. It follows the key when you change it.</p>
+<h2 id="s7"><span class="num">7</span>Hold a key: SELECT, PRESET, ALGO</h2>
+<p>SELECT, PRESET and ALGO do one thing each, on every screen, and only while you <strong>hold a key</strong>. The change goes to that key's whole group.</p>
+<div class="table" tabindex="0" role="region" aria-label="Table: Hold a key: SELECT, PRESET, ALGO (Hold a key and turn, Does)"><table><thead><tr><th>Hold a key and turn</th><th>Does</th></tr></thead><tbody><tr><td>SELECT</td><td>The group's output: a sound (WARM, KEYS, ORGAN, STRINGS, PLUCK, BASS, BELL, LEAD, PAD, BRASS), or MIDI 1, 2, 3 or 4. A sound plays on the FM-1 with no MIDI; MIDI is silent on the FM-1 and goes out on that channel</td></tr><tr><td>PRESET</td><td>START: the line where the window begins</td></tr><tr><td>ALGO</td><td>END: the line where it ends</td></tr></tbody></table></div>
+<p>The lines move smoothly, in tiny steps that grow the faster you turn (hold HOME for the finest). They go anywhere, notes there or not, up to a quarter of the sequence past either edge, and the notes never move: what's outside the lines is dark and doesn't play. The window shows while you turn and closes when you let go, with its length in seconds.</p>
+<ul><li><a href="#progression-keys-a-tap-plays-start-to-end-once"><strong>Progression keys</strong>: a tap plays START to END once.</a></li><li><a href="#chord-keys-on-a-rhythm-or-an-arp-start-to-end-goes-round-while-you-hold-the-key-and-stops-when-you-let-go"><strong>Chord keys on a rhythm or an arp</strong>: START to END goes round while you hold the key, and stops when you let go.</a></li><li><a href="#chord-keys-on-hold-plain-or-strummed-sound-until-you-let-go-start-before-the-chord-gives-a-gap-before-it-sounds-end-doesn-t-apply"><strong>Chord keys on HOLD (plain or strummed)</strong>: sound until you let go. START before the chord gives a gap before it sounds; END doesn't apply.</a></li><li><a href="#note-keys-a-piano-no-window"><strong>Note keys</strong>: a piano, no window.</a></li></ul>
+<p>This is not note LENGTH (home K3), which is how long each note lasts.</p>
+<div class="figs"><figure class="shot"><img src="img/seed-window.png" alt="The window" loading="lazy"><figcaption>The window</figcaption></figure></div>
+<p>Parked for now, to be placed again: the key's root (set in PICK NOTES meanwhile), INVERSION and SWING.</p>
+<h2 id="s8"><span class="num">8</span>EDIT and LOCK</h2>
+<div class="figs"><figure class="shot"><img src="img/seed-padedit.png" alt="EDIT" loading="lazy"><figcaption>EDIT</figcaption></figure></div>
+<p><strong>ENV</strong> opens EDIT for the group you played last; ENV again goes home. The title says what the knobs change: CHORD KEYS, PROGRESSION KEYS, NOTE KEYS, or the one key you hold. The top shows the notes of the key played last, and a playhead crosses them while it plays: a progression's four bars, or one bar of how a chord plays. Brown is the lowest note, white the notes sounding now.</p>
+<p>The knobs, most used first:</p>
+<div class="table" tabindex="0" role="region" aria-label="Table: EDIT and LOCK (Control, Chord and progression keys)"><table><thead><tr><th>Control</th><th>Chord and progression keys</th></tr></thead><tbody><tr><td>K1</td><td>RHYTHM: HOLD, STABS, OFFBEAT, 3-3-2, SYNC, ARP UP, ARP DOWN, ARP UP-DN, ARP RANDOM</td></tr><tr><td>K2</td><td>STRUM: the chord's notes one after another, OFF to 200 ms</td></tr><tr><td>K3</td><td>SPEED, 50% to 200%</td></tr><tr><td>K4</td><td>HUMANIZE: each note a little off in time and velocity, like a player</td></tr></tbody></table></div>
+<div class="figs"><figure class="shot"><img src="img/seed-progedit.png" alt="Progression keys" loading="lazy"><figcaption>Progression keys</figcaption></figure></div>
+<p>The <strong>note keys</strong> sound while you hold them, so only HUMANIZE (K4) applies to them; the rest shows n/a. OCT- and OCT+ move their octave, FX picks their sound.</p>
+<div class="figs"><figure class="shot"><img src="img/seed-noteedit.png" alt="Note keys" loading="lazy"><figcaption>Note keys</figcaption></figure></div>
+<p><strong>LFO</strong> is <strong>LOCK</strong>: it locks the key you played last, so it stays exactly as it is when the key, type or bass mode changes, and group changes leave it out. LFO again unlocks it. A small corner marks a locked key.</p>
+<h2 id="s9"><span class="num">9</span>LOOP, UNDO, SAVE and LOAD</h2>
+<div class="figs"><figure class="shot"><img src="img/seed-loop.png" alt="LOOP" loading="lazy"><figcaption>LOOP</figcaption></figure></div>
+<p><strong>REC</strong> opens the LOOP window and arms it: REC blinks. <strong>PLAY</strong> gives a bar's intro (the metronome counts it in), then the loop runs and records what goes out as MIDI: chord keys, progression keys with their rhythms, note keys and MIDI in. Every pass that records becomes a layer, so keep playing to stack parts.</p>
+<div class="table" tabindex="0" role="region" aria-label="Table: LOOP, UNDO, SAVE and LOAD (Control, Does)"><table><thead><tr><th>Control</th><th>Does</th></tr></thead><tbody><tr><td>PLAY</td><td>Armed: the intro, then recording. Playing: stop. Stopped: play the loop (no recording)</td></tr><tr><td>REC</td><td>Playing: recording on and off. Stopped: arm. In another screen: back to LOOP</td></tr><tr><td>ARP</td><td>The last layer off</td></tr><tr><td>HOME + REC</td><td>Clear the loop</td></tr><tr><td>K1</td><td>METRONOME: OFF, INTRO ONLY, ALWAYS (the FM-1's speaker only, never MIDI)</td></tr><tr><td>K2</td><td>BARS: 1, 2, 4, 8</td></tr><tr><td>K3</td><td>QUANTIZE: OFF or 16THS, on playback, so it can always be switched off again</td></tr><tr><td>K4</td><td>SWING: STRAIGHT to 75%, with QUANTIZE on</td></tr></tbody></table></div>
+<p>The loop plays out on the channels its notes came in on and follows TAP and MIDI clock. It keeps playing when you leave the window; PLAY stops it anywhere. The colours: blue chord keys, light blue progression keys, red note keys, white the keyboard and MIDI in.</p>
+<p><strong>SYS</strong> (GLO) tapped is <strong>STOP ALL</strong>, always dim lit: every key, the loop, all notes off on every channel. Hold SYS for SETUP, and <strong>HOME + SYS</strong> for COACH.</p>
+<p><strong>ARP</strong> outside the loop window is <strong>UNDO</strong>: one step back (a LIB drop, clearing the keys, a LOAD). ARP again goes forward.</p>
+<p><strong>SHIFT</strong> is <strong>HOME held</strong>. <strong>SHIFT + PLAY</strong> clears every key that isn't locked. ARP undoes it.</p>
+<p><strong>SAVE</strong> keeps the keys, their EDIT settings, the loop and the settings. <strong>Hold SAVE</strong> to LOAD them back.</p>
+<h2 id="s10"><span class="num">10</span>SOUND, MIDI and SETUP</h2>
+<div class="figs"><figure class="shot"><img src="img/seed-sound.png" alt="SOUND" loading="lazy"><figcaption>SOUND</figcaption></figure></div>
+<p><strong>FX</strong> opens SOUND, the overview of every group's output: K1 the chord keys, K2 the progression keys, K3 the note keys, K4 the keyboard (PICK NOTES and LIB). Each is either a sound on the FM-1 (no MIDI), or MIDI 1 to 4 (silent on the FM-1). Hold a key and turn SELECT for the same anywhere.</p>
+<p>Ten sounds: WARM, KEYS, ORGAN, STRINGS, PLUCK, BASS, BELL, LEAD, PAD, BRASS.</p>
+<p>MIDI goes out over <strong>USB</strong> and <strong>Bluetooth</strong> (the FM-1's TRS jack is MIDI in only). MIDI coming in on channels 1 to 4 plays that group's sound; above 4, the keyboard's. <strong>SYS</strong> sends all notes off on every channel.</p>
+<div class="figs"><figure class="shot"><img src="img/seed-setup.png" alt="SETUP" loading="lazy"><figcaption>SETUP</figcaption></figure></div>
+<p><strong>Hold SYS</strong> for SETUP: K1 Bluetooth MIDI on or off, K2 MIDI clock out (24 a beat, at the BPM), K3 MIDI clock in (the BPM follows it while it comes), K4 the steps (OFF, FIRST, ALWAYS). <strong>HOME + SYS</strong> for the steps.</p>
+<h2 id="s11"><span class="num">11</span>All the controls</h2>
+<div class="table" tabindex="0" role="region" aria-label="Table: All the controls (Control, Does)"><table><thead><tr><th>Control</th><th>Does</th></tr></thead><tbody><tr><td>Chord keys (white 1 to 8)</td><td>Chords. In LIB, take the pick. In REC, pick the key</td></tr><tr><td>Progression keys (white 9 to 16)</td><td>Progressions, one at a time. A tap plays START to END once</td></tr><tr><td>Note keys (black 1 to 7)</td><td>The notes of the key, lit by the chord you played</td></tr><tr><td>C pads (last 4 black keys)</td><td>BASS, NO BASS, NO ROOT (the group, or the key held), TAP</td></tr><tr><td>HOME</td><td>Home. Held: SHIFT. In COACH: skip</td></tr><tr><td>EDIT</td><td>PICK NOTES</td></tr><tr><td>SEL</td><td>LIB</td></tr><tr><td>ENV</td><td>EDIT: the group played last, or the key held</td></tr><tr><td>LFO</td><td>LOCK</td></tr><tr><td>FX</td><td>SOUND: every group's sound or MIDI channel</td></tr><tr><td>SYS (GLO)</td><td>STOP ALL, always dim lit. Held: SETUP. HOME + SYS: COACH</td></tr><tr><td>PLAY</td><td>The loop: armed, the intro and recording; playing, stop; stopped, play. SHIFT: clear the keys. In PICK NOTES: use the scale. In LIB: hear it</td></tr><tr><td>ARP</td><td>UNDO. In LOOP: the last layer off</td></tr><tr><td>SEQ</td><td>Free for now</td></tr><tr><td>REC</td><td>LOOP: open it armed, recording on and off. HOME + REC: clear</td></tr><tr><td>SAVE</td><td>Save. Held: LOAD</td></tr><tr><td>OCT- / OCT+</td><td>Octave: of the key you hold, else the group played last. In PICK NOTES: the keyboard</td></tr></tbody></table></div>
+</main>
+</div>
+</body>
+</html>
