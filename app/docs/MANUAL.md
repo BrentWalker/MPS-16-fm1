@@ -52,7 +52,7 @@ the step, it moves on by itself:
 ## 3. The keys: A, B and C pads
 
 - **A pads**: the 16 white keys. Pads 1 to 8 are your key's chords (1 to 7, then the first one an octave up). Pads 9
-  to 16 are progressions, four bars each.
+  to 16 are progressions, four bars each. One progression plays at a time: start another and the first stops.
 - **B pads**: the first 7 black keys. The notes of your key, from the root up.
 - **C pads**: the last 4 black keys. **BASS**, **NO BASS**, **NO ROOT** and **TAP**.
 
@@ -115,17 +115,33 @@ choose one, **PLAY** to hear it, and a **white key** puts it on that pad. It fol
 
 ![PAD EDIT](img/seed-padedit.png)
 
-**ENV** opens PAD EDIT for the pad you played last, as the web's pad edit window:
+**ENV** opens PAD EDIT for the pad you played last, as the web's pad edit window. The top shows the pad's notes and a
+playhead crosses them while it plays: a progression's four bars, or one bar of how a chord plays (CHORD, STRUM, ARP or
+STABS). Brown is the lowest note, white the notes sounding now. Play any pad and the screen follows it.
+
+**PLAY** page:
 
 | Control | Does |
 |---|---|
 | PRESET | PLAYS: CHORD, STRUM, ARP, STABS |
 | K1 | SPEED, 50% to 200% |
-| K2 | HUMANIZE |
-| K3 | LENGTH |
-| K4 | INVERSION, -3 to +3 |
+| K2 | LENGTH |
+| K3 | INVERSION, -3 to +3 |
+| K4 | The pad's octave, -2 to +2 |
+
+![MIDI FX](img/seed-midifx.png)
+
+**ENV** again: the **MIDI FX** page, the web's MIDI FX strip:
+
+| Control | Does |
+|---|---|
+| K1 | STRUM: the chord's notes one after another, OFF to 200 ms (STRUM plays: 35 ms when OFF) |
+| K2 | HUMANIZE: each note a little off in time and velocity, like a player |
+| K3 | SWING: the off-beats late, STRAIGHT to 75% |
+| K4 | ARP: UP, DOWN, UP-DOWN, RANDOM (for ARP plays) |
 | SELECT | VELOCITY: as you play it, or a fixed one |
-| ALGORITHM | The pad's octave (SHIFT: every pad's) |
+
+**ENV** a third time goes home. **Hold HOME** while you turn a knob and it sets every pad at once (the web's ALL PADS).
 
 **LFO** is **LOCK**: it locks the pad you played last, so it stays exactly as it is when the key, type or bass mode
 changes. LFO again unlocks it. A small corner marks a locked pad.
@@ -184,11 +200,11 @@ Set your synths to listen on those. SETUP shows the map too. **PLAY** sends all 
 | HOME | Home. Held: SHIFT. In COACH: skip |
 | EDIT | PICK NOTES |
 | SEL | LIB |
-| ENV | PAD EDIT |
+| ENV | PAD EDIT, again: MIDI FX, again: home |
 | LFO | LOCK |
 | FX | SOUND: each group's sound, and OUT (sound, MIDI, or both) |
 | SYS (GLO) | Tap: SETUP. Hold: COACH |
-| PLAY | Stop, all notes off. SHIFT: clear the pads. In PICK NOTES: use the scale. In LIB: hear it |
+| PLAY | STOP ALL, always dim lit: every pad stops, all notes off on every channel. SHIFT: clear the pads. In PICK NOTES: use the scale. In LIB: hear it |
 | ARP | UNDO |
 | SEQ | LATCH |
 | REC | Record into a pad |
