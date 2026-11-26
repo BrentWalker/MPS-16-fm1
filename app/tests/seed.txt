@@ -260,6 +260,37 @@ wait 60
 expect midi_ch 2
 key 1 up
 wait 100
+# LENGTH on home K3: the group (chords), then one held key
+key 4 down
+wait 30
+key 4 up
+wait 30
+turn K3 -2
+wait 30
+expect len0 -2
+expect len3 -2
+expect len9 0
+key 4 down
+wait 30
+turn K3 -1
+wait 30
+key 4 up
+wait 30
+expect len2 -3
+expect len3 -2
+key 14 down
+wait 30
+key 14 up
+wait 30
+turn K3 -4
+wait 60
+expect len8 -4
+key 14 down
+wait 900
+shot seed-len.png
+key 14 up
+tap GLO
+wait 60
 # OCT: held chord key 2, held progression key 9, a held note key; nothing held: the group played last
 key 2 down
 wait 60

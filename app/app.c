@@ -760,9 +760,12 @@ static void midi_in(void)                /* audio interrupt: MIDI in plays the s
     }
 }
 
-static const uint16_t LEN_PCT[11] = {10, 25, 40, 55, 75, 100, 140, 200, 300, 450, 0};
-static const char *const LEN_NAME[11] = {"10%", "25%", "40%", "55%", "75%", "AS WRITTEN", "140%", "200%", "300%",
-                                         "450%", "LEGATO"};
+/* LENGTH, as music: a note this long (ticks, PPQ 96), AS IS (0), LEGATO (each note to the next). Index len + 5 */
+#define LEN_MAX 4
+static const uint16_t LEN_TK[10] = {12, 24, 48, 96, 192, 0, 384, 768, 1536, 0};
+static const char *const LEN_NAME[10] = {"1/32", "1/16", "1/8", "1/4", "1/2", "AS IS", "1 BAR", "2 BARS", "4 BARS",
+                                         "LEGATO"};
+#define LEN_LEGATO(l) ((l) == LEN_MAX)
 static uint32_t cs_rng = 0x2545F491u;
 static uint32_t cs_rnd(void)
 {
@@ -824,9 +827,9 @@ static void phrase_tick(uint32_t n)
                     out_off(P->snd[k] - 1u, P->ch);
                 out_on(m, clamp((int32_t)v, 1, 127), P->ch);
                 P->snd[k] = (uint8_t)(m + 1u);
-                if (f->len && li < 11u) {
-                    if (LEN_PCT[li])
-                        d = d * LEN_PCT[li] / 100u;
+                if (f->len && li < 10u) {
+                    if (!LEN_LEGATO(f->len))
+                        d = LEN_TK[li];
                     else {
                         uint32_t j, nx = (uint32_t)we;
                         for (j = 0; j < pd->pn && j < MAXPH; j++)
@@ -933,14 +936,15 @@ static void chord_tick(uint32_t n)
             while (c->next < c->t + n) {
                 if (RH_PAT[c->mode] >> (c->idx % 16u) & 1u) {
                     uint32_t li = (uint32_t)(c->len + 5), g = step * 3u / 2u;
+                    float tk = SR * 60.0f / ((float)tempo * (float)PPQ);   /* a tick, in samples */
                     for (k = 0; k < c->n; k++) {
                         if (c->sounded[k])
                             out_off(c->note[k], c->ch);
                         out_on(c->note[k], c->human ? human_vel(c->vel[0], c->human) : c->vel[0], c->ch);
                         c->sounded[k] = 1;
                     }
-                    if (li < 11u)
-                        g = LEN_PCT[li] ? g * LEN_PCT[li] / 100u : step * 5u;
+                    if (c->len && li < 10u)
+                        g = LEN_LEGATO(c->len) ? step * 16u : (uint32_t)((float)LEN_TK[li] * tk);
                     c->off = c->next + (g ? g : 1u);
                 }
                 c->next += c->swing > 50u ? (c->idx & 1u ? step * 2u * (100u - c->swing) / 100u
@@ -948,6 +952,12 @@ static void chord_tick(uint32_t n)
                 c->idx++;
             }
         } else if (RH_ARP(c->mode) && c->n) {
+            if (c->off && c->off < c->t + n) {   /* LENGTH: the arp note ends before the next */
+                if (c->cur)
+                    out_off(c->cur - 1u, c->ch);
+                c->cur = 0;
+                c->off = 0;
+            }
             while (c->next < c->t + n) {
                 uint32_t step = (uint32_t)(30.0f * SR / (float)tempo / c->spd);   /* 8ths at 100% */
                 uint32_t q = arp_pick(c->arp, c->idx, c->n);
@@ -957,6 +967,10 @@ static void chord_tick(uint32_t n)
                     out_off(c->cur - 1u, c->ch);
                 out_on(c->note[q], c->human ? human_vel(c->vel[0], c->human) : c->vel[0], c->ch);
                 c->cur = (uint8_t)(c->note[q] + 1u);
+                if (c->len && !LEN_LEGATO(c->len) && c->len + 5 < 10) {
+                    uint32_t g = (uint32_t)((float)LEN_TK[c->len + 5] * SR * 60.0f / ((float)tempo * (float)PPQ));
+                    c->off = g < step ? c->next + (g ? g : 1u) : 0u;
+                }
                 c->idx++;
                 c->next += step ? step : 1u;
             }
@@ -1568,6 +1582,8 @@ static int session_load(void)
     for (i = 0; i < NPADS; i++) {
         desc[i] = SS.d[i];
         pfx[i] = SS.f[i];
+        if (pfx[i].len > LEN_MAX)
+            pfx[i].len = LEN_MAX;
         if (SS.kept >> i & 1u) {
             pads[i] = SS.p[i];
             if (pads[i].type == PAD_PROG)
@@ -1870,7 +1886,10 @@ static void edit_say(const char *what, const char *val)   /* "CHORD KEYS: RHYTHM
         str_set(t, j < 8u ? "CHORD " : "PROG ", sizeof t);
         num_text((int32_t)(j < 8u ? j + 1u : j - 7u), t + cs_len(t), 0);
     } else
-        str_set(t, h ? "HELD KEYS" : GRP_NAME[ui.grp % 3u], sizeof t);
+    {
+        static const char *const SH[3] = {"CHORDS", "PROGS", "NOTES"};
+        str_set(t, h ? "HELD KEYS" : SH[ui.grp % 3u], sizeof t);
+    }
     text_cat(t, ": ");
     text_cat_n(t, what, sizeof t);
     app_say(t, val);
@@ -2290,7 +2309,7 @@ buttons:
                     num_text(v.human * 2, t, 0);
                     text_cat(t, "%");
                 } else if (es) {
-                    v.len = (int8_t)clamp(v.len + es, -5, 5);
+                    v.len = (int8_t)clamp(v.len + es, -5, LEN_MAX);
                     what = "LENGTH";
                     str_set(t, v.len ? LEN_NAME[v.len + 5] : "AS IS", sizeof t);
                 } else if (ea) {
@@ -2416,6 +2435,20 @@ buttons:
             rekey();
             app_say("TYPE", CTYPE_NAME[set.type]);
             coach_event(CE_SHAPE);
+        }
+        if (k3) {                        /* LENGTH: the group played last, or the keys held */
+            int32_t r = edit_ref();
+            uint32_t m = edit_pads(), j;
+            if (r < 0)
+                app_say("NOTE KEYS", "THEY SOUND WHILE HELD");
+            else {
+                int8_t l = (int8_t)clamp(pfx[r].len + k3, -5, LEN_MAX);
+                for (j = 0; j < NPADS; j++)
+                    if (m >> j & 1u)
+                        pfx[j].len = l;
+                set_dirty = 1;
+                edit_say("LENGTH", LEN_NAME[l + 5]);
+            }
         }
         if (es || k1 || k2 || k3 || k4 || ek || ea)
             ui.redraw = 1;
@@ -2735,11 +2768,14 @@ static void draw_home_bottom(void)
         cv_text(x + (56 - text_w(&FONT_XS, CN[i])) / 2, 52, &FONT_XS, CN[i], C_WHITE);
     }
     {
-        static const char *const LBL[4] = {"PRESET KEY", "K1 SCALE", "K2 TYPE", "TAP BPM"};
+        static const char *const LBL[4] = {"KEY", "K2 TYPE", "K3 LENGTH", "TAP BPM"};
         char v[4][12];
+        int32_t r = edit_ref();
         spell(set.root, letter_of(set.root, set.scale), v[0]);
-        str_set(v[1], SCALE_SHORT[set.scale], sizeof v[1]);
-        str_set(v[2], CTYPE_NAME[set.type], sizeof v[2]);
+        text_cat(v[0], " ");
+        text_cat_n(v[0], SCALE_SHORT[set.scale], sizeof v[0]);
+        str_set(v[1], CTYPE_NAME[set.type], sizeof v[1]);
+        str_set(v[2], r >= 0 ? LEN_NAME[pfx[r].len + 5] : "n/a", sizeof v[2]);
         num_text((int32_t)tempo, v[3], 0);
         bottom_bar(72, LBL, v);
     }
@@ -2908,7 +2944,7 @@ static void draw_roll(uint32_t i, int32_t x0, int32_t y0, int32_t w, int32_t h)
         bars = p->bars ? p->bars : 1u;
         for (k = 0; k < p->pn && k < MAXPH && n < RN; k++, n++) {
             st[n] = swing_t((float)ph[i][k].s, f->swing);
-            du[n] = (float)ph[i][k].d;
+            du[n] = f->len && !LEN_LEGATO(f->len) ? (float)LEN_TK[f->len + 5] : (float)ph[i][k].d;
             pi[n] = (int16_t)(ph[i][k].p + 12 * f->oct);
         }
         if (pl[i].on)
@@ -2943,7 +2979,7 @@ static void draw_roll(uint32_t i, int32_t x0, int32_t y0, int32_t w, int32_t h)
             for (j = 0; t < W && n < RN; j++, n++) {
                 float sl = f->swing > 50u ? step * 2.0f * (float)(j & 1u ? 100u - f->swing : f->swing) / 100.0f : step;
                 st[n] = t;
-                du[n] = sl * 0.9f;
+                du[n] = f->len && !LEN_LEGATO(f->len) ? fm_minf((float)LEN_TK[f->len + 5], sl) : sl * 0.9f;
                 pi[n] = (int16_t)v[dir == AR_RANDOM ? j % cn : arp_pick(dir, j, cn)];
                 t += sl;
             }
@@ -2954,7 +2990,7 @@ static void draw_roll(uint32_t i, int32_t x0, int32_t y0, int32_t w, int32_t h)
                 if (RH_PAT[f->plays] >> (j % 16u) & 1u)
                     for (k = 0; k < cn && n < RN; k++, n++) {
                         st[n] = t;
-                        du[n] = step * 1.5f;
+                        du[n] = f->len ? (LEN_LEGATO(f->len) ? W - t : (float)LEN_TK[f->len + 5]) : step * 1.5f;
                         pi[n] = (int16_t)v[k];
                     }
                 t += sl;
@@ -3276,7 +3312,7 @@ void app_init(void)
         int got = plat_store_load(OBJ_SETTINGS, &set, sizeof set);
         if (got != (int)sizeof set || set.magic != SET_MAGIC || set.root > 11u || set.scale >= NSCALES ||
             set.octave < -2 || set.octave > 2 || set.boct < -2 || set.boct > 2 || set.type >= NCTYPES || set.plays >= PL_N || set.bassm >= BM_N ||
-            set.human > 50u || set.len < -5 || set.len > 5 || set.bpm < 40u || set.bpm > 240u || set.coach >= CO_N ||
+            set.human > 50u || set.len < -5 || set.len > LEN_MAX || set.bpm < 40u || set.bpm > 240u || set.coach >= CO_N ||
             set.out >= OUT_N || set.snd[0] >= NSOUNDS || set.snd[1] >= NSOUNDS || set.snd[2] >= NSOUNDS ||
             set.snd[3] >= NSOUNDS)
             settings_defaults();
@@ -3445,6 +3481,8 @@ int app_expect(const char *what, int *got)
         *got = pfx[atoi(what + 6) % NPADS].plays;
     else if (!strncmp(what, "speed", 5))
         *got = pfx[atoi(what + 5) % NPADS].speed;
+    else if (!strncmp(what, "len", 3))
+        *got = pfx[atoi(what + 3) % NPADS].len;
     else if (!strncmp(what, "human", 5))
         *got = pfx[atoi(what + 5) % NPADS].human;
     else if (!strcmp(what, "boct"))

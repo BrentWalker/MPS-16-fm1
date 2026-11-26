@@ -86,7 +86,8 @@ the BPM too.
 | PRESET | The key's root |
 | K1 | The scale (major, minor and the modes) |
 | K2 | TYPE: TRIADS, 7THS, 9THS, SUS2, SUS4, ADD9 |
-| K3, K4, SELECT, ALGORITHM | Free for now |
+| K3 | LENGTH: 1/32, 1/16, 1/8, 1/4, 1/2, AS IS, 1 BAR, 2 BARS, 4 BARS, LEGATO. The group played last, or hold a key for that key |
+| K4, SELECT, ALGORITHM | Free for now |
 | OCT- / OCT+ | Octave: of the key you hold, else of the group you played last |
 | HOME, held | SHIFT |
 
@@ -131,7 +132,7 @@ The knobs, most used first:
 | K2 | STRUM: the chord's notes one after another, OFF to 200 ms |
 | K3 | SPEED, 50% to 200% |
 | K4 | HUMANIZE: each note a little off in time and velocity, like a player |
-| SELECT | LENGTH: shorter, AS IS, longer, all the way LEGATO |
+| SELECT | LENGTH, the same as home K3: 1/32 to 4 BARS, AS IS, LEGATO |
 | ALGORITHM | SWING: the off-beats late, STRAIGHT to 75% |
 | PRESET | INVERSION, -3 to +3 (chord keys) |
 
