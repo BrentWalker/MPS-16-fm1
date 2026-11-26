@@ -69,10 +69,10 @@ wait 30
 key 3 up
 wait 30
 expect coach 6
-# step 5: shape it
-turn K2 1
+# step 5: shape it: ARP steps the rhythm
+tap ARP
 wait 60
-expect type 2
+expect rhythm0 1
 expect coach 7
 shot seed-step6.png
 # step 6: a C pad: NO BASS
@@ -85,11 +85,26 @@ expect coach 8
 shot seed-done.png
 wait 4500
 expect coach 0
-# home: NO BASS on a 9th chord: the bottom note out
+# ARP round to HOLD again (9 rhythms)
+key 0 down
+wait 30
+key 0 up
+wait 30
+tap ARP
+tap ARP
+tap ARP
+tap ARP
+tap ARP
+tap ARP
+tap ARP
+tap ARP
+wait 30
+expect rhythm0 0
+# home: NO BASS on a 7th chord: the bottom note out
 key 0 down
 wait 60
-expect padn0 4
-expect voices 4
+expect padn0 3
+expect voices 3
 shot seed-home-nobass.png
 leds
 key 0 up
@@ -98,7 +113,6 @@ wait 300
 key 17 down
 wait 30
 key 17 up
-turn K2 -1
 wait 60
 expect type 1
 expect bassm 0
@@ -162,24 +176,27 @@ key 25 up
 wait 100
 expect bpm >117
 expect bpm <123
-# EDIT (ENV): the group played last, all of it; a held key alone
+# the key pages: ARP the rhythm, ENV the notes' shape, SEQ the window, LFO the groove
 key 2 down
 wait 60
 key 2 up
 wait 100
 expect grp 0
-tap ENV
-wait 30
-expect screen 3
-turn K1 1
+tap ARP
 wait 30
 expect rhythm1 1
 expect rhythm5 1
 expect rhythm9 0
-turn K2 2
+tap ENV
+wait 30
+expect screen 3
+turn K4 2
 wait 30
 expect strum0 2
-# hold a key: PRESET START, ALGO LENGTH of the window, for its group
+tap SEQ
+wait 30
+expect screen 3
+# hold a key: PRESET START, ALGO END of the window, for its group
 key 2 down
 wait 60
 turn PRESET 4
@@ -196,16 +213,25 @@ wait 400
 shot seed-padedit.png
 key 2 up
 wait 60
-turn K1 -1
+tap ARP
+tap ARP
+tap ARP
+tap ARP
+tap ARP
+tap ARP
+tap ARP
+tap ARP
 wait 30
 expect rhythm3 0
-# a progression key: its group
+# a progression key: its group, on LFO
 key 14 down
 wait 60
 key 14 up
 wait 60
 expect grp 1
-turn K3 1
+tap LFO
+wait 30
+turn K2 1
 wait 30
 expect speed8 4
 expect speed9 4
@@ -216,13 +242,15 @@ shot seed-progedit.png
 key 14 up
 tap GLO
 wait 60
-# a note key: HUMANIZE only
+# a note key: ENV HUMANIZE only
 key 1 down
 wait 60
 key 1 up
 wait 30
 expect grp 2
-turn K4 2
+tap ENV
+wait 30
+turn K2 2
 wait 30
 expect nhum 10
 shot seed-noteedit.png
@@ -233,11 +261,15 @@ wait 60
 tap ENV
 wait 30
 expect screen 0
-# LOCK (LFO) pad 2, then the key changes: pad 2 stays
-tap LFO
+# LOCK (HOME + SEQ) key 2, then the key changes: key 2 stays
+press HOME
+wait 30
+tap SEQ
+wait 30
+release HOME
 wait 30
 expect lock1 1
-# UNDO (ARP) after SHIFT + PLAY clears the pads
+# UNDO (HOME + ARP) after HOME + PLAY clears the keys
 press HOME
 wait 30
 tap PLAY
@@ -246,7 +278,11 @@ release HOME
 wait 30
 expect padtype5 0
 expect padtype1 1
+press HOME
+wait 30
 tap ARP
+wait 30
+release HOME
 wait 30
 expect padtype5 1
 # SELECT with a key held: the group's sound, then MIDI 1-4 (silent here, out on that channel)
@@ -311,19 +347,21 @@ shot seed-window.png
 key 14 up
 wait 60
 expect screen 0
-# LENGTH on home K3: the group (chords), then one held key
+# LENGTH on ENV K1: the group (chords), then one held key
 key 4 down
 wait 30
 key 4 up
 wait 30
-turn K3 -2
+tap ENV
+wait 30
+turn K1 -2
 wait 30
 expect len0 -2
 expect len3 -2
 expect len9 0
 key 4 down
 wait 30
-turn K3 -1
+turn K1 -1
 wait 30
 key 4 up
 wait 30
@@ -333,13 +371,15 @@ key 14 down
 wait 30
 key 14 up
 wait 30
-turn K3 -4
+turn K1 -4
 wait 60
 expect len8 -4
 key 14 down
 wait 900
 shot seed-len.png
 key 14 up
+tap ENV
+wait 30
 tap GLO
 wait 60
 # OCT: held chord key 2, held progression key 9, a held note key; nothing held: the group played last
@@ -447,16 +487,16 @@ expect loopn >4
 tap ARP
 wait 60
 expect loopn >3
-expect loopn <6
+expect loopn <9
 tap PLAY
 wait 60
 expect looprun 0
 tap HOME
 wait 30
 # SETUP: SYS held; a tap is STOP ALL
-press GLO
+press FX
 wait 900
-release GLO
+release FX
 wait 30
 expect screen 4
 turn K1 -1
