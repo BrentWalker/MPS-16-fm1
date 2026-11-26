@@ -219,6 +219,28 @@ wait 60
 expect midi_ch 2
 key 1 up
 wait 100
+# SOUND (FX): B pads to BELL, OUT to MIDI only (the FM-1 quiet), back to both
+tap FX
+wait 30
+expect screen 5
+turn K3 1
+wait 30
+expect snd2 6
+shot seed-sound.png
+turn SELECT 2
+wait 30
+expect out 2
+key 4 down
+wait 60
+expect voices 0
+key 4 up
+wait 100
+turn SELECT -2
+wait 30
+expect out 0
+tap FX
+wait 30
+expect screen 0
 # REC into pad 16: count in, a B pad, REC stops
 tap REC
 wait 30

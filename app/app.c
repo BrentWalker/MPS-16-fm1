@@ -5,7 +5,7 @@
  * The first 7 black keys (B pads): the notes of the key, lit by the chord you played (the bass bright). The last 4
  * (C pads): BASS, NO BASS, NO ROOT, TAP. HOME (held: SHIFT), EDIT pick notes, SEL the library, ENV pad edit, LFO
  * LOCK, SYS setup (held: COACH), PLAY stop (SHIFT: clear the pads), ARP UNDO, SEQ LATCH, REC, SAVE (held:
- * LOAD), OCT- / OCT+ the keyboard's octave. FX: free. MIDI out over USB and Bluetooth on four fixed channels: pads
+ * LOAD), OCT- / OCT+ the keyboard's octave, FX SOUND (8 sounds a group; OUT: sound, MIDI or both). MIDI out over USB and Bluetooth on four fixed channels: pads
  * 1-8 on 1, pads 9-16 on 2, the B pads on 3, the keyboard on 4. MIDI clock out and in.
  *
  * Part of the unity build (device/unity.c, host/plat_host.c), after the platform: gfx.c and announce.c are in
@@ -13,7 +13,7 @@
 #include "fastmath.h"
 
 /* ================================================================ settings === */
-#define SET_MAGIC 0x33444553u            /* "SED3" */
+#define SET_MAGIC 0x34444553u            /* "SED4" */
 enum { BM_BASS, BM_NOBASS, BM_NOROOT, BM_N };
 enum { PL_CHORD, PL_STRUM, PL_ARP, PL_STABS, PL_N };
 enum { CO_OFF, CO_FIRST, CO_ALWAYS, CO_N };
@@ -22,6 +22,8 @@ enum { CO_OFF, CO_FIRST, CO_ALWAYS, CO_N };
 #define CH_PADS2 1u
 #define CH_BPADS 2u
 #define CH_KEYS 3u
+#define NGRP 4u                          /* those four: each plays its own FM-1 sound */
+enum { OUT_BOTH, OUT_SOUND, OUT_MIDI, OUT_N };   /* the FM-1's sound and MIDI out, or one of them */
 typedef struct {
     uint32_t magic;
     uint8_t root;                        /* 0 = C .. 11 = B */
@@ -36,6 +38,8 @@ typedef struct {
     uint8_t coach, coach_seen, coach_set;   /* COACH: CO_*, been through once, the choice made */
     uint8_t ble;                         /* Bluetooth MIDI on */
     uint8_t clk_out, clk_in;             /* MIDI clock: sent at the BPM; followed when it comes in */
+    uint8_t out;                         /* OUT_* */
+    uint8_t snd[NGRP];                   /* each group's sound: SOUNDS[] */
     uint8_t rsv[3];
 } settings_t;
 static settings_t set;
@@ -56,6 +60,11 @@ static void settings_defaults(void)
     set.ble = 1;
     set.clk_out = 1;
     set.clk_in = 1;
+    set.out = OUT_BOTH;
+    set.snd[CH_PADS1] = 1;               /* KEYS, STRINGS, BASS, WARM */
+    set.snd[CH_PADS2] = 3;
+    set.snd[CH_BPADS] = 5;
+    set.snd[CH_KEYS] = 0;
 }
 
 /* ================================================================== theory === */
@@ -482,9 +491,33 @@ static void kit_fresh(void)              /* every pad the kit's, settings as the
 /* ================================================================== synth === */
 #define NVOICES 12u
 #define SR 44100.0f
+/* the sounds: one oscillator shape, a filter, an envelope. All cheap enough for 12 voices */
+enum { W_SAW2, W_SQR2, W_FM, W_ORGAN, W_BASS };
+typedef struct {
+    const char *name;
+    uint8_t wave;
+    float det;                           /* the second oscillator's ratio (FM: the modulator's) */
+    float fm;                            /* FM: the index, by the envelope */
+    float fc, fc_vel, fc_env;            /* the filter: Hz, more with velocity squared, more with the envelope */
+    float att, sus, dec, rel;            /* attack a sample; sustain level, the rate toward it; release */
+    float gain;
+} sound_t;
+#define NSOUNDS 8u
+#define SND_CLICK NSOUNDS                /* REC's count-in */
+static const sound_t SOUNDS[NSOUNDS + 1u] = {
+    {"WARM", W_SAW2, 1.0058f, 0, 700, 2600, 1800, 0.0045f, 0.62f, 0.00012f, 0.99975f, 1.0f},
+    {"KEYS", W_FM, 1.0f, 1.6f, 9000, 0, 0, 0.02f, 0.0f, 0.00005f, 0.9993f, 1.4f},
+    {"ORGAN", W_ORGAN, 1.0f, 0, 9000, 0, 0, 0.01f, 1.0f, 0.001f, 0.9993f, 0.75f},
+    {"STRINGS", W_SAW2, 1.0071f, 0, 1400, 1500, 600, 0.00007f, 0.85f, 0.0002f, 0.99993f, 1.2f},
+    {"PLUCK", W_SAW2, 1.003f, 0, 300, 1500, 5200, 0.03f, 0.0f, 0.00009f, 0.9995f, 1.7f},
+    {"BASS", W_BASS, 0.5f, 0, 350, 900, 1700, 0.01f, 0.7f, 0.0002f, 0.9994f, 1.1f},
+    {"BELL", W_FM, 3.5f, 2.4f, 9000, 0, 0, 0.03f, 0.0f, 0.000025f, 0.99985f, 1.3f},
+    {"LEAD", W_SQR2, 1.004f, 0, 1300, 3000, 1500, 0.01f, 0.8f, 0.0002f, 0.9995f, 0.8f},
+    {"CLICK", W_FM, 2.0f, 0.5f, 9000, 0, 0, 0.1f, 0.0f, 0.0008f, 0.999f, 1.0f},
+};
 typedef struct {
     int8_t note;
-    uint8_t gate;
+    uint8_t gate, grp, snd;              /* grp: the group (0 .. 3, 4 the click) it was played in */
     uint8_t stage;
     float env, vel, p1, p2, inc, lp1, lp2;
     uint32_t age;
@@ -492,24 +525,35 @@ typedef struct {
 static voice_t vo[NVOICES];
 static uint32_t vo_clock;
 static float gain_now;
+static float sinp(float p)               /* sin(2 pi p), p 0 .. 1, close enough (and its sign flipped) */
+{
+    float u = 2.0f * p - 1.0f, y = 4.0f * u * (1.0f - fm_fabsf(u));
+    return 0.225f * (y * fm_fabsf(y) - y) + y;
+}
+static float frac1(float x) { return x - (float)(int32_t)x; }   /* x >= 0 */
 
 #define BARRIER() __asm__ volatile("" ::: "memory")
 #define QN 128u
 static volatile uint32_t q_ev[QN];
 static volatile uint32_t q_w, q_r;
 enum { QE_OFF, QE_ON, QE_PSTART, QE_PSTOP, QE_CSTART, QE_CSTOP };
-static void ev_push(uint32_t type, uint32_t a, uint32_t b)
+static void ev_push_g(uint32_t type, uint32_t a, uint32_t b, uint32_t g)
 {
     uint32_t w = q_w;
     if (w - q_r >= QN)
         return;
-    q_ev[w % QN] = type << 16 | (a & 127u) << 8 | (b & 127u);
+    q_ev[w % QN] = g << 24 | type << 16 | (a & 127u) << 8 | (b & 127u);
     BARRIER();
     q_w = w + 1u;
 }
-static void voice_on(uint32_t note, uint32_t vel)
+static void ev_push(uint32_t type, uint32_t a, uint32_t b) { ev_push_g(type, a, b, 0); }
+static uint8_t out_mode;               /* set.out, as the audio side sees it */
+static uint8_t grp_snd[NGRP];
+static void voice_on(uint32_t note, uint32_t vel, uint32_t grp)
 {
     uint32_t i, best = 0, oldest = 0xFFFFFFFFu;
+    if (grp < NGRP && out_mode == OUT_MIDI)
+        return;
     for (i = 0; i < NVOICES; i++) {
         uint32_t score = vo[i].stage == 0 ? 0u : vo[i].stage == 3 ? 1u : 2u;
         uint32_t key = score << 28 | (vo[i].age & 0x0FFFFFFFu);
@@ -519,6 +563,8 @@ static void voice_on(uint32_t note, uint32_t vel)
         }
     }
     vo[best].note = (int8_t)note;
+    vo[best].grp = (uint8_t)grp;
+    vo[best].snd = (uint8_t)(grp < NGRP ? grp_snd[grp] % NSOUNDS : SND_CLICK);
     vo[best].gate = 1;
     vo[best].stage = 1;
     vo[best].vel = 0.35f + 0.65f * (float)vel / 127.0f;
@@ -529,11 +575,11 @@ static void voice_on(uint32_t note, uint32_t vel)
         vo[best].p2 = 0.37f;
     }
 }
-static void voice_off(uint32_t note)
+static void voice_off(uint32_t note, uint32_t grp)
 {
     uint32_t i;
     for (i = 0; i < NVOICES; i++)
-        if (vo[i].note == (int8_t)note && vo[i].gate) {
+        if (vo[i].note == (int8_t)note && vo[i].grp == grp && vo[i].gate) {
             vo[i].gate = 0;
             vo[i].stage = 3;
         }
@@ -547,18 +593,20 @@ static uint32_t midi_to(void) { return TO_USB | (set.ble ? TO_BLE : 0u); }
 static uint8_t ch_last;
 static void midi_note(uint32_t on, uint32_t ch, uint32_t m, uint32_t v)
 {
+    if (set.out == OUT_SOUND)
+        return;
     ch_last = (uint8_t)ch;
     plat_midi_send((on ? 0x09u | (0x90u | ch) << 8 | m << 16 | v << 24 : 0x08u | (0x80u | ch) << 8 | m << 16),
                    midi_to());
 }
 static void out_on(uint32_t m, uint32_t v, uint32_t ch)
 {
-    voice_on(m, v);
+    voice_on(m, v, ch % NGRP);
     midi_note(1, ch, m, v);
 }
 static void out_off(uint32_t m, uint32_t ch)
 {
-    voice_off(m);
+    voice_off(m, ch % NGRP);
     midi_note(0, ch, m, 0);
 }
 static uint32_t pad_ch(uint32_t i)       /* pads 1-8 on 1, 9-16 on 2; LIB's preview (i = NPADS) on the keyboard's */
@@ -607,10 +655,10 @@ static void midi_in(void)                /* audio interrupt: MIDI in plays the s
             continue;
         }
         if (hi == 0x90u && d2) {
-            voice_on(d1, d2);
+            voice_on(d1, d2, (st & 15u) < NGRP ? st & 15u : CH_KEYS);   /* MIDI in: its channel's sound */
             rec_push(1, d1, d2);
         } else if (hi == 0x80u || hi == 0x90u) {
-            voice_off(d1);
+            voice_off(d1, (st & 15u) < NGRP ? st & 15u : CH_KEYS);
             rec_push(0, d1, 0);
         }
     }
@@ -828,13 +876,16 @@ void app_render(int32_t *lr, uint32_t n, uint32_t master_q12)
     uint32_t i, v;
     float gain = (float)master_q12 / 4096.0f * 8300000.0f;
     static float mix[APP_BLOCK];
+    out_mode = set.out;
+    for (i = 0; i < NGRP; i++)
+        grp_snd[i] = set.snd[i];
     while (q_r != q_w) {
         BARRIER();
-        uint32_t e = q_ev[q_r % QN], type = e >> 16, a = e >> 8 & 127u, b = e & 127u;
+        uint32_t e = q_ev[q_r % QN], type = e >> 16 & 255u, a = e >> 8 & 127u, b = e & 127u, g = e >> 24;
         if (type == QE_ON)
-            voice_on(a, b);
+            voice_on(a, b, g);
         else if (type == QE_OFF)
-            voice_off(a);
+            voice_off(a, g);
         else if (type == QE_CSTART && a < NPADS)
             cp_start(a, b);
         else if (type == QE_CSTOP && a < NPADS)
@@ -868,27 +919,33 @@ void app_render(int32_t *lr, uint32_t n, uint32_t master_q12)
         mix[i] = 0.0f;
     for (v = 0; v < NVOICES; v++) {
         voice_t *x = &vo[v];
-        float fc, c, inc2;
+        const sound_t *S = &SOUNDS[x->snd];
+        float fc, c, inc2, g = x->vel * S->gain;
         if (!x->stage)
             continue;
-        fc = 700.0f + 2600.0f * x->vel * x->vel + 1800.0f * x->env;
+        fc = S->fc + S->fc_vel * x->vel * x->vel + S->fc_env * x->env;
         c = fm_minf(0.95f, 6.2831853f * fc / SR);
-        inc2 = x->inc * 1.0058f;
+        inc2 = x->inc * S->det;
         for (i = 0; i < n; i++) {
             float s;
             switch (x->stage) {
             case 1:
-                x->env += 0.0045f;
+                x->env += S->att;
                 if (x->env >= 1.0f) {
                     x->env = 1.0f;
                     x->stage = 2;
                 }
                 break;
             case 2:
-                x->env += (0.62f - x->env) * 0.00012f;
+                x->env += (S->sus - x->env) * S->dec;
+                if (S->sus == 0.0f && x->env < 0.0004f) {
+                    x->env = 0.0f;
+                    x->stage = 0;
+                    x->note = -1;
+                }
                 break;
             default:
-                x->env *= 0.99975f;
+                x->env *= S->rel;
                 if (x->env < 0.0004f) {
                     x->env = 0.0f;
                     x->stage = 0;
@@ -901,10 +958,25 @@ void app_render(int32_t *lr, uint32_t n, uint32_t master_q12)
             x->p2 += inc2;
             if (x->p2 >= 1.0f)
                 x->p2 -= 1.0f;
-            s = (x->p1 + x->p2) - 1.0f;
+            switch (S->wave) {
+            case W_SAW2:
+                s = (x->p1 + x->p2) - 1.0f;
+                break;
+            case W_SQR2:
+                s = ((x->p1 < 0.5f) ? 0.5f : -0.5f) + ((x->p2 < 0.5f) ? 0.5f : -0.5f);
+                break;
+            case W_FM:
+                s = 0.8f * sinp(frac1(x->p1 + 2.0f + S->fm * x->env * x->vel * 0.16f * sinp(x->p2)));
+                break;
+            case W_ORGAN:
+                s = 0.55f * sinp(x->p1) + 0.3f * sinp(frac1(2.0f * x->p1)) + 0.2f * sinp(frac1(3.0f * x->p1));
+                break;
+            default:                     /* BASS: a square and a sine an octave down */
+                s = ((x->p1 < 0.5f) ? 0.5f : -0.5f) + 0.7f * sinp(x->p2);
+            }
             x->lp1 += c * (s - x->lp1);
             x->lp2 += c * (x->lp1 - x->lp2);
-            mix[i] += x->lp2 * x->env * x->vel;
+            mix[i] += x->lp2 * x->env * g;
             if (!x->stage)
                 break;
         }
@@ -958,7 +1030,7 @@ static void notes_on(uint32_t k, const uint8_t *notes, uint32_t n, uint32_t vel,
     for (i = 0; i < n && i < MAXN; i++) {
         int32_t m = clamp((int32_t)notes[i] + 12 * set.octave, 0, 127);
         h->note[h->n++] = (uint8_t)m;
-        ev_push(QE_ON, (uint32_t)m, vel);
+        ev_push_g(QE_ON, (uint32_t)m, vel, ch % NGRP);
         midi_note(1, ch, (uint32_t)m, vel);
         rec_push(1, (uint32_t)m, vel);
     }
@@ -968,7 +1040,7 @@ static void notes_off(uint32_t k)
     uint32_t i;
     held_t *h = &held[k];
     for (i = 0; i < h->n; i++) {
-        ev_push(QE_OFF, h->note[i], 0);
+        ev_push_g(QE_OFF, h->note[i], 0, h->ch % NGRP);
         midi_note(0, h->ch, h->note[i], 0);
         rec_push(0, h->note[i], 0);
     }
@@ -1041,7 +1113,7 @@ static void pad_release_rec(uint32_t i)   /* REC: a chord pad let go */
 }
 
 /* ======================================================================= UI === */
-enum { SCR_HOME, SCR_PICK, SCR_LIB, SCR_PAD, SCR_SETUP };
+enum { SCR_HOME, SCR_PICK, SCR_LIB, SCR_PAD, SCR_SETUP, SCR_SOUND };
 enum { CS_NONE, CS_CHOOSE, CS_NOTES, CS_SCALE, CS_PADS, CS_BASS, CS_SHAPE, CS_CPADS, CS_DONE };
 enum { RS_OFF, RS_PICK, RS_COUNT, RS_REC };
 static struct {
@@ -1486,8 +1558,8 @@ static void rec_tick(void)               /* the count-in's clicks, then the take
         uint32_t now = clock_smp;
         if ((int32_t)(now - ui.r_click) >= 0 && (int32_t)(ui.r_t0 - now) > 0) {
             uint32_t first = (ui.r_t0 - ui.r_click) / bpb_smp() == 3u;
-            ev_push(QE_ON, first ? 96u : 84u, 90);
-            ev_push(QE_OFF, first ? 96u : 84u, 0);
+            ev_push_g(QE_ON, first ? 96u : 84u, 90, NGRP);
+            ev_push_g(QE_OFF, first ? 96u : 84u, 0, NGRP);
             ui.r_click += bpb_smp();
         }
         if ((int32_t)(now - ui.r_t0) >= 0) {
@@ -1764,6 +1836,8 @@ buttons:
                 app_say(t, desc[ui.pad].lock ? "LOCKED: KEPT AS IT IS" : "UNLOCKED");
                 set_dirty = 1;
             }
+        } else if (i == B_FX) {          /* SOUND: each group's sound, and OUT */
+            ui.screen = ui.screen == SCR_SOUND ? SCR_HOME : SCR_SOUND;
         } else if (i == B_ARP) {         /* UNDO */
             undo_swap();
         } else if (i == B_SEQ) {         /* LATCH */
@@ -1860,6 +1934,21 @@ buttons:
             if (ek || k1 || k2 || k3 || k4 || es || ea)
                 set_dirty = 1;
             es = k1 = k2 = k3 = k4 = ek = ea = 0;
+        } else if (ui.screen == SCR_SOUND) {
+            int32_t kk[NGRP] = {k1, k2, k3, k4};
+            uint32_t g;
+            for (g = 0; g < NGRP; g++)
+                if (kk[g]) {             /* the sound, round and round */
+                    set.snd[g] = (uint8_t)(((int32_t)set.snd[g] + kk[g] % (int32_t)NSOUNDS + (int32_t)NSOUNDS) %
+                                           (int32_t)NSOUNDS);
+                    set_dirty = 1;
+                }
+            if (es) {                    /* OUT: SOUND AND MIDI, SOUND, MIDI */
+                all_notes_off();
+                set.out = (uint8_t)clamp(set.out + es, OUT_BOTH, OUT_MIDI);
+                set_dirty = 1;
+            }
+            es = k1 = k2 = k3 = k4 = 0;
         } else if (ui.screen == SCR_SETUP) {
             if (k1) {
                 set.ble = (uint8_t)(k1 > 0);
@@ -2051,7 +2140,7 @@ static void lights(void)
         btn |= 1u << B_ARP;
     if (ui.rs == RS_REC || ((ui.rs == RS_PICK || ui.rs == RS_COUNT) && blink))
         btn |= 1u << B_REC;
-    btn |= 1u << (ui.screen == SCR_LIB ? B_SEL : ui.screen == SCR_PAD ? B_ENV
+    btn |= 1u << (ui.screen == SCR_LIB ? B_SEL : ui.screen == SCR_PAD ? B_ENV : ui.screen == SCR_SOUND ? B_FX
                   : ui.screen == SCR_SETUP ? B_GLO : B_HOME);
     plat_lights(btn | ui.btn, bright, 0, dim, 1);
     plat_lights_mid(0, mid);
@@ -2455,6 +2544,26 @@ static void draw_pad(void)               /* PAD EDIT, as the web's pad edit wind
     cv_blit(0, 120);
 }
 
+static void draw_sound(void)
+{
+    static const char *const LBL[4] = {"K1 PADS 1-8", "K2 9-16", "K3 B PADS", "K4 KEYS"};
+    static const char *const OUTN[OUT_N] = {"SOUND AND MIDI", "SOUND ONLY", "MIDI ONLY"};
+    char v[4][12];
+    uint32_t g;
+    lab_begin();
+    top_bar("SOUND", FIRE_C);
+    text_c(34, &FONT_XS, "SELECT: OUT", LAB_LABEL);
+    text_c(50, &FONT_M, OUTN[set.out % OUT_N], set.out == OUT_MIDI ? WATER_C : C_WHITE);
+    text_c(86, &FONT_XS, set.out == OUT_MIDI ? "THE FM-1 STAYS QUIET" : "PLAY A PAD TO HEAR IT", LAB_LABEL);
+    cv_blit(0, 0);
+    lab_begin();
+    for (g = 0; g < NGRP; g++)
+        str_set(v[g], SOUNDS[set.snd[g] % NSOUNDS].name, sizeof v[g]);
+    bottom_bar(8, LBL, v);
+    text_c(66, &FONT_XS, set.out == OUT_SOUND ? "NO MIDI OUT" : "MIDI: CH 1, 2, 3, 4 AS ABOVE", LAB_LABEL);
+    cv_blit(0, 120);
+}
+
 static int clock_ext(void) { return set.clk_in && clk_seen && clock_smp - clk_seen < 22050u; }
 static void draw_setup(void)
 {
@@ -2543,7 +2652,9 @@ void app_init(void)
         int got = plat_store_load(OBJ_SETTINGS, &set, sizeof set);
         if (got != (int)sizeof set || set.magic != SET_MAGIC || set.root > 11u || set.scale >= NSCALES ||
             set.octave < -2 || set.octave > 2 || set.type >= NCTYPES || set.plays >= PL_N || set.bassm >= BM_N ||
-            set.human > 50u || set.len < -5 || set.len > 5 || set.bpm < 40u || set.bpm > 240u || set.coach >= CO_N)
+            set.human > 50u || set.len < -5 || set.len > 5 || set.bpm < 40u || set.bpm > 240u || set.coach >= CO_N ||
+            set.out >= OUT_N || set.snd[0] >= NSOUNDS || set.snd[1] >= NSOUNDS || set.snd[2] >= NSOUNDS ||
+            set.snd[3] >= NSOUNDS)
             settings_defaults();
     }
     tempo = set.bpm;
@@ -2623,6 +2734,8 @@ void app_frame(void)
             draw_pad();
         else if (ui.screen == SCR_SETUP)
             draw_setup();
+        else if (ui.screen == SCR_SOUND)
+            draw_sound();
         else {
             if (!ui.coach)
                 draw_home_top();
@@ -2679,6 +2792,10 @@ int app_expect(const char *what, int *got)
         *got = (int)tempo;
     else if (!strcmp(what, "rec"))
         *got = ui.rs;
+    else if (!strcmp(what, "out"))
+        *got = set.out;
+    else if (!strncmp(what, "snd", 3))
+        *got = set.snd[atoi(what + 3) % NGRP];
     else if (!strcmp(what, "ble"))
         *got = set.ble;
     else if (!strncmp(what, "padnote", 7)) {

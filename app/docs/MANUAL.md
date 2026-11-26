@@ -17,7 +17,7 @@ This is an early test build by BeatSmith.
 6. [LIB](#6-lib)
 7. [PAD EDIT and LOCK](#7-pad-edit-and-lock)
 8. [REC, UNDO, SAVE and LOAD](#8-rec-undo-save-and-load)
-9. [MIDI and SETUP](#9-midi-and-setup)
+9. [SOUND, MIDI and SETUP](#9-sound-midi-and-setup)
 10. [All the controls](#10-all-the-controls)
 
 ## 1. Install
@@ -145,7 +145,18 @@ ARP to undo.
 
 **SAVE** keeps the pads, their PAD EDIT and the settings. **Hold SAVE** to LOAD them back.
 
-## 9. MIDI and SETUP
+## 9. SOUND, MIDI and SETUP
+
+![SOUND](img/seed-sound.png)
+
+**FX** opens SOUND. Each of the four groups plays its own FM-1 sound: K1 pads 1 to 8, K2 pads 9 to 16, K3 the B pads,
+K4 the keyboard. Eight sounds: WARM, KEYS, ORGAN, STRINGS, PLUCK, BASS, BELL, LEAD. **SELECT** sets OUT:
+
+- SOUND AND MIDI: the FM-1 plays and MIDI goes out
+- SOUND ONLY: no MIDI out
+- MIDI ONLY: the FM-1 stays quiet and drives your synths (REC's count-in click still sounds)
+
+MIDI coming in plays the sound of its channel (1 to 4), and channels above 4 play the keyboard's.
 
 MIDI goes out over **USB** and **Bluetooth** (the FM-1's TRS jack is MIDI in only), on four fixed channels:
 
@@ -175,7 +186,7 @@ Set your synths to listen on those. SETUP shows the map too. **PLAY** sends all 
 | SEL | LIB |
 | ENV | PAD EDIT |
 | LFO | LOCK |
-| FX | Free for now |
+| FX | SOUND: each group's sound, and OUT (sound, MIDI, or both) |
 | SYS (GLO) | Tap: SETUP. Hold: COACH |
 | PLAY | Stop, all notes off. SHIFT: clear the pads. In PICK NOTES: use the scale. In LIB: hear it |
 | ARP | UNDO |
