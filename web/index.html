@@ -413,11 +413,19 @@ div.abs:has(>#bRec){left:144px!important;top:944px!important;width:200px!importa
 #jPush span{position:absolute;inset:8px;border-radius:50%;background:radial-gradient(circle at 50% 62%,#FFFFFF 0%,#FFFFFF 55%,#ADCFDE 100%);box-shadow:0 0 0 3px #7EB3D2,0 0 16px rgba(126,179,210,.8),inset 0 -5px 10px rgba(255,255,255,.5),inset 0 5px 12px rgba(49,48,67,.45);display:flex;flex-direction:column;align-items:center;justify-content:center;font:700 13px 'Space Grotesk',sans-serif;letter-spacing:.2em;color:#424C60}
 #jPush small{font:600 8px 'Space Grotesk',sans-serif;letter-spacing:.14em;margin-top:3px;opacity:.75}
 #jPush:active span,#jPush.hold span{transform:scale(.96);box-shadow:0 0 0 3px #DC7B78,0 0 18px rgba(220,123,120,.8),inset 0 5px 12px rgba(49,48,67,.45)}
-#jPM{position:absolute;left:30px;right:30px;top:354px;height:58px;border-radius:18px;background:#313043;box-shadow:inset 0 3px 8px rgba(49,48,67,.6);display:flex;gap:8px;padding:7px 8px;box-sizing:border-box}
+#jPM{position:absolute;left:30px;right:30px;top:344px;height:50px;border-radius:18px;background:#313043;box-shadow:inset 0 3px 8px rgba(49,48,67,.6);display:flex;gap:8px;padding:7px 8px;box-sizing:border-box}
 #jPM button{flex:1;border:0;background:linear-gradient(180deg,#57556F,#424C60);box-shadow:0 4px 0 #313043;color:#FFFFFF;font:700 26px 'Space Grotesk',sans-serif;cursor:pointer;touch-action:manipulation}
 #jPM button:first-child{border-radius:14px 6px 6px 14px}#jPM button:last-child{border-radius:6px 14px 14px 6px}
 #jPM button:active{transform:translateY(2px);box-shadow:0 2px 0 #313043}
-#jHint{position:absolute;left:0;right:0;top:420px;text-align:center;font:700 9px 'JetBrains Mono',monospace;letter-spacing:.16em;color:rgba(255,255,255,.5)}
+#jFill{position:absolute;left:30px;right:30px;top:400px;height:34px;border:0;border-radius:12px;background:linear-gradient(180deg,#7C5D48,#5f4636);box-shadow:0 4px 0 #313043;color:#FFFFFF;font:700 13px 'Space Grotesk',sans-serif;letter-spacing:.16em;cursor:pointer;touch-action:none;display:none}
+body:not(.seed) #jFill{display:block}
+#jFill:active,#jFill.on{transform:translateY(2px);box-shadow:0 2px 0 #313043}
+#jFill.on{background:linear-gradient(180deg,#DC7B78,#7C5D48)}
+#jLed.two{flex-direction:column;align-items:flex-start;justify-content:center;gap:1px;padding:0 10px}
+#jLed.two #jMode{font-size:13px;letter-spacing:.06em;white-space:nowrap}
+#jLed.two #jVal{font-size:12px;max-width:100%}
+#smpPH{position:absolute;top:0;bottom:0;width:2px;margin-left:-1px;background:#DC7B78;box-shadow:0 0 8px #DC7B78;z-index:5;pointer-events:none}
+#jHint{position:absolute;left:0;right:0;top:440px;text-align:center;font:700 9px 'JetBrains Mono',monospace;letter-spacing:.16em;color:rgba(255,255,255,.5)}
 #jPick{position:absolute;left:22px;right:22px;top:84px;display:none;flex-wrap:wrap;gap:4px;justify-content:center;z-index:3}
 #jogU.picking #jPick{display:flex}
 #jPick b{font:700 9px 'JetBrains Mono',monospace;letter-spacing:.08em;padding:2px 5px;border-radius:3px;color:rgba(255,255,255,.6);background:#313043}
@@ -3208,6 +3216,110 @@ function smpReshape(what,val){ snap(); let n=0;
   const _rbV=renderBig; renderBig=function(){ const r=_rbV.apply(this,arguments); if(src!=='file'){ SV=null; document.body.classList.remove('sliceView'); } else if(SV&&lastPad==null){ showSlice(clamp(cur,0,Math.max(0,omSlices.length-1))); drawSmall(); drawTrim(); } return r; };
 })();
 
+/* SAMPLE, the jog in two modes. AUTO: the file comes sliced (EVEN, CHORDS, HITS). MANUAL: no slices; the ring scrubs
+   a playhead through the file, FILL PADS held marks a slice (press: it starts, let go: it ends) onto the next pad,
+   − / + cut the last slice into equal pieces on the pads after it. The same controls mean the same in both:
+   ring: move · push: listen · − / +: how many · FILL PADS: onto the pads · SHIFT + ring or push: chop type ·
+   SHIFT + − / +: nudge the current slice. Slices in MANUAL are regions on the one file: nothing is cut */
+(()=>{ const T=['manual','even','chords','hits']; MODEN.manual='MANUAL';
+  const man=()=>src==='file'&&OM.smode==='manual';
+  let flash=null, flashT=0, slicing=null;
+  const flashSay=(a,b)=>{ flash=[a,b]; clearTimeout(flashT); flashT=setTimeout(()=>{ flash=null; jogShow(); },1800); jogShow(); };
+  const bbt=b=>{ const B=bpb(), bar=Math.floor(b/B)+1, bt=Math.floor(b%B)+1, sx=Math.floor((b%1)*4)+1; return bar+'.'+bt+'.'+sx; };
+  const nextPad=()=>{ for(let i=clamp(+OM.mnext||0,0,16);i<16;i++) if(!(pads[i]&&pads[i].hold)) return i; return -1; };   /* MANUAL: the pad after the last slice (locked pads skipped) */
+  const lenTxt=x=>{ const LN={0.25:'1/16',0.5:'1/8',1:'1/4',2:'1/2'}; for(const k in LN) if(Math.abs(x-k)<1e-3) return LN[k]; return fmtLen(x).toUpperCase(); };
+  /* MANUAL's slices: its regions, as they were made (they may overlap) */
+  const _osl=omSliceList; omSliceList=function(){ if(OM.smode==='manual'&&src==='file') return (OM.mr||[]).map(r=>({s:r.s,e:r.e,fe:r.e})); return _osl.apply(this,arguments); };
+  const _sb=smpBuild; smpBuild=function(){ if(OM.smode==='manual'){ omSlices=omSliceList(); cur=clamp(cur,0,Math.max(0,omSlices.length-1)); save(); renderBig(); refresh(); return; } return _sb.apply(this,arguments); };
+  /* SHIFT + ring or push: the chop type, MANUAL first */
+  const _ty=window.smpType; window.smpType=d=>{ if(!notes.length) return; const now=T.includes(OM.smode)?OM.smode:'even', k=((T.indexOf(now)+d)%4+4)%4, m=T[k];
+    if(m==='manual'){ OM.smode='manual'; OM.mr=OM.mr||[]; OM.ph=clamp(+OM.ph||0,0,L); OM.mcut=null; if(!OM.mr.length) OM.mnext=0; smpBuild(); say('CHOP · MANUAL',omSlices.length?omSlices.length+' SLICES':'TURN TO SCRUB · HOLD FILL PADS TO SLICE'); return; }
+    if(now==='manual'){ stopHear(); omSlices=[]; } OM.smode=m; _ty(0); };
+  /* the playhead (MANUAL) on the timeline */
+  let lastZ=1;
+  const phDraw=()=>{ const strip=q('#bwBody .strip'); let ph=q('#smpPH'); if(!man()||!strip||!notes.length){ if(ph) ph.remove(); return; }
+    if(!ph){ ph=document.createElement('div'); ph.id='smpPH'; } if(ph.parentElement!==strip) strip.appendChild(ph);
+    const W=strip.offsetWidth||1; ph.style.left=((+OM.ph||0)/Math.max(1e-6,L)*W)+'px';
+    const body=q('#bwBody'), x=ph.offsetLeft; if(body&&(x<body.scrollLeft+20||x>body.scrollLeft+body.clientWidth-20)) body.scrollLeft=Math.max(0,x-body.clientWidth/2); };
+  const _lay=window.smpLayout; window.smpLayout=z=>{ lastZ=z||lastZ; if(_lay) _lay(z);
+    if(man()&&!omSlices.length){ const body=q('#bwBody'), strip=q('#bwBody .strip'); if(strip&&body){ strip.classList.add('tl'); const bw=body.clientWidth, W=Math.max(bw-6,(bw-6)*lastZ); strip.style.width=W+'px';
+      let bg=q('#fileBg'); if(!bg){ bg=document.createElement('canvas'); bg.id='fileBg'; } if(bg.parentElement!==strip) strip.insertBefore(bg,strip.firstChild);
+      bg.style.top='22px'; bg.style.height='calc(100% - 44px)'; bg.style.width=W+'px'; requestAnimationFrame(()=>{ if(bg.isConnected) miniWave(bg,0,L); }); } }
+    phDraw(); };
+  const _rbm=renderBig; renderBig=function(){ const r=_rbm.apply(this,arguments); if(man()){ setTimeout(()=>{ if(window.smpLayout) window.smpLayout(lastZ); },0); } else phDraw(); return r; };
+  /* hearing the file: the notes between a and b, short (scrub), or from a for a while (listen) */
+  const hearSpan=(a,b,short)=>{ const ns=notes.filter(n=>n.s>=a-1e-6&&n.s<b-1e-6); if(!ns.length) return; audio();
+    if(short){ ns.slice(0,8).forEach(n=>{ const h=noteOn(out(n.p),n.v); setTimeout(()=>noteOff(h),110); }); return; }
+    preview({type:'phrase',notes:ns.map(n=>({p:n.p,s:n.s-a,d:n.d,v:n.v})),len:b-a}); };
+  const stopHear=()=>{ if(window._pv){ _pv.timers.forEach(clearTimeout); _pv.handles.forEach(noteOff); _pv.timers=[]; _pv.handles=[]; } };
+  /* MANUAL slices hold whatever sounds inside them, notes cut at the edges (a region of the file, like audio) */
+  const _opm=omPadItem; omPadItem=function(sl,idx){ if(!man()) return _opm.apply(this,arguments);
+    const ns=notes.filter(n=>n.s<sl.e-1e-6&&n.s+n.d>sl.s+1e-6).map(n=>{ const a=Math.max(n.s,sl.s), e=Math.min(n.s+n.d,sl.e); return {p:n.p,s:a-sl.s,d:Math.max(0.03,e-a),v:n.v}; });
+    if(!ns.length) return null; const it=buildItem({notes:ns,len:sl.e-sl.s,off:sl.s},0,sl.e-sl.s,'S'+(idx+1)); if(!it) return null;
+    if(it.type==='chord'){ it.type='phrase'; delete it.pitches; } return it; };
+  /* a slice onto pad i */
+  const toPad=(sl,idx,i)=>{ const it=omPadItem(sl,idx); if(!it){ pads[i]=null; return false; } it._sl=idx; it.title='S'+(idx+1); pads[i]=it; return true; };
+  /* the ring */
+  PAGES[0].jog.s=(d,fine)=>{ if(!notes.length){ say('NO FILE','DROP A MIDI FILE IN'); return; }
+    if(shiftOn&&!fine){ if(typeof useShift==='function') useShift(); window.smpType(d); return; }
+    if(man()){ if(slicing) return; const st=0.25, a=+OM.ph||0, b=clamp(a+d*st,0,L); OM.ph=b; if(b>a) hearSpan(a,b,true); else hearSpan(b,a,true); phDraw(); return; }
+    goSlice(cur+d); };
+  PAGES[0].jog.tap=()=>{ if(!notes.length){ say('NO FILE','DROP A MIDI FILE IN'); return; }
+    if(shiftOn&&window.smpType){ if(typeof useShift==='function') useShift(); window.smpType(1); refresh(); return; }
+    if(man()){ hearSpan(+OM.ph||0,Math.min(L,(+OM.ph||0)+4*bpb()),false); return; }
+    audio(); playSlice(cur); };
+  /* − / +: how many. AUTO: slices. MANUAL: the last slice cut into pieces on the pads after it. SHIFT: nudge */
+  const _pm=window.smpPM;
+  const cutLast=d=>{ const c=OM.mcut; if(!c){ say('NOTHING TO CUT','HOLD FILL PADS TO MAKE A SLICE'); return; }
+    const room=16-c.pad0, n=clamp(c.n+d,1,Math.max(1,room)); if(n===c.n){ say(n+' PIECES',n>=room?'NO MORE PADS AFTER IT':'ONE PIECE IS THE WHOLE SLICE'); return; } snap();
+    OM.mr=OM.mr.filter((_,k)=>!c.ids.includes(k)); const base=OM.mr.length, w=(c.e-c.s)/n; c.ids=[];
+    for(let k=0;k<n;k++){ OM.mr.push({s:c.s+k*w,e:c.s+(k+1)*w}); c.ids.push(base+k); }
+    c.n=n; OM.mnext=c.pad0+n; omSlices=omSliceList();
+    pads.forEach(p=>{ if(p&&p._sl!=null&&p._sl>=0&&p._mc!==c.id){ const k=p._sl; if(OM.mr[k]==null) p._sl=-1; } });
+    for(let k=0;k<n;k++){ const i=c.pad0+k; if(pads[i]&&pads[i].hold) continue; toPad(omSlices[c.ids[k]],c.ids[k],i); }
+    /* the pads past the pieces that held the old pieces: empty again */
+    for(let i=c.pad0+n;i<16;i++){ const p=pads[i]; if(p&&!p.hold&&p._mc===c.id) pads[i]=null; }
+    for(let k=0;k<n;k++){ const p=pads[c.pad0+k]; if(p) p._mc=c.id; }
+    cur=c.ids[0]; lastPad=c.pad0; save(); renderPads(); renderBig(); refresh();
+    flashSay('MANUAL · '+n+(n===1?' PIECE':' PIECES'),n===1?'PAD '+(c.pad0+1):'PADS '+(c.pad0+1)+' TO '+(c.pad0+n)); };
+  const nudge=d=>{ const st=0.125;
+    if(man()){ const sl=OM.mr&&OM.mr[cur]; if(!sl) return; const w=sl.e-sl.s, s0=clamp(sl.s+d*st,0,L-w); sl.s=s0; sl.e=s0+w; omSlices=omSliceList(); const i=padOfSlice(cur); if(i>=0&&!pads[i].hold) toPad(omSlices[cur],cur,i); save(); renderPads(); renderBig(); refresh(); say('SLICE '+(cur+1)+' MOVED',bbt(s0)); return; }
+    if(!OM.mb||cur<=0||cur>=OM.mb.length-1){ say('NUDGE','THE FIRST SLICE STARTS THE FILE'); return; }
+    const b=OM.mb.slice(); b[cur]=clamp(b[cur]+d*st,b[cur-1]+0.0625,b[cur+1]-0.0625); OM.mb=b; omSlices=omSliceList(); save(); renderBig(); refresh(); say('SLICE '+(cur+1)+' NUDGED',bbt(b[cur])); };
+  window.smpPM=(d,down)=>{ if(!down) return; if(!notes.length){ say('NO FILE','DROP A MIDI FILE IN'); return; } audio();
+    if(shiftOn){ if(typeof useShift==='function') useShift(); nudge(d); return; }
+    if(man()){ cutLast(d); return; }
+    _pm(d,true); _pm(d,false); };
+  /* FILL PADS: AUTO, a tap: this slice and the next 15 onto the pads. MANUAL, held: a slice from the playhead */
+  const fb=document.createElement('button'); fb.id='jFill'; fb.textContent='FILL PADS';
+  fb.dataset.probe='FILL PADS. AUTO: tap, this slice and the next 15 go onto the pads (locked pads stay). MANUAL: hold it, the file plays from the playhead; let go and that bit is a slice, on the next empty pad.';
+  q('#jPM').after(fb);
+  const tick=()=>{ if(!slicing) return; const el=(performance.now()-slicing.t0)/beatMs(); OM.ph=clamp(slicing.s+el,0,L); phDraw(); jogShow(); if(OM.ph>=L){ endSlice(); return; } slicing.raf=requestAnimationFrame(tick); };
+  const startSlice=()=>{ const i=nextPad(); if(i<0){ say('PADS FULL','CLEAR A PAD FIRST'); return; } const s0=+OM.ph||0; if(s0>=L-0.05){ say('THE END OF THE FILE','TURN BACK FIRST'); return; }
+    slicing={s:s0,t0:performance.now(),pad:i}; fb.classList.add('on'); hearSpan(s0,L,false); slicing.raf=requestAnimationFrame(tick); jogShow(); };
+  function endSlice(){ const sl=slicing; if(!sl) return; slicing=null; cancelAnimationFrame(sl.raf); fb.classList.remove('on'); stopHear();
+    const e=clamp(+OM.ph||0,0,L); if(e-sl.s<0.05){ OM.ph=sl.s; phDraw(); jogShow(); say('TOO SHORT','HOLD FILL PADS LONGER'); return; }
+    snap(); OM.mr=OM.mr||[]; OM.mr.push({s:sl.s,e}); const idx=OM.mr.length-1; omSlices=omSliceList();
+    toPad(omSlices[idx],idx,sl.pad); OM.mcut={s:sl.s,e,pad0:sl.pad,n:1,ids:[idx],id:Date.now()}; pads[sl.pad]._mc=OM.mcut.id; OM.mnext=sl.pad+1;
+    cur=idx; lastPad=sl.pad; save(); renderPads(); renderBig(); refresh(); flashSay('MANUAL · SLICE '+(idx+1),'ON PAD '+(sl.pad+1)); }
+  fb.addEventListener('pointerdown',e=>{ if(probing()) return; e.preventDefault(); if(!notes.length){ say('NO FILE','DROP A MIDI FILE IN'); return; } audio(); try{ fb.setPointerCapture(e.pointerId); }catch(_){}
+    if(man()){ startSlice(); return; }
+    snap(); OM.start=cur; OM.mut='off'; OM.fromSel=1; try{ omFill(); } finally{ OM.fromSel=0; } save(); renderPads(); refresh(); say('PADS FILLED','FROM SLICE '+(cur+1)+' · LOCKED PADS STAY'); });
+  const fUp=()=>{ if(slicing) endSlice(); }; fb.addEventListener('pointerup',fUp); fb.addEventListener('pointercancel',fUp);
+  /* the 2-line display: AUTO or MANUAL, where you are; then what it is or what's next */
+  const _js=jogShow; jogShow=function(){ _js(); const led=q('#jLed'); if(!led) return; const two=src==='file'&&page===0&&!picking; led.classList.toggle('two',two); q('#jogU').classList.toggle('manual',man());
+    const hn=q('#jHint'); if(hn&&src==='file'&&!shiftOn) hn.textContent=man()?'HOLD FILL PADS: SLICE · − / +: CUT IT':'− / +: FEWER OR MORE SLICES';
+    if(!two) return; let a,b;
+    if(!notes.length){ a='NO FILE'; b='DROP A MIDI FILE'; }
+    else if(flash){ a=flash[0]; b=flash[1]; }
+    else if(man()){ if(slicing){ a='MANUAL · SLICING'; b=(((+OM.ph||0)-slicing.s)*beatMs()/1000).toFixed(2)+' S'; }
+      else { a='MANUAL · '+bbt(+OM.ph||0); const i=nextPad(); b=i<0?'PADS FULL':'NEXT: PAD '+(i+1); } }
+    else { const n=omSlices.length, m=OM.smode||'even'; a='AUTO · '+(n?(cur+1)+' OF '+n:'NO SLICES');
+      const avg=n?omSlices.reduce((t,x)=>t+(x.e-x.s),0)/n:0; b=(MODEN[m]||'EVEN')+(n?', '+lenTxt(avg)+' EACH':''); }
+    q('#jMode').textContent=a; q('#jVal').textContent=b; };
+  PAGES[0].help=[['JOG','RING: MOVE (AUTO: SLICE TO SLICE · MANUAL: SCRUB) · PUSH: LISTEN · − / +: HOW MANY (AUTO: SLICES · MANUAL: CUT THE LAST SLICE INTO PIECES) · FILL PADS (AUTO: TAP, FROM THIS SLICE · MANUAL: HOLD TO SLICE) · SHIFT + RING OR PUSH: CHOP TYPE, MANUAL, EVEN, CHORDS, HITS · SHIFT + − / +: NUDGE THE SLICE'],['PLAYER','TAP A SLICE: HEAR IT · DRAG IT ONTO A PAD · BAR UNDER THE SLICES: DRAG TO MOVE, DRAG AN END TO ZOOM, NOTHING PLAYS'],['DIALS','SLICE LENGTH · TRANSPOSE']];
+  q('#jogU').dataset.probe='THE JOG. AUTO (EVEN, CHORDS, HITS): turn for slice to slice, push to hear it, − / + for fewer or more slices, FILL PADS for this slice and the next 15. MANUAL: turn to scrub, push to listen from the playhead, hold FILL PADS to slice, − / + to cut the last slice into pieces. SHIFT + turn or push: the chop type. SHIFT + − / +: nudge the slice.';
+  const _ss=setShift; })();
 /* the ring: turn it (finger or wheel); 15 degrees a step */
 (()=>{ const ring=q('#jRing'), rot=q('#jRot'); let a0=null,acc=0,deg=0,pid=null; const STEP=15;
   const ang=e=>{ const r=ring.getBoundingClientRect(); return Math.atan2(e.clientY-(r.top+r.height/2),e.clientX-(r.left+r.width/2))*180/Math.PI; };
